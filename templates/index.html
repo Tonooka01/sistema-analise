@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+
+{% block title %}
+    Dashboard Principal
+{% endblock %}
+
+{% block content %}
+<h1 class="text-4xl font-bold text-center mb-6">Dashboard Financeiro SQLite</h1>
+        
+<div class="absolute top-4 right-4">
+    <a href="/logout" class="text-sm bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded transition">
+        Sair
+    </a>
+</div>
+<div class="absolute top-4 right-4 flex gap-2">
+    
+    {% if current_user.is_authenticated and current_user.username == 'admin' %}
+        
+        <button id="openAdminSettingsModalBtn" class="text-sm bg-blue-600 hover:bg-blue-700 text-white py-1 px-3 rounded transition shadow-lg flex items-center gap-1">
+            ⚙️ Configurações
+        </button>
+        
+        <a href="/admin/logs" class="text-sm bg-gray-800 hover:bg-gray-900 text-white py-1 px-3 rounded transition shadow-lg flex items-center gap-1">
+            👁️ Ver Logs
+        </a>
+
+    {% endif %}
+
+    <a href="/logout" class="text-sm bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded transition shadow-lg">
+        Sair
+    </a>
+</div>
+<div class="collection-selector flex flex-wrap justify-center items-center gap-4 mb-8">
+    <button id="btnClientes" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Clientes</button>
+    <button id="btnContasAReceber" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Contas a Receber</button>
+    <button id="btnAtendimentos" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Atendimentos</button>
+    <button id="btnOS" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">OS</button>
+    <button id="btnLogins" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Logins</button>
+    <button id="btnContratos" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Contratos</button>
+    <button id="btnCidade" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Cidade</button>
+    <button id="btnVendedor" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Vendedor</button>
+    <div class="relative">
+        <select id="customAnalysisSelector" class="px-5 py-3 rounded-xl shadow-md bg-purple-600 text-white font-semibold cursor-pointer">
+            <option value="" disabled selected>Análise Personalizada</option>
+            <!-- NOVA ANÁLISE ADICIONADA -->
+            <option value="analise_juros_atraso" class="text-black bg-white">Análise de Juros por Atraso</option>
+            <option value="faturamento_por_cidade" class="text-black bg-white">Faturamento por Período e Cidade</option>
+            <option value="active_clients_evolution" class="text-black bg-white">Evolução de Clientes Ativos</option>
+            <option value="analise_comportamento" class="text-black bg-white">Análise de Comportamento</option>
+            <option value="activations_by_seller" class="text-black bg-white">Ativação por Vendedor</option>
+            <option value="atrasos_e_nao_pagos" class="text-black bg-white">Atrasos e Faturas Não Pagas</option>
+            <option value="saude_financeira_contrato_atraso" class="text-black bg-white">Saúde Financeira por Contrato (Financeiro em atraso)</option>
+            <option value="saude_financeira_contrato_bloqueio" class="text-black bg-white">Saúde Financeira por Contrato (Bloqueio automático)</option>
+            <option value="cancellations" class="text-black bg-white">Análise de Cancelamento</option>
+            <option value="negativacao" class="text-black bg-white">Análise de Negativação</option>
+            <option value="vendedores" class="text-black bg-white">Análise de Vendedores (Churn)</option> <!-- Renomeado para clareza -->
+            <option value="cancellations_by_city" class="text-black bg-white">Cancelamento/Negativação por Cidade</option>
+            <option value="cancellations_by_neighborhood" class="text-black bg-white">Cancelamento/Negativação por Bairro</option>
+            <option value="cancellations_by_equipment" class="text-black bg-white">Cancelamento por Equipamento</option>
+            <option value="equipment_by_olt" class="text-black bg-white">Equipamentos por OLT</option>
+            <option value="cohort_retention" class="text-black bg-white">Gráfico de Retenção (Coorte)</option>
+            <option value="daily_evolution_by_city" class="text-black bg-white">Evolução Diária por Cidade</option>
+            <option value="comparativo_diario" class="text-black bg-white">Comparativo Diário</option>
+
+        </select>
+    </div>
+        <button id="saveLayoutBtn" class="px-5 py-3 rounded-xl shadow-md bg-green-600 text-white font-semibold hover:bg-green-700 active:scale-95 transition">
+        Salvar Layout
+    </button>
+</div>
+
+<div id="dashboard-content-wrapper" class="card p-6">
+        <div id="dashboard-content">
+        <p class="text-center text-gray-500">Selecione uma coleção acima para visualizar as análises.</p>
+    </div>
+    <div id="chart-loading" class="text-center text-gray-600 mb-4 hidden">
+        <div class="loading-spinner"></div>
+        Carregando análises...
+    </div>
+    <div id="chart-error-message" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+        <strong class="font-bold">Erro!</strong>
+        <span class="block sm:inline" id="chart-error-text">Não foi possível carregar as análises.</span>
+    </div>
+
+    <div id="behavior-analysis-container" class="hidden">
+        <div class="border-b border-gray-200 mb-4">
+            <nav id="behavior-analysis-tabs" class="-mb-px flex space-x-8" aria-label="Tabs">
+                <a href="#" data-tab="reclamacoes" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Padrão de Reclamações</a>
+                <a href="#" data-tab="churn" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Padrão de Churn</a>
+                <a href="#" data-tab="preditiva" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Análise Preditiva de Churn</a>
+            </nav>
+        </div>
+        <div id="behavior-analysis-tab-content">
+            <div id="tab-content-reclamacoes" class="tab-pane"></div>
+            <div id="tab-content-churn" class="tab-pane"></div>
+            <div id="tab-content-preditiva" class="tab-pane"></div>
+        </div>
+    </div>
+
+
+    <!-- FILTRO DE BUSCA (USADO POR CANCELAMENTO E NEGATIVAÇÃO) -->
+    <div id="custom-search-filter" class="flex flex-col md:flex-row items-center justify-center gap-4 my-8 hidden">
+        <label for="clientSearchInput" class="text-gray-700 font-medium whitespace-nowrap">Buscar Cliente:</label>
+        <input type="text" id="clientSearchInput" placeholder="Digite o nome do cliente..." class="block w-full max-w-sm py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+        <button id="applyClientSearch" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition">Buscar</button>
+    
+        <!-- NOVO FILTRO DE RELEVÂNCIA (PARA CANCELAMENTO/NEGATIVAÇÃO) -->
+        <div class="flex flex-col items-center">
+            <label for="relevanceFilterSearch" class="text-gray-700 font-medium whitespace-nowrap text-sm">Relevância (Meses Pós-Ativação):</label>
+            <select id="relevanceFilterSearch" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos</option>
+                <option value="0-6">0-6 Meses</option>
+                <option value="0-12">0-12 Meses</option>
+                <option value="13-24">13-24 Meses</option>
+                <option value="25-36">25-36 Meses</option>
+                <option value="37+">37+ Meses</option>
+            </select>
+        </div>
+    </div>
+    
+    <div id="financial-health-filters" class="flex flex-wrap justify-center items-center gap-4 my-4 hidden">
+        <div>
+            <label for="contractStatusFilter" class="text-gray-700 font-medium mr-2">Status do Contrato:</label>
+            <select id="contractStatusFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos</option>
+            </select>
+        </div>
+        <div>
+            <label for="accessStatusFilter" class="text-gray-700 font-medium mr-2">Status de Acesso:</label>
+            <select id="accessStatusFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos</option>
+            </select>
+        </div>
+    </div>
+    
+    <div id="faturamento-cidade-filters" class="flex flex-wrap justify-center items-center gap-4 my-8 hidden">
+        <div class="flex flex-col items-center">
+            <label for="faturamentoStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
+            <input type="date" id="faturamentoStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="faturamentoEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <input type="date" id="faturamentoEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="faturamentoCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
+            <select id="faturamentoCityFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todas as Cidades</option>
+            </select>
+        </div>
+    </div>
+
+
+    <div id="financial-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
+        <div class="flex flex-col items-center">
+            <label for="yearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano:</label>
+            <select id="yearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Anos</option>
+            </select>
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="monthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês:</label>
+            <select id="monthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Meses</option>
+                <option value="1">Janeiro</option>
+                <option value="2">Fevereiro</option>
+                <option value="3">Março</option>
+                <option value="4">Abril</option>
+                <option value="5">Maio</option>
+                <option value="6">Junho</option>
+                <option value="7">Julho</option>
+                <option value="8">Agosto</option>
+                <option value="9">Setembro</option>
+                <option value="10">Outubro</option>
+                <option value="11">Novembro</option>
+                <option value="12">Dezembro</option>
+            </select>
+        </div>
+        <div id="city-filter-container" class="flex flex-col items-center hidden">
+            <label for="cityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
+            <select id="cityFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todas as Cidades</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- FILTROS PARA ANÁLISE DE VENDEDORES (CHURN) -->
+    <div id="seller-analysis-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
+        <div class="flex flex-col items-center">
+            <label for="sellerYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano:</label>
+            <select id="sellerYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Anos</option>
+            </select>
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="sellerMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês:</label>
+            <select id="sellerMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Meses</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- NOVOS FILTROS PARA ATIVAÇÃO POR VENDEDOR -->
+    <div id="activation-seller-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
+        <div class="flex flex-col items-center">
+            <label for="activationSellerCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
+            <select id="activationSellerCityFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todas as Cidades</option>
+            </select>
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="activationSellerYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano (Ativação):</label>
+            <select id="activationSellerYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Anos</option>
+            </select>
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="activationSellerMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês (Ativação):</label>
+            <select id="activationSellerMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Meses</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+        </div>
+    </div>
+
+    
+    <!-- NOVOS FILTROS PARA GRÁFICO DE RETENÇÃO (COORTE) -->
+    <div id="cohort-analysis-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
+        <div class="flex flex-col items-center">
+            <label for="cohortCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
+            <select id="cohortCityFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todas as Cidades</option>
+            </select>
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="cohortYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano (Ativação):</label>
+            <select id="cohortYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Anos</option>
+            </select>
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="cohortMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês (Ativação):</label>
+            <select id="cohortMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Meses</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+        </div>
+    </div>
+    
+    <!-- FILTROS PARA CANCELAMENTO/NEGATIVAÇÃO POR CIDADE -->
+    <div id="city-cancellation-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
+        <div class="flex flex-col items-center">
+            <label for="cityCancellationYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano:</label>
+            <select id="cityCancellationYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Anos</option>
+            </select>
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="cityCancellationMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês:</label>
+            <select id="cityCancellationMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Meses</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+        </div>
+        <!-- NOVO FILTRO DE RELEVÂNCIA (PARA CIDADE) -->
+        <div class="flex flex-col items-center">
+            <label for="relevanceFilterCity" class="text-gray-700 font-medium mb-2 whitespace-nowrap text-sm">Relevância (Meses Pós-Ativação):</label>
+            <select id="relevanceFilterCity" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos</option>
+                <option value="0-6">0-6 Meses</option>
+                <option value="0-12">0-12 Meses</option>
+                <option value="13-24">13-24 Meses</option>
+                <option value="25-36">25-36 Meses</option>
+                <option value="37+">37+ Meses</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- FILTROS PARA CANCELAMENTO/NEGATIVAÇÃO POR BAIRRO -->
+    <div id="neighborhood-analysis-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
+        <div class="flex flex-col items-center">
+            <label for="neighborhoodAnalysisCityFilter" class="text-gray-700 font-medium mb-2">Selecione a Cidade:</label>
+            <select id="neighborhoodAnalysisCityFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Selecione uma cidade</option>
+            </select>
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="neighborhoodAnalysisYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano:</label>
+            <select id="neighborhoodAnalysisYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Anos</option>
+            </select>
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="neighborhoodAnalysisMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês:</label>
+            <select id="neighborhoodAnalysisMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Meses</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+        </div>
+        <!-- NOVO FILTRO DE RELEVÂNCIA (PARA BAIRRO) -->
+        <div class="flex flex-col items-center">
+            <label for="relevanceFilterNeighborhood" class="text-gray-700 font-medium mb-2 whitespace-nowrap text-sm">Relevância (Meses Pós-Ativação):</label>
+            <select id="relevanceFilterNeighborhood" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos</option>
+                <option value="0-6">0-6 Meses</option>
+                <option value="0-12">0-12 Meses</option>
+                <option value="13-24">13-24 Meses</option>
+                <option value="25-36">25-36 Meses</option>
+                <option value="37+">37+ Meses</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- FILTROS PARA ANÁLISE DE EQUIPAMENTO -->
+    <div id="equipment-analysis-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
+        <div class="flex flex-col items-center">
+            <label for="equipmentAnalysisCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
+            <select id="equipmentAnalysisCityFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todas as Cidades</option>
+            </select>
+        </div>
+        <div id="equipmentYearFilterContainer" class="flex flex-col items-center">
+                <label for="equipmentAnalysisYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano:</label>
+                <select id="equipmentAnalysisYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    <option value="">Todos os Anos</option>
+                </select>
+        </div>
+        <div id="equipmentMonthFilterContainer" class="flex flex-col items-center">
+            <label for="equipmentAnalysisMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês:</label>
+            <select id="equipmentAnalysisMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Meses</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+        </div>
+        <!-- NOVO FILTRO DE RELEVÂNCIA (PARA EQUIPAMENTO) -->
+        <div class="flex flex-col items-center">
+            <label for="relevanceFilterEquipment" class="text-gray-700 font-medium mb-2 whitespace-nowrap text-sm">Relevância (Meses Pós-Ativação):</label>
+            <select id="relevanceFilterEquipment" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos</option>
+                <option value="0-6">0-6 Meses</option>
+                <option value="0-12">0-12 Meses</option>
+                <option value="13-24">13-24 Meses</option>
+                <option value="25-36">25-36 Meses</option>
+                <option value="37+">37+ Meses</option>
+            </select>
+        </div>
+    </div>
+    
+    <div id="daily-evolution-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
+        <div class="flex flex-col items-center">
+            <label for="dailyEvolutionStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
+            <input type="date" id="dailyEvolutionStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="dailyEvolutionEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <input type="date" id="dailyEvolutionEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+        </div>
+    </div>
+
+    <!-- NOVOS FILTROS PARA ANÁLISE DE JUROS POR ATRASO -->
+    <div id="late-payment-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
+        <div class="flex flex-col items-center">
+            <label for="latePaymentYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano (Pagamento):</label>
+            <select id="latePaymentYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Anos</option>
+            </select>
+        </div>
+        <div class="flex flex-col items-center">
+            <label for="latePaymentMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês (Pagamento):</label>
+            <select id="latePaymentMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">Todos os Meses</option>
+                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+        </div>
+    </div>
+
+
+    <div id="main-charts-area" class="grid-stack mt-8">
+        </div>
+    
+    <div class="flex justify-center mt-6">
+        <button id="viewTableBtn" class="bg-purple-600 text-white px-6 py-3 rounded-xl shadow-md transition duration-300 ease-in-out transform hover:scale-105 active:scale-95 font-semibold hidden">
+            Ver Tabela Completa (Paginação)
+        </button>
+    </div>
+</div>
+{% endblock %}

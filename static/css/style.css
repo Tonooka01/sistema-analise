@@ -1,0 +1,471 @@
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+}
+.container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 1.5rem;
+    background-color: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+.card {
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+h1, h2 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0;
+}
+th, td {
+    padding: 10px;
+    border-bottom: 1px solid #e0e0e0;
+    text-align: left;
+    white-space: nowrap; 
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+/* --- CABEÇALHO FIXO (STICKY HEADER) --- */
+th {
+    background-color: #f1f5f9; 
+    color: #4b5563;
+    font-weight: 600;
+    position: sticky; 
+    top: 0;
+    z-index: 10; 
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05); 
+}
+
+.collection-selector button, .collection-selector select {
+    border: 2px solid transparent;
+    transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+.collection-selector button:hover {
+    transform: scale(1.05);
+}
+.collection-selector button.active {
+    background-color: #1d4ed8;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+    transform: scale(1);
+    border-color: #60a5fa;
+}
+#customAnalysisSelector {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22/%3E%3C/svg%3E');
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: .65em auto;
+    padding-right: 2.5rem;
+}
+#customAnalysisSelector.active {
+    border-color: #a78bfa;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* --- CONFIGURAÇÃO DA BARRA DE ROLAGEM (TABLE WRAPPER) --- */
+.table-wrapper {
+    max-height: 500px; 
+    overflow-y: auto; 
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin-top: 1rem;
+    position: relative;
+    background-color: white;
+    scroll-behavior: smooth;
+}
+
+.table-wrapper::-webkit-scrollbar { width: 8px; height: 8px; }
+.table-wrapper::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+.table-wrapper::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+.table-wrapper::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+.loading-spinner {
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    border-left-color: #3b82f6;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    animation: spin 1s linear infinite;
+    margin: 2rem auto;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* --- Estilos para o Modal --- */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+.modal.show {
+    opacity: 1;
+    visibility: visible;
+}
+.modal-content {
+    background-color: #ffffff;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    width: 95%; 
+    max-width: 1400px;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
+}
+.modal-close-button {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #718096;
+    transition: color 0.2s ease;
+}
+.modal-close-button:hover {
+    color: #4a5568;
+}
+.modal-body {
+    flex: 1 1 auto; 
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0; 
+}
+.modal .table-wrapper {
+    flex: 1 1 auto; 
+    height: auto; 
+    max-height: none; 
+    overflow-y: auto; 
+    margin-top: 0;
+    border: none;
+}
+
+/* --- CORREÇÃO ESPECÍFICA PARA O MODAL DE HISTÓRICO/CANCELAMENTO --- */
+#cancellation-detail-content {
+    flex: 1 1 auto; 
+    overflow-y: auto; 
+    min-height: 0;
+    padding-right: 8px; 
+    padding-bottom: 20px;
+}
+#cancellation-detail-content .table-wrapper {
+    flex: none !important; 
+    height: auto !important;
+    max-height: none !important; 
+    overflow: visible !important; 
+    margin-bottom: 2rem; 
+    border: 1px solid #e5e7eb;
+    box-shadow: none; 
+}
+#cancellation-detail-content th {
+    position: static; 
+}
+
+.modal .pagination-controls { 
+    padding-top: 1rem;
+    border-top: 1px solid #e0e0e0;
+    flex-shrink: 0;
+}
+
+.chart-type-options {
+    display: flex;
+    gap: 10px;
+}
+
+.tab-link {
+    border-color: transparent;
+    color: #6b7280; 
+    cursor: pointer;
+}
+.tab-link:hover {
+    border-color: #d1d5db;
+    color: #4b5563;
+}
+.tab-link.active {
+    border-color: #3b82f6;
+    color: #3b82f6;
+}
+.tab-pane {
+    display: none;
+}
+.tab-pane.active {
+    display: block;
+}
+
+/* --- GridStack & Gráficos --- */
+.grid-stack {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 10px;
+}
+.grid-stack-item-content {
+    color: #2c3e50;
+    text-align: center;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.chart-container-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding: 0 0.5rem;
+    flex-shrink: 0;
+}
+.chart-title {
+    font-weight: 600;
+    color: #4a5568;
+    font-size: 1.1rem;
+    text-align: left;
+    flex-grow: 1;
+}
+.chart-canvas-container {
+    flex-grow: 1;
+    position: relative;
+    min-height: 0;
+    width: 100%;
+}
+.chart-canvas-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+/* --- Media Queries --- */
+@media (max-width: 768px) {
+    body { padding: 0.5rem; }
+    .container { margin: 0.5rem auto; padding: 1rem; }
+    h1 { font-size: 1.75rem; }
+    .chart-title { font-size: 1rem; }
+    .collection-selector, 
+    #financial-filters, 
+    #seller-analysis-filters,
+    #city-cancellation-filters,
+    #neighborhood-analysis-filters,
+    #equipment-analysis-filters {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    .modal-content { max-width: 95%; padding: 1.5rem; max-height: 95%; }
+    .modal th { font-size: 0.75rem; }
+}
+
+/* --- Cards de Resumo --- */
+.summary-cards-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    justify-content: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+.summary-card {
+    padding: 1rem 1.5rem;
+    border-radius: 0.75rem;
+    text-align: center;
+    min-width: 200px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    border: 1px solid #e5e7eb;
+}
+.summary-card-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #4b5563;
+    margin-bottom: 0.25rem;
+}
+.summary-card-value {
+    font-size: 2.25rem;
+    font-weight: 700;
+}
+.summary-card.bg-red-50 .summary-card-value { color: #b91c1c; }
+.summary-card.bg-orange-50 .summary-card-value { color: #c2410c; }
+.summary-card.bg-purple-50 .summary-card-value { color: #6b21a8; }
+.summary-card.bg-gray-100 .summary-card-value { color: #1f2937; }
+
+/* --- Coorte --- */
+.cohort-table th, .cohort-table td {
+    text-align: center;
+    padding: 0.75rem 0.5rem;
+    font-size: 0.8rem;
+    min-width: 80px;
+    border: 1px solid #e5e7eb;
+}
+.cohort-table th { background-color: #f9fafb; font-weight: 600; color: #4b5563; }
+.cohort-table .cohort-month { font-weight: bold; background-color: #f9fafb; text-align: left; padding-left: 1rem; }
+.cohort-table .cohort-size { background-color: #f3f4f6; font-weight: 500; }
+.cohort-table td { transition: background-color 0.2s ease-in-out; }
+
+/* --- Estilos para o Comparativo Diário --- */
+.comparison-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+    .comparison-container {
+        flex-direction: row;
+    }
+}
+
+.comparison-table-wrapper {
+    flex: 1;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+}
+
+.comparison-header {
+    background-color: #1e3a8a; /* Azul escuro */
+    color: white;
+    padding: 10px;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.1rem;
+    border-bottom: 2px solid #172554;
+}
+
+.comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.comparison-table th {
+    background-color: #1e40af; /* Azul um pouco mais claro */
+    color: white;
+    padding: 8px;
+    text-align: right;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+}
+
+.comparison-table th:first-child {
+    text-align: center;
+}
+
+.comparison-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #cbd5e1;
+    border-right: 1px solid #cbd5e1;
+    text-align: right;
+    color: #334155;
+}
+
+.comparison-table td:first-child {
+    text-align: center;
+    font-weight: bold;
+    background-color: #f8fafc;
+}
+
+/* Cores Condicionais baseadas na imagem */
+.row-weekend {
+    background-color: #fef3c7; /* Bege/Amarelo claro (Fim de semana) */
+}
+
+.row-holiday {
+    background-color: #d1fae5; /* Verde claro (Feriado) */
+}
+
+.row-today {
+    background-color: #dbeafe; /* Azul claro (Dia Atual) */
+    border: 2px solid #3b82f6;
+}
+
+/* --- NOVA COR DO TOTAL (AZUL ESCURO) --- */
+.row-total {
+    background-color: #1e3a8a !important;
+    color: white !important;
+    font-weight: bold;
+    border-top: 2px solid #172554;
+}
+
+.text-neg { color: #dc2626; font-weight: bold; } /* Vermelho para negativo */
+.text-pos { color: #166534; font-weight: bold; } /* Verde para positivo */
+
+/* Botão de Upload PDF */
+.upload-pdf-container {
+    background-color: #f8fafc;
+    border: 2px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    margin-bottom: 2rem;
+    transition: all 0.3s ease;
+}
+.upload-pdf-container:hover {
+    border-color: #3b82f6;
+    background-color: #eff6ff;
+}
+
+/* --- LEGENDA DE CORES --- */
+.comparison-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    justify-content: center;
+    background: white;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    font-size: 0.85rem;
+    color: #475569;
+}
+.legend-box {
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+}

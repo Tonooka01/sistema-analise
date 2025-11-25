@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dashboard Financeiro{% endblock %}</title>
+
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js and Datalabels Plugin (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    <!-- Google Fonts (Inter) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- GridStack (CDN) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/8.1.1/gridstack.min.css" rel="stylesheet"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/8.1.1/gridstack-all.js"></script>
+
+    <!-- Link para o seu CSS estático -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        /* Adiciona um estilo básico para o body enquanto o Tailwind carrega */
+        body { font-family: 'Inter', sans-serif; background-color: #f0f2f5; }
+    </style>
+</head>
+<body class="p-4">
+    <div class="container mx-auto"> <!-- Adicionado mx-auto para centralizar container se necessário -->
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Inclui os Modais -->
+    {% include 'partials/modals.html' %}
+
+    <script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Referências do NOVO Modal Centralizado
+    const adminSettingsModal = document.getElementById('adminSettingsModal');
+    const openBtn = document.getElementById('openAdminSettingsModalBtn');
+    const closeBtn = document.getElementById('closeAdminSettingsModalBtn');
+
+    // Referências dos Elementos INTERNOS (Movidos para o Modal)
+    const timeoutInput = document.getElementById('inactivityTimeout');
+    const saveButton = document.getElementById('saveTimeoutBtn');
+    const statusSpan = document.getElementById('timeoutStatus');
+
+    let timeoutMinutes = 30;
+    let lastActivity = Date.now();
+    let timeoutId;
+    
+    // --- Funções de Timer (Mantidas Iguais) ---
+    function resetTimer() {
+        lastActivity = Date.now();
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(checkInactivity, (timeoutMinutes * 60 * 1000) + 1000); 
+    }
+    // ... (código anterior do TimeOut e Modal) ...
+
+    const usersTableBody = document.getElementById('usersTableBody');
+    const refreshUsersBtn = document.getElementById('refreshUsersBtn');
+
+    // REFERÊNCIAS NOVAS DO TOGGLE
+    const toggleCreateUserBtn = document.getElementById('toggleCreateUserBtn');
+    const createUserFormContainer = document.getElementById('createUserFormContainer');
+
+    // Lógica do Botão "Novo Usuário"
+    toggleCreateUserBtn?.addEventListener('click', () => {
+        // Alterna a classe 'hidden'
+        createUserFormContainer.classList.toggle('hidden');
+        
+        // (Opcional) Muda o texto do botão
+        if (createUserFormContainer.classList.contains('hidden')) {
+            toggleCreateUserBtn.innerHTML = '➕ Novo Usuário';
+            toggleCreateUserBtn.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+            toggleCreateUserBtn.classList.add('bg-purple-600', 'hover:bg-purple-700');
+        } else {
+            toggleCreateUserBtn.innerHTML = '➖ Cancelar';
+            toggleCreateUserBtn.classList.remove('bg-purple-600', 'hover:bg-purple-700');
+            toggleCreateUserBtn.classList.add('bg-gray-500', 'hover:bg-gray-600');
+            
+            // Foca no campo de usuário para agilizar
+            document.getElementById('modalUsername')?.focus();
+        }
+    });
+
+    // Função para Carregar Usuários
+    async function loadUsers() {
+        if (!usersTableBody) return;
+        
+        try {
+            const response = await fetch('/api/admin/users');
+            const users = await response.json();
+            
+            usersTableBody.innerHTML = '';
+            
+            users.forEach(u => {
+                // Define Status Online/Offline
+                let statusBadge = u.is_online 
+                    ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">● Online</span>`
+                    : `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">Offline</span>`;
+                
+                // Define Botão de Ação (Ativar/Desativar)
+                let actionBtnClass = u.is_active ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-green-100 text-green-700 hover:bg-green-200';
+                let actionBtnText = u.is_active ? 'Bloquear 🚫' : 'Ativar ✅';
+                let rowOpacity = u.is_active ? '' : 'opacity-60 bg-red-50'; // Deixa meio transparente se bloqueado
+
+                // Link para ver logs específicos desse usuário
+                let logsLink = `/admin/logs?username=${u.username}`; // (Ainda precisamos ajustar o backend para suportar esse filtro, veja passo extra abaixo)
+
+                const row = `
+                    <tr class="border-b border-gray-100 ${rowOpacity}">
+                        <td class="py-2 px-3 font-medium text-gray-700">${u.username}</td>
+                        <td class="py-2 px-3 text-center">${statusBadge}</td>
+                        <td class="py-2 px-3 text-center text-xs text-gray-500">${u.last_seen || 'Nunca'}</td>
+                        <td class="py-2 px-3 text-center flex justify-center gap-2">
+                            <button onclick="toggleUserStatus(${u.id})" class="px-2 py-1 rounded text-xs font-bold transition ${actionBtnClass}">
+                                ${actionBtnText}
+                            </button>
+                            </td>
+                    </tr>
+                `;
+                usersTableBody.innerHTML += row;
+            });
+        } catch (e) {
+            console.error("Erro ao listar usuários", e);
+            usersTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-red-500 py-2">Erro ao carregar.</td></tr>';
+        }
+    }
+
+    // Função Global para o botão de Toggle (precisa ser window.toggleUserStatus para funcionar no onclick do HTML gerado)
+    window.toggleUserStatus = async function(userId) {
+        if(!confirm("Tem certeza que deseja alterar o acesso deste usuário?")) return;
+        
+        try {
+            const res = await fetch('/api/admin/users/toggle', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: userId})
+            });
+            if(res.ok) {
+                loadUsers(); // Recarrega a tabela
+            } else {
+                const err = await res.json();
+                alert("Erro: " + err.error);
+            }
+        } catch(e) {
+            alert("Erro de conexão.");
+        }
+    };
+
+    // Adiciona carregamento ao abrir o modal
+    openBtn?.addEventListener('click', () => {
+        openModal(); // Sua função existente
+        loadUsers(); // Nova chamada
+    });
+    
+    refreshUsersBtn?.addEventListener('click', loadUsers);
+
+    function checkInactivity() {
+        const elapsed = Date.now() - lastActivity;
+        const limit = timeoutMinutes * 60 * 1000;
+
+        if (elapsed > limit) {
+            console.warn(`Sessão expirada por inatividade (${timeoutMinutes} min). Redirecionando para login.`);
+            window.location.href = "/logout?reason=inactivity"; 
+        }
+    }
+    // ------------------------------------------
+
+    // 1. Carregar Configurações Iniciais
+    async function loadSettings() {
+        try {
+            const response = await fetch('/api/admin/settings');
+            if (response.ok) {
+                const data = await response.json();
+                timeoutMinutes = parseInt(data.timeout_minutes) || 30;
+                
+                if (timeoutInput) { 
+                    timeoutInput.value = timeoutMinutes; // Atualiza o input dentro do modal
+                }
+            }
+        } catch (e) {
+            console.error("Não foi possível carregar tempo de inatividade.", e);
+        }
+        resetTimer(); 
+    }
+    
+    // 2. Salvar Handler (Evento do Botão Salvar dentro do Modal)
+    saveButton?.addEventListener('click', async () => {
+        const newTimeout = parseInt(timeoutInput.value);
+        if (newTimeout < 5 || newTimeout > 360 || isNaN(newTimeout)) {
+            statusSpan.textContent = "Valor deve ser entre 5 e 360 min.";
+            statusSpan.classList.remove('text-green-700', 'hidden');
+            statusSpan.classList.add('text-red-700');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/admin/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ timeout: newTimeout })
+            });
+            if (response.ok) {
+                timeoutMinutes = newTimeout;
+                resetTimer();
+                statusSpan.textContent = `Configuração salva (${newTimeout} min)!`;
+                statusSpan.classList.remove('text-red-700', 'hidden');
+                statusSpan.classList.add('text-green-700');
+                setTimeout(() => statusSpan.classList.add('hidden'), 3000);
+            }
+        } catch (e) {
+            statusSpan.textContent = "Erro ao salvar no servidor.";
+            statusSpan.classList.remove('text-green-700', 'hidden');
+            statusSpan.classList.add('text-red-700');
+        }
+    });
+
+    // 3. Funções de controle do Modal
+    function openModal(e) {
+        if (e) e.preventDefault(); 
+        if (adminSettingsModal) adminSettingsModal.classList.add('show');
+    }
+    
+    function closeModal() {
+        if (adminSettingsModal) adminSettingsModal.classList.remove('show');
+        // Limpa o status ao fechar
+        statusSpan.classList.add('hidden');
+    }
+
+    // Inicializar e Monitorar Eventos do Usuário
+    loadSettings();
+    openBtn?.addEventListener('click', openModal);
+    closeBtn?.addEventListener('click', closeModal);
+
+    // Fechar ao clicar fora e Monitoramento de Atividade (Mantido Igual)
+    adminSettingsModal?.addEventListener('click', (e) => { if (e.target === adminSettingsModal) closeModal(); });
+    ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+        document.addEventListener(event, resetTimer, true);
+    });
+});
+</script>
+    {% include 'partials/modals.html' %}
+
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+</body>
+</html>
+
+    <!-- Carrega o JavaScript principal COMO MÓDULO e usando url_for -->
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+</body>
+</html>
+
