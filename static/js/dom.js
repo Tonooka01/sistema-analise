@@ -30,10 +30,11 @@ export let clientSearchInput;
 export let applyClientSearchBtn;
 export let relevanceFilterSearch; // NOVO FILTRO DE RELEVÂNCIA
 
-// Filtros Saúde Financeira
+// Filtros Saúde Financeira / Evolução Ativos
 export let financialHealthFiltersDiv;
 export let contractStatusFilter;
-export let accessStatusFilter;
+export let accessStatusContainer; // <-- ATUALIZADO: Agora é um container para checkboxes
+export let filterActiveClientsBtn; // <-- NOVO: Botão Filtrar
 
 // Filtros Análise Vendedores
 export let sellerAnalysisFiltersDiv;
@@ -217,6 +218,18 @@ export let activeEquipmentDetailPrevPageBtn;
 export let activeEquipmentDetailNextPageBtn;
 export let activeEquipmentDetailPageInfo;
 
+// Elementos do Admin
+export let adminSettingsModal;
+export let openAdminSettingsModalBtn;
+export let closeAdminSettingsModalBtn;
+export let timeoutInput;
+export let saveTimeoutBtn;
+export let timeoutStatus;
+export let usersTableBody;
+export let refreshUsersBtn;
+export let toggleCreateUserBtn;
+export let createUserFormContainer;
+
 
 /**
  * Função para preencher as variáveis de referência do DOM.
@@ -256,10 +269,11 @@ export function initializeDom() {
     applyClientSearchBtn = document.getElementById('applyClientSearch');
     relevanceFilterSearch = document.getElementById('relevanceFilterSearch'); // NOVO
 
-    // Filtros Saúde Financeira
+    // Filtros Saúde Financeira / Evolução Ativos
     financialHealthFiltersDiv = document.getElementById('financial-health-filters');
     contractStatusFilter = document.getElementById('contractStatusFilter');
-    accessStatusFilter = document.getElementById('accessStatusFilter');
+    accessStatusContainer = document.getElementById('accessStatusContainer'); // <-- ATUALIZADO: Busca o container
+    filterActiveClientsBtn = document.getElementById('filterActiveClientsBtn'); // <-- NOVO: Botão Filtrar
 
     // Filtros Análise Vendedores
     sellerAnalysisFiltersDiv = document.getElementById('seller-analysis-filters');
@@ -429,6 +443,18 @@ export function initializeDom() {
     activeEquipmentDetailPrevPageBtn = document.getElementById('activeEquipmentDetailPrevPageBtn');
     activeEquipmentDetailNextPageBtn = document.getElementById('activeEquipmentDetailNextPageBtn');
     activeEquipmentDetailPageInfo = document.getElementById('activeEquipmentDetailPageInfo');
+
+    // Referências Admin
+    adminSettingsModal = document.getElementById('adminSettingsModal');
+    openAdminSettingsModalBtn = document.getElementById('openAdminSettingsModalBtn');
+    closeAdminSettingsModalBtn = document.getElementById('closeAdminSettingsModalBtn');
+    timeoutInput = document.getElementById('inactivityTimeout');
+    saveTimeoutBtn = document.getElementById('saveTimeoutBtn');
+    timeoutStatus = document.getElementById('timeoutStatus');
+    usersTableBody = document.getElementById('usersTableBody');
+    refreshUsersBtn = document.getElementById('refreshUsersBtn');
+    toggleCreateUserBtn = document.getElementById('toggleCreateUserBtn');
+    createUserFormContainer = document.getElementById('createUserFormContainer');
 
     console.log("Referências do DOM inicializadas.");
 

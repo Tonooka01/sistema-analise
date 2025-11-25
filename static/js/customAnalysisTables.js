@@ -6,6 +6,7 @@ import * as utils from './utils.js';
 
 /**
  * Busca os status de contrato e acesso para preencher os filtros da análise de Saúde Financeira.
+ * ATUALIZADO: Status do Contrato é Select, Status de Acesso é Checkbox.
  */
 export async function populateContractStatusFilters() {
     try {
@@ -16,7 +17,7 @@ export async function populateContractStatusFilters() {
         }
         const data = await response.json();
 
-        // Preenche o filtro de Status do Contrato
+        // 1. Preenche o filtro de Status do Contrato (Select Padrão)
         if (dom.contractStatusFilter && data.status_contrato) {
             dom.contractStatusFilter.innerHTML = '<option value="">Todos</option>'; // Opção padrão
             data.status_contrato.forEach(status => {
@@ -27,14 +28,30 @@ export async function populateContractStatusFilters() {
             });
         }
 
-        // Preenche o filtro de Status de Acesso
-        if (dom.accessStatusFilter && data.status_acesso) {
-            dom.accessStatusFilter.innerHTML = '<option value="">Todos</option>'; // Opção padrão
+        // 2. Preenche o filtro de Status de Acesso (CHECKBOXES)
+        if (dom.accessStatusContainer && data.status_acesso) {
+            dom.accessStatusContainer.innerHTML = ''; // Limpa o container
+
             data.status_acesso.forEach(status => {
-                const option = document.createElement('option');
-                option.value = status;
-                option.textContent = status;
-                dom.accessStatusFilter.appendChild(option);
+                const wrapper = document.createElement('div');
+                wrapper.className = 'flex items-center mb-1 hover:bg-gray-50 p-1 rounded';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = status;
+                // Estilização do checkbox e identificador
+                checkbox.className = 'mr-2 form-checkbox h-4 w-4 text-purple-600 transition duration-150 ease-in-out cursor-pointer';
+                const uniqueId = `chk_access_${status.replace(/\s+/g, '_')}`;
+                checkbox.id = uniqueId;
+
+                const label = document.createElement('label');
+                label.textContent = status;
+                label.htmlFor = uniqueId;
+                label.className = 'text-gray-700 cursor-pointer select-none w-full text-xs';
+
+                wrapper.appendChild(checkbox);
+                wrapper.appendChild(label);
+                dom.accessStatusContainer.appendChild(wrapper);
             });
         }
     } catch (error) {
@@ -142,13 +159,26 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     
     const currentState = state.getCustomAnalysisState(); 
     const contractStatus = dom.contractStatusFilter?.value || '';
-    const accessStatus = dom.accessStatusFilter?.value || '';
+    
+    // --- LÓGICA MULTI-SELECT PARA ACESSO ---
+    let accessStatus = '';
+    if (dom.accessStatusContainer && dom.accessStatusContainer.querySelector('input[type="checkbox"]')) {
+         // É container de checkbox: Pega todos os marcados
+         const checked = dom.accessStatusContainer.querySelectorAll('input[type="checkbox"]:checked');
+         accessStatus = Array.from(checked).map(cb => cb.value).join(',');
+    } else if (dom.accessStatusContainer && dom.accessStatusContainer.tagName === 'SELECT') {
+         // Fallback se ainda for select
+         accessStatus = dom.accessStatusContainer.value;
+    }
+    // ---------------------------------------
+
     const offset = (page - 1) * currentState.rowsPerPage;
     const endpoint = analysisType === 'bloqueio' ? 'financial_health_auto_block' : 'financial_health';
 
     const params = new URLSearchParams({ search_term: searchTerm, limit: currentState.rowsPerPage, offset: offset });
+    
     if (contractStatus) params.append('status_contrato', contractStatus);
-    if (accessStatus) params.append('status_acesso', accessStatus);
+    if (accessStatus) params.append('status_acesso', accessStatus); // Envia lista separada por vírgula
     if (relevance) params.append('relevance', relevance);
 
     const url = `${state.API_BASE_URL}/api/custom_analysis/${endpoint}?${params.toString()}`;

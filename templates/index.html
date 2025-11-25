@@ -42,7 +42,6 @@
     <div class="relative">
         <select id="customAnalysisSelector" class="px-5 py-3 rounded-xl shadow-md bg-purple-600 text-white font-semibold cursor-pointer">
             <option value="" disabled selected>Análise Personalizada</option>
-            <!-- NOVA ANÁLISE ADICIONADA -->
             <option value="analise_juros_atraso" class="text-black bg-white">Análise de Juros por Atraso</option>
             <option value="faturamento_por_cidade" class="text-black bg-white">Faturamento por Período e Cidade</option>
             <option value="active_clients_evolution" class="text-black bg-white">Evolução de Clientes Ativos</option>
@@ -53,7 +52,7 @@
             <option value="saude_financeira_contrato_bloqueio" class="text-black bg-white">Saúde Financeira por Contrato (Bloqueio automático)</option>
             <option value="cancellations" class="text-black bg-white">Análise de Cancelamento</option>
             <option value="negativacao" class="text-black bg-white">Análise de Negativação</option>
-            <option value="vendedores" class="text-black bg-white">Análise de Vendedores (Churn)</option> <!-- Renomeado para clareza -->
+            <option value="vendedores" class="text-black bg-white">Análise de Vendedores (Churn)</option>
             <option value="cancellations_by_city" class="text-black bg-white">Cancelamento/Negativação por Cidade</option>
             <option value="cancellations_by_neighborhood" class="text-black bg-white">Cancelamento/Negativação por Bairro</option>
             <option value="cancellations_by_equipment" class="text-black bg-white">Cancelamento por Equipamento</option>
@@ -61,7 +60,6 @@
             <option value="cohort_retention" class="text-black bg-white">Gráfico de Retenção (Coorte)</option>
             <option value="daily_evolution_by_city" class="text-black bg-white">Evolução Diária por Cidade</option>
             <option value="comparativo_diario" class="text-black bg-white">Comparativo Diário</option>
-
         </select>
     </div>
         <button id="saveLayoutBtn" class="px-5 py-3 rounded-xl shadow-md bg-green-600 text-white font-semibold hover:bg-green-700 active:scale-95 transition">
@@ -70,7 +68,7 @@
 </div>
 
 <div id="dashboard-content-wrapper" class="card p-6">
-        <div id="dashboard-content">
+    <div id="dashboard-content">
         <p class="text-center text-gray-500">Selecione uma coleção acima para visualizar as análises.</p>
     </div>
     <div id="chart-loading" class="text-center text-gray-600 mb-4 hidden">
@@ -104,7 +102,7 @@
         <input type="text" id="clientSearchInput" placeholder="Digite o nome do cliente..." class="block w-full max-w-sm py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         <button id="applyClientSearch" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition">Buscar</button>
     
-        <!-- NOVO FILTRO DE RELEVÂNCIA (PARA CANCELAMENTO/NEGATIVAÇÃO) -->
+        <!-- FILTRO DE RELEVÂNCIA (PARA CANCELAMENTO/NEGATIVAÇÃO) -->
         <div class="flex flex-col items-center">
             <label for="relevanceFilterSearch" class="text-gray-700 font-medium whitespace-nowrap text-sm">Relevância (Meses Pós-Ativação):</label>
             <select id="relevanceFilterSearch" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
@@ -118,19 +116,29 @@
         </div>
     </div>
     
-    <div id="financial-health-filters" class="flex flex-wrap justify-center items-center gap-4 my-4 hidden">
-        <div>
-            <label for="contractStatusFilter" class="text-gray-700 font-medium mr-2">Status do Contrato:</label>
-            <select id="contractStatusFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+    <!-- FILTROS SAÚDE FINANCEIRA / EVOLUÇÃO ATIVOS -->
+    <!-- ATUALIZADO: Adicionado items-end, checkbox container e botão filtrar -->
+    <div id="financial-health-filters" class="flex flex-wrap justify-center items-end gap-6 my-4 hidden">
+        <!-- Status do Contrato (Select) -->
+        <div class="flex flex-col">
+            <label for="contractStatusFilter" class="text-gray-700 font-medium mb-1 text-sm">Status do Contrato:</label>
+            <select id="contractStatusFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm w-48">
                 <option value="">Todos</option>
             </select>
         </div>
-        <div>
-            <label for="accessStatusFilter" class="text-gray-700 font-medium mr-2">Status de Acesso:</label>
-            <select id="accessStatusFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos</option>
-            </select>
+
+        <!-- Status de Acesso (Checkbox Container) -->
+        <div class="flex flex-col">
+            <label class="text-gray-700 font-medium mb-1 text-sm">Status de Acesso:</label>
+            <div id="accessStatusContainer" class="bg-white border border-gray-300 rounded-md p-2 h-32 overflow-y-auto w-56 shadow-sm text-sm relative">
+                <p class="text-gray-400 text-xs">Carregando...</p>
+            </div>
         </div>
+
+        <!-- NOVO BOTÃO FILTRAR -->
+        <button id="filterActiveClientsBtn" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition h-10 font-semibold">
+            Filtrar
+        </button>
     </div>
     
     <div id="faturamento-cidade-filters" class="flex flex-wrap justify-center items-center gap-4 my-8 hidden">
@@ -201,7 +209,7 @@
         </div>
     </div>
 
-    <!-- NOVOS FILTROS PARA ATIVAÇÃO POR VENDEDOR -->
+    <!-- FILTROS PARA ATIVAÇÃO POR VENDEDOR -->
     <div id="activation-seller-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="activationSellerCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
@@ -225,7 +233,7 @@
     </div>
 
     
-    <!-- NOVOS FILTROS PARA GRÁFICO DE RETENÇÃO (COORTE) -->
+    <!-- FILTROS PARA GRÁFICO DE RETENÇÃO (COORTE) -->
     <div id="cohort-analysis-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="cohortCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
@@ -263,7 +271,7 @@
                 <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
             </select>
         </div>
-        <!-- NOVO FILTRO DE RELEVÂNCIA (PARA CIDADE) -->
+        <!-- FILTRO DE RELEVÂNCIA (PARA CIDADE) -->
         <div class="flex flex-col items-center">
             <label for="relevanceFilterCity" class="text-gray-700 font-medium mb-2 whitespace-nowrap text-sm">Relevância (Meses Pós-Ativação):</label>
             <select id="relevanceFilterCity" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
@@ -298,7 +306,7 @@
                 <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
             </select>
         </div>
-        <!-- NOVO FILTRO DE RELEVÂNCIA (PARA BAIRRO) -->
+        <!-- FILTRO DE RELEVÂNCIA (PARA BAIRRO) -->
         <div class="flex flex-col items-center">
             <label for="relevanceFilterNeighborhood" class="text-gray-700 font-medium mb-2 whitespace-nowrap text-sm">Relevância (Meses Pós-Ativação):</label>
             <select id="relevanceFilterNeighborhood" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
@@ -333,7 +341,7 @@
                 <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
             </select>
         </div>
-        <!-- NOVO FILTRO DE RELEVÂNCIA (PARA EQUIPAMENTO) -->
+        <!-- FILTRO DE RELEVÂNCIA (PARA EQUIPAMENTO) -->
         <div class="flex flex-col items-center">
             <label for="relevanceFilterEquipment" class="text-gray-700 font-medium mb-2 whitespace-nowrap text-sm">Relevância (Meses Pós-Ativação):</label>
             <select id="relevanceFilterEquipment" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
@@ -358,7 +366,7 @@
         </div>
     </div>
 
-    <!-- NOVOS FILTROS PARA ANÁLISE DE JUROS POR ATRASO -->
+    <!-- FILTROS PARA ANÁLISE DE JUROS POR ATRASO -->
     <div id="late-payment-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="latePaymentYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano (Pagamento):</label>

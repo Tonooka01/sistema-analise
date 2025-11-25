@@ -80,9 +80,7 @@ function handleCustomAnalysisChange(page = 1) {
 
     // --- Mostra Filtros e Chama Função de Fetch ---
     switch (selectedAnalysis) {
-        // --- NOVO: Lógica do Comparativo Diário (Faltava no seu arquivo) ---
         case 'comparativo_diario':
-            // Esconde filtros padrões pois essa tela tem lógica própria de data (hoje)
             customTables.fetchAndRenderDailyComparison();
             break;
 
@@ -106,15 +104,16 @@ function handleCustomAnalysisChange(page = 1) {
             if (dom.faturamentoCidadeFiltersDiv) dom.faturamentoCidadeFiltersDiv.classList.remove('hidden');
             if(dom.faturamentoCityFilter) dom.faturamentoCityFilter.closest('.flex-col')?.classList.remove('hidden');
             if (dom.financialHealthFiltersDiv) dom.financialHealthFiltersDiv.classList.remove('hidden');
+            
+            // Popula os filtros (Select de Contrato e Checkboxes de Acesso)
             customTables.populateContractStatusFilters();
 
             const acStartDate = dom.faturamentoStartDate?.value || '';
             const acEndDate = dom.faturamentoEndDate?.value || '';
             const acCity = dom.faturamentoCityFilter?.value || '';
-            const statusContrato = dom.contractStatusFilter?.value || '';
-            const statusAcesso = dom.accessStatusFilter?.value || '';
             
-            customCharts.fetchAndRenderActiveClientsEvolution(acStartDate, acEndDate, acCity, statusContrato, statusAcesso);
+            // Chama a função sem passar status explicitamente, pois ela busca direto do DOM
+            customCharts.fetchAndRenderActiveClientsEvolution(acStartDate, acEndDate, acCity);
             break;
 
         case 'analise_comportamento':
@@ -283,6 +282,29 @@ export function initializeEventListeners() {
         handleCustomAnalysisChange(1);
     });
 
+    // --- Listener do Botão FILTRAR (Atualizado) ---
+    dom.filterActiveClientsBtn?.addEventListener('click', () => {
+         const currentState = state.getCustomAnalysisState();
+         const currentAnalysis = currentState.currentAnalysis;
+
+         // 1. Evolução de Clientes Ativos
+         if (currentAnalysis === 'active_clients_evolution') {
+             const acStartDate = dom.faturamentoStartDate?.value || '';
+             const acEndDate = dom.faturamentoEndDate?.value || '';
+             const acCity = dom.faturamentoCityFilter?.value || '';
+             customCharts.fetchAndRenderActiveClientsEvolution(acStartDate, acEndDate, acCity);
+         }
+         // 2. Saúde Financeira (Atraso ou Bloqueio)
+         else if (currentAnalysis === 'saude_financeira') {
+             const searchTerm = dom.clientSearchInput?.value || '';
+             const analysisType = currentState.currentAnalysisType || 'atraso';
+             const relevance = dom.relevanceFilterSearch?.value || '';
+             
+             // Dispara a busca manual ao clicar
+             customTables.fetchAndRenderFinancialHealthAnalysis(searchTerm, analysisType, 1, relevance);
+         }
+    });
+
     // --- Listeners para Filtros Específicos das Análises Personalizadas ---
 
     dom.applyClientSearchBtn?.addEventListener('click', () => handleCustomAnalysisChange(1));
@@ -292,7 +314,8 @@ export function initializeEventListeners() {
 
     const filterElementsToWatch = [
         dom.yearFilterSelect, dom.monthFilterSelect, dom.cityFilterSelect,
-        dom.contractStatusFilter, dom.accessStatusFilter,
+        dom.contractStatusFilter, 
+        dom.accessStatusContainer, // Vigia o container de checkboxes (bubbling)
         dom.sellerYearFilter, dom.sellerMonthFilter,
         dom.cityCancellationYearFilter, dom.cityCancellationMonthFilter,
         dom.neighborhoodAnalysisCityFilter, dom.neighborhoodAnalysisYearFilter, dom.neighborhoodAnalysisMonthFilter,
@@ -318,6 +341,12 @@ export function initializeEventListeners() {
                 const currentAnalysis = currentAnalysisState ? currentAnalysisState.currentAnalysis : null;
                 const mainCollection = state.getModalCurrentCollection();
                 const customSelectorValue = dom.customAnalysisSelector ? dom.customAnalysisSelector.value : null;
+
+                // --- BLOQUEIO ATUALIZADO: Se for Evolução OU Saúde Financeira, NÃO recarrega ao mudar status ---
+                if ((currentAnalysis === 'active_clients_evolution' || currentAnalysis === 'saude_financeira') && 
+                    (el.id === 'contractStatusFilter' || el.id === 'accessStatusContainer')) {
+                    return; 
+                }
 
                 if (customSelectorValue && currentAnalysis) {
                     handleCustomAnalysisChange(1);

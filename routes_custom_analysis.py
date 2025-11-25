@@ -102,9 +102,11 @@ def execute_financial_health_query(delay_days):
         search_term = request.args.get('search_term', '').strip()
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
-        status_contrato = request.args.get('status_contrato', '')
-        status_acesso = request.args.get('status_acesso', '')
-        relevance = request.args.get('relevance', '') # <-- CAPTURA O PARÂMETRO
+        
+        # Captura os filtros (podem vir separados por vírgula)
+        status_contrato_str = request.args.get('status_contrato', '')
+        status_acesso_str = request.args.get('status_acesso', '')
+        relevance = request.args.get('relevance', '')
 
         params = []
         where_conditions = []
@@ -112,15 +114,22 @@ def execute_financial_health_query(delay_days):
         if search_term:
             where_conditions.append("C.Cliente LIKE ?")
             params.append(f'%{search_term}%')
-        if status_contrato:
-            where_conditions.append("C.Status_contrato = ?")
-            params.append(status_contrato)
-        if status_acesso:
-            where_conditions.append("C.Status_acesso = ?")
-            params.append(status_acesso)
 
-        # --- LÓGICA DE RELEVÂNCIA (Meses até a primeira inadimplência) ---
-        # Usa SUBSTR para garantir formato YYYY-MM-DD e evitar erros com horas
+        # --- LÓGICA MULTI-SELECT PARA SAÚDE FINANCEIRA ---
+        if status_contrato_str:
+            status_list = status_contrato_str.split(',')
+            placeholders = ','.join(['?'] * len(status_list))
+            where_conditions.append(f"C.Status_contrato IN ({placeholders})")
+            params.extend(status_list)
+
+        if status_acesso_str:
+            acesso_list = status_acesso_str.split(',')
+            placeholders = ','.join(['?'] * len(acesso_list))
+            where_conditions.append(f"C.Status_acesso IN ({placeholders})")
+            params.extend(acesso_list)
+        # -------------------------------------------------
+
+        # Lógica de relevância
         months_calc = """
             CAST(ROUND(
                 (JULIANDAY(SUBSTR(FLP.Primeira_Inadimplencia_Vencimento, 1, 10)) - JULIANDAY(SUBSTR(C.Data_ativa_o, 1, 10))) / 30.44
@@ -1178,25 +1187,20 @@ def api_daily_evolution_by_city():
 
 @custom_analysis_bp.route('/active_clients_evolution')
 def api_active_clients_evolution():
-    """
-    Calcula a evolução mensal do número de clientes ativos dentro de um período.
-    Agora considera Contratos e Contratos_Negativacao, exclui cidades específicas
-    e suporta filtros de Status Contrato e Status Acesso.
-    """
     conn = get_db()
     try:
         start_date_str = request.args.get('start_date')
         end_date_str = request.args.get('end_date')
         city = request.args.get('city', '')
-        # Novos filtros
-        status_contrato = request.args.get('status_contrato', '')
-        status_acesso = request.args.get('status_acesso', '')
+        
+        # Pega as strings separadas por vírgula
+        status_contrato_str = request.args.get('status_contrato', '')
+        status_acesso_str = request.args.get('status_acesso', '')
 
         if not start_date_str or not end_date_str:
             return jsonify({"error": "Data inicial e final são obrigatórias."}), 400
 
-        # --- 1. Construção da Query com CTE 'AllContracts' ---
-        # Unifica as tabelas e normaliza as datas
+        # --- Query Base ---
         all_contracts_cte = """
             WITH AllContracts AS (
                 SELECT ID, Data_ativa_o, Data_cancelamento AS End_Date, Status_contrato, Status_acesso, Cidade
@@ -1214,25 +1218,34 @@ def api_active_clients_evolution():
         
         params = []
         
-        # Adiciona filtros dinâmicos à CTE de contratos filtrados
         if city:
             all_contracts_cte += " AND Cidade = ?"
             params.append(city)
         
-        if status_contrato:
-            all_contracts_cte += " AND Status_contrato = ?"
-            params.append(status_contrato)
+        # --- LÓGICA MULTI-SELECT (SQL IN) ---
+        if status_contrato_str:
+            # Se vier separado por vírgula (embora seja select, pode ser útil se mudar para checkbox)
+            status_list = status_contrato_str.split(',')
+            if len(status_list) == 1:
+                all_contracts_cte += " AND Status_contrato = ?"
+                params.append(status_list[0])
+            else:
+                placeholders = ','.join(['?'] * len(status_list))
+                all_contracts_cte += f" AND Status_contrato IN ({placeholders})"
+                params.extend(status_list)
             
-        if status_acesso:
-            all_contracts_cte += " AND Status_acesso = ?"
-            params.append(status_acesso)
+        if status_acesso_str:
+            acesso_list = status_acesso_str.split(',')
+            placeholders = ','.join(['?'] * len(acesso_list))
+            all_contracts_cte += f" AND Status_acesso IN ({placeholders})"
+            params.extend(acesso_list)
+        # ------------------------------------
             
-        all_contracts_cte += ")" # Fecha a CTE FilteredContracts
+        all_contracts_cte += ")" 
 
-        # Adiciona datas para a CTE recursiva de meses
         params.extend([start_date_str, end_date_str])
 
-        # Query Principal
+        # Query Principal (Mantida igual)
         query = f"""
             {all_contracts_cte},
             month_series(month_start) AS (
