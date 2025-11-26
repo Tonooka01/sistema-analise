@@ -31,6 +31,10 @@ function handleCustomAnalysisChange(page = 1) {
 
     // Obtém o termo de busca atual, se aplicável
     const searchTerm = dom.clientSearchInput?.value || '';
+    
+    // Obtém a preferência de ordenação do ESTADO (não mais do checkbox)
+    const currentSortOrder = state.getCustomAnalysisState().sortOrder; // 'asc' ou 'desc'
+    const sortAsc = currentSortOrder === 'asc';
 
     // Esconde todos os filtros personalizados antes de mostrar o correto
     utils.hideAllCustomFilters();
@@ -120,13 +124,15 @@ function handleCustomAnalysisChange(page = 1) {
         case 'cancellations':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
             const relevanceSearch = dom.relevanceFilterSearch?.value || '';
-            customTables.fetchAndRenderCancellationAnalysis(searchTerm, page, relevanceSearch);
+            // Passa o parâmetro de ordenação (Lê do estado)
+            customTables.fetchAndRenderCancellationAnalysis(searchTerm, page, relevanceSearch, sortAsc);
             break;
 
         case 'negativacao':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
             const relevanceSearchNeg = dom.relevanceFilterSearch?.value || '';
-            customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, page, relevanceSearchNeg);
+            // Passa o parâmetro de ordenação (Lê do estado)
+            customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, page, relevanceSearchNeg, sortAsc);
             break;
 
         case 'vendedores':
@@ -295,6 +301,7 @@ export function initializeEventListeners() {
         dom.dailyEvolutionStartDate, dom.dailyEvolutionEndDate,
         
         dom.relevanceFilterSearch,
+        // dom.sortPermanenceAsc, // REMOVIDO - Não existe mais como checkbox
         dom.relevanceFilterCity,
         dom.relevanceFilterNeighborhood,
         dom.relevanceFilterEquipment,
@@ -496,6 +503,30 @@ export function initializeEventListeners() {
     // --- Listeners Globais com Delegação de Eventos ---
 
     document.body.addEventListener('click', (e) => {
+        
+        // --- NOVO: Listener para ordenação da coluna Permanência ---
+        const sortHeader = e.target.closest('.sort-permanence-header');
+        if (sortHeader) {
+            const currentState = state.getCustomAnalysisState();
+            
+            // Inverte a ordem atual: 'desc' -> 'asc' ou 'asc' -> 'desc'
+            const newSortOrder = currentState.sortOrder === 'asc' ? 'desc' : 'asc';
+            state.setCustomAnalysisState({ sortOrder: newSortOrder });
+
+            // Recarrega a análise correta com os parâmetros atuais
+            const searchTerm = dom.clientSearchInput?.value || '';
+            const relevance = dom.relevanceFilterSearch?.value || '';
+            const isAsc = newSortOrder === 'asc';
+            
+            if (currentState.currentAnalysis === 'cancellations') {
+                customTables.fetchAndRenderCancellationAnalysis(searchTerm, 1, relevance, isAsc);
+            } else if (currentState.currentAnalysis === 'negativacao') {
+                customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, 1, relevance, isAsc);
+            }
+            return;
+        }
+        // ------------------------------------------------------------
+
         const invoiceDetailTrigger = e.target.closest('.invoice-detail-trigger');
         if (invoiceDetailTrigger) {
             const { contractId, clientName, type } = invoiceDetailTrigger.dataset;

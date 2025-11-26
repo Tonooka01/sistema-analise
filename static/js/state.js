@@ -36,7 +36,8 @@ let customAnalysisState = {
     totalRows: 0,
     currentAnalysis: '',
     currentSearchTerm: '',
-    currentAnalysisType: '' // Para Saúde Financeira (atraso/bloqueio)
+    currentAnalysisType: '', // Para Saúde Financeira (atraso/bloqueio)
+    sortOrder: 'desc' // <--- Ordenação padrão: Descendente (Maior para Menor)
 };
 
 // Estado Modal Detalhes Fatura (Atrasos/Não Pagas)
@@ -78,7 +79,7 @@ let cityDetailState = {
     currentType: null, // 'cancelado' or 'negativado'
     currentYear: '',
     currentMonth: '',
-    currentRelevance: '' // <-- NOVO ESTADO DE RELEVÂNCIA
+    currentRelevance: '' 
 };
 
 // Estado Modal Detalhes Bairro (Cancel./Negat. por Bairro)
@@ -91,7 +92,7 @@ let neighborhoodDetailState = {
     currentType: null, // 'cancelado' or 'negativado'
     currentYear: '',
     currentMonth: '',
-    currentRelevance: '' // <-- NOVO ESTADO DE RELEVÂNCIA
+    currentRelevance: '' 
 };
 
 // Estado Modal Detalhes Equipamento (Cancelamento)
@@ -103,7 +104,7 @@ let equipmentDetailState = {
     currentYear: '',
     currentMonth: '',
     currentCity: '',
-    currentRelevance: '' // <-- NOVO ESTADO DE RELEVÂNCIA
+    currentRelevance: '' 
 };
 
 // Estado Modal Detalhes Equipamento Ativo (por OLT)
@@ -140,7 +141,6 @@ export function getModalCurrentPage() { return modalCurrentPage; }
 export function getModalCurrentCollection() { return modalCurrentCollection; }
 export function getModalTotalRows() { return modalTotalRows; }
 
-// --- NOVO GETTER ---
 export function getCustomModalState() { return customModalState; }
 
 export function getCurrentSelectedYear() { return currentSelectedYear; }
@@ -175,7 +175,6 @@ export function setModalCurrentPage(page) { modalCurrentPage = page; }
 export function setModalCurrentCollection(collection) { modalCurrentCollection = collection; }
 export function setModalTotalRows(total) { modalTotalRows = total; }
 
-// --- NOVO SETTER ---
 export function setCustomModalState(newState) { customModalState = { ...customModalState, ...newState }; }
 
 export function setCurrentSelectedYear(year) { currentSelectedYear = year; }
@@ -202,12 +201,12 @@ export function setSellerActivationDetailState(newState) { sellerActivationDetai
 export function resetCustomAnalysisState() {
     customAnalysisState = {
         currentPage: 1, rowsPerPage: 50, totalRows: 0,
-        currentAnalysis: '', currentSearchTerm: '', currentAnalysisType: ''
+        currentAnalysis: '', currentSearchTerm: '', currentAnalysisType: '',
+        sortOrder: 'desc' // Reset para descendente por padrão
     };
     console.log("Estado customAnalysisState resetado.");
 }
 
-// --- NOVO RESET ---
 export function resetCustomModalState() {
     customModalState = {
         isActive: false, endpoint: '', title: '', params: {},

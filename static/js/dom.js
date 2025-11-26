@@ -29,6 +29,7 @@ export let customSearchFilterDiv;
 export let clientSearchInput;
 export let applyClientSearchBtn;
 export let relevanceFilterSearch;
+export let sortPermanenceAsc; // <--- NOVO: Referência ao checkbox de ordenação
 
 // Filtros Saúde Financeira / Evolução Ativos
 export let financialHealthFiltersDiv;
@@ -245,6 +246,7 @@ export function initializeDom() {
     clientSearchInput = document.getElementById('clientSearchInput');
     applyClientSearchBtn = document.getElementById('applyClientSearch');
     relevanceFilterSearch = document.getElementById('relevanceFilterSearch');
+    sortPermanenceAsc = document.getElementById('sortPermanenceAsc'); // <--- NOVO: Inicialização da variável
 
     financialHealthFiltersDiv = document.getElementById('financial-health-filters');
     contractStatusFilter = document.getElementById('contractStatusFilter');

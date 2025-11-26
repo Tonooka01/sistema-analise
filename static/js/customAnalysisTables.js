@@ -206,7 +206,7 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     }
 }
 
-export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page = 1, relevance = '') {
+export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false) {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'cancellations', currentSearchTerm: searchTerm });
     const currentState = state.getCustomAnalysisState();
@@ -219,6 +219,9 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
     });
     if (relevance) params.append('relevance', relevance);
     
+    // --- CORREÇÃO: Enviar sort_order ('asc' ou 'desc') ao invés de sort_asc ---
+    params.append('sort_order', sortAsc ? 'asc' : 'desc'); 
+    
     const url = `${state.API_BASE_URL}/api/custom_analysis/cancellations?${params.toString()}`;
 
     try {
@@ -229,21 +232,30 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
         }
         const result = await response.json();
         
+        // --- LÓGICA DO CABEÇALHO CLICÁVEL ---
+        // sortAsc=true (Menor->Maior) => Seta Baixo (↓) para indicar "do menor para o maior" ou o estado atual
+        // Conforme seu pedido: "seta para baixo quando estiver do menor para o maior"
+        const arrowIcon = sortAsc ? '↓' : '↑';
+        
+        const headerHtml = `
+            <div class="flex items-center gap-1 cursor-pointer select-none sort-permanence-header hover:text-blue-600 transition-colors" title="Clique para ordenar">
+                Permanência (Meses) <span class="text-lg font-bold leading-none">${arrowIcon}</span>
+            </div>
+        `;
+
         const columns = [
             { header: 'Cliente', render: r => `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>` },
             { header: 'ID Contrato', key: 'Contrato_ID' },
-            { header: 'Permanência (Meses)', key: 'permanencia_meses', cssClass: 'text-center' },
+            { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' }, // Cabeçalho HTML
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
         renderCustomTable(result, 'Análise de Cancelamentos por Contato Técnico', columns);
 
-        // --- ATUALIZAÇÃO: GARANTIR VISIBILIDADE DO BOTÃO VER TABELA ---
         if (dom.viewTableBtn) {
             dom.viewTableBtn.classList.remove('hidden');
             dom.viewTableBtn.textContent = 'Ver Tabela Completa (Paginação)';
         }
         
-        // --- ATUALIZAÇÃO: GARANTIR QUE O FILTRO DE RELEVÂNCIA (PERMANÊNCIA) ESTÁ VISÍVEL ---
         if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
         if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
 
@@ -254,7 +266,7 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
     }
 }
 
-export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 1, relevance = '') {
+export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false) {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'negativacao', currentSearchTerm: searchTerm });
     const currentState = state.getCustomAnalysisState();
@@ -267,6 +279,9 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
     });
     if (relevance) params.append('relevance', relevance);
     
+    // --- CORREÇÃO: Enviar sort_order ('asc' ou 'desc') ---
+    params.append('sort_order', sortAsc ? 'asc' : 'desc');
+    
     const url = `${state.API_BASE_URL}/api/custom_analysis/negativacao?${params.toString()}`;
 
     try {
@@ -277,21 +292,28 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
         }
         const result = await response.json();
 
+        // --- LÓGICA DO CABEÇALHO CLICÁVEL ---
+        const arrowIcon = sortAsc ? '↓' : '↑';
+        
+        const headerHtml = `
+            <div class="flex items-center gap-1 cursor-pointer select-none sort-permanence-header hover:text-blue-600 transition-colors" title="Clique para ordenar">
+                Permanência (Meses) <span class="text-lg font-bold leading-none">${arrowIcon}</span>
+            </div>
+        `;
+
         const columns = [
             { header: 'Cliente', render: r => `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>` },
             { header: 'ID Contrato', key: 'Contrato_ID' },
-            { header: 'Permanência (Meses)', key: 'permanencia_meses', cssClass: 'text-center' },
+            { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' }, // Cabeçalho HTML
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
         renderCustomTable(result, 'Análise de Negativação por Contato Técnico', columns);
 
-        // --- ATUALIZAÇÃO: GARANTIR VISIBILIDADE DO BOTÃO VER TABELA ---
         if (dom.viewTableBtn) {
             dom.viewTableBtn.classList.remove('hidden');
             dom.viewTableBtn.textContent = 'Ver Tabela Completa (Paginação)';
         }
 
-        // --- ATUALIZAÇÃO: GARANTIR QUE O FILTRO DE RELEVÂNCIA (PERMANÊNCIA) ESTÁ VISÍVEL ---
         if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
         if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
 

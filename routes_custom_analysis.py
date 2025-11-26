@@ -243,9 +243,13 @@ def api_cancellation_analysis():
         search_term = request.args.get('search_term', '').strip()
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
-        relevance = request.args.get('relevance', '') # <-- NOVO FILTRO
+        relevance = request.args.get('relevance', '')
+        
+        # --- LÓGICA DE ORDENAÇÃO (ATUALIZADA PARA EXCEL STYLE) ---
+        # Aceita 'asc' ou 'desc' do frontend
+        sort_order = request.args.get('sort_order', '') 
 
-        # --- MODIFICADO: Query base movida para um CTE para permitir filtro de relevância ---
+        # --- Query base movida para um CTE para permitir filtro de relevância ---
         base_query = """
             WITH RelevantTickets AS (
                  SELECT DISTINCT Cliente FROM (
@@ -268,7 +272,6 @@ def api_cancellation_analysis():
             )
             SELECT * FROM BaseData
         """
-        # --- FIM DA MODIFICAÇÃO ---
 
         params = []
         where_clauses = []
@@ -284,14 +287,22 @@ def api_cancellation_analysis():
         if max_months is not None:
             where_clauses.append("permanencia_meses <= ?")
             params.append(max_months)
-        # --- FIM DA LÓGICA ---
-            
+        
         where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
         count_query = f"SELECT COUNT(*) FROM ({base_query}) AS sub {where_sql}"
         total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
 
-        paginated_query = f"SELECT * FROM ({base_query}) AS sub {where_sql} ORDER BY Cliente, Contrato_ID LIMIT ? OFFSET ?"
+        # --- DEFINE A CLÁUSULA ORDER BY ---
+        order_by = "ORDER BY Cliente, Contrato_ID" # Padrão
+        
+        # Verifica a direção da ordenação solicitada
+        if sort_order == 'asc':
+            order_by = "ORDER BY permanencia_meses ASC, Cliente"
+        elif sort_order == 'desc':
+            order_by = "ORDER BY permanencia_meses DESC, Cliente"
+
+        paginated_query = f"SELECT * FROM ({base_query}) AS sub {where_sql} {order_by} LIMIT ? OFFSET ?"
         params.extend([limit, offset])
         data = conn.execute(paginated_query, tuple(params)).fetchall()
 
@@ -311,9 +322,12 @@ def api_negativacao_analysis():
         search_term = request.args.get('search_term', '').strip()
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
-        relevance = request.args.get('relevance', '') # <-- NOVO FILTRO
+        relevance = request.args.get('relevance', '')
+        
+        # --- LÓGICA DE ORDENAÇÃO (ATUALIZADA PARA EXCEL STYLE) ---
+        sort_order = request.args.get('sort_order', '')
 
-        # --- MODIFICADO: Query base movida para um CTE para permitir filtro de relevância ---
+        # --- Query base movida para um CTE ---
         base_query = """
             WITH RelevantTickets AS (
                 SELECT DISTINCT Cliente FROM (
@@ -344,7 +358,6 @@ def api_negativacao_analysis():
             )
             SELECT * FROM BaseData
         """
-        # --- FIM DA MODIFICAÇÃO ---
 
         params = []
         where_clauses = []
@@ -360,14 +373,22 @@ def api_negativacao_analysis():
         if max_months is not None:
             where_clauses.append("permanencia_meses <= ?")
             params.append(max_months)
-        # --- FIM DA LÓGICA ---
         
         where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
         count_query = f"SELECT COUNT(*) FROM ({base_query}) AS sub {where_sql}"
         total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
 
-        paginated_query = f"SELECT * FROM ({base_query}) AS sub {where_sql} ORDER BY Cliente, Contrato_ID LIMIT ? OFFSET ?"
+        # --- DEFINE A CLÁUSULA ORDER BY ---
+        order_by = "ORDER BY Cliente, Contrato_ID" # Padrão
+        
+        # Verifica a direção da ordenação solicitada
+        if sort_order == 'asc':
+            order_by = "ORDER BY permanencia_meses ASC, Cliente"
+        elif sort_order == 'desc':
+            order_by = "ORDER BY permanencia_meses DESC, Cliente"
+
+        paginated_query = f"SELECT * FROM ({base_query}) AS sub {where_sql} {order_by} LIMIT ? OFFSET ?"
         params.extend([limit, offset])
         data = conn.execute(paginated_query, tuple(params)).fetchall()
 
@@ -1797,4 +1818,4 @@ def api_late_interest_analysis():
         if conn: conn.close()
 
         
-# --- FIM DA NOVA ROTA ---De
+# --- FIM DA NOVA ROTA ---
