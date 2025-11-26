@@ -6,7 +6,6 @@ import * as utils from './utils.js';
 
 /**
  * Busca os status de contrato e acesso para preencher os filtros da análise de Saúde Financeira.
- * ATUALIZADO: Status do Contrato é Select, Status de Acesso é Checkbox.
  */
 export async function populateContractStatusFilters() {
     try {
@@ -17,9 +16,8 @@ export async function populateContractStatusFilters() {
         }
         const data = await response.json();
 
-        // 1. Preenche o filtro de Status do Contrato (Select Padrão)
         if (dom.contractStatusFilter && data.status_contrato) {
-            dom.contractStatusFilter.innerHTML = '<option value="">Todos</option>'; // Opção padrão
+            dom.contractStatusFilter.innerHTML = '<option value="">Todos</option>';
             data.status_contrato.forEach(status => {
                 const option = document.createElement('option');
                 option.value = status;
@@ -28,9 +26,8 @@ export async function populateContractStatusFilters() {
             });
         }
 
-        // 2. Preenche o filtro de Status de Acesso (CHECKBOXES)
         if (dom.accessStatusContainer && data.status_acesso) {
-            dom.accessStatusContainer.innerHTML = ''; // Limpa o container
+            dom.accessStatusContainer.innerHTML = '';
 
             data.status_acesso.forEach(status => {
                 const wrapper = document.createElement('div');
@@ -39,7 +36,6 @@ export async function populateContractStatusFilters() {
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.value = status;
-                // Estilização do checkbox e identificador
                 checkbox.className = 'mr-2 form-checkbox h-4 w-4 text-purple-600 transition duration-150 ease-in-out cursor-pointer';
                 const uniqueId = `chk_access_${status.replace(/\s+/g, '_')}`;
                 checkbox.id = uniqueId;
@@ -160,17 +156,13 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     const currentState = state.getCustomAnalysisState(); 
     const contractStatus = dom.contractStatusFilter?.value || '';
     
-    // --- LÓGICA MULTI-SELECT PARA ACESSO ---
     let accessStatus = '';
     if (dom.accessStatusContainer && dom.accessStatusContainer.querySelector('input[type="checkbox"]')) {
-         // É container de checkbox: Pega todos os marcados
          const checked = dom.accessStatusContainer.querySelectorAll('input[type="checkbox"]:checked');
          accessStatus = Array.from(checked).map(cb => cb.value).join(',');
     } else if (dom.accessStatusContainer && dom.accessStatusContainer.tagName === 'SELECT') {
-         // Fallback se ainda for select
          accessStatus = dom.accessStatusContainer.value;
     }
-    // ---------------------------------------
 
     const offset = (page - 1) * currentState.rowsPerPage;
     const endpoint = analysisType === 'bloqueio' ? 'financial_health_auto_block' : 'financial_health';
@@ -178,7 +170,7 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     const params = new URLSearchParams({ search_term: searchTerm, limit: currentState.rowsPerPage, offset: offset });
     
     if (contractStatus) params.append('status_contrato', contractStatus);
-    if (accessStatus) params.append('status_acesso', accessStatus); // Envia lista separada por vírgula
+    if (accessStatus) params.append('status_acesso', accessStatus); 
     if (relevance) params.append('relevance', relevance);
 
     const url = `${state.API_BASE_URL}/api/custom_analysis/${endpoint}?${params.toString()}`;
@@ -200,6 +192,13 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
             { header: 'Tem Reclamações?', render: r => r.Possui_Reclamacoes === 'Sim' ? `<span class="detail-trigger cursor-pointer text-orange-600 font-bold hover:underline" data-type="complaints" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Razao_Social.replace(/"/g, '&quot;')}">Sim</span>` : 'Não' },
             { header: 'Última Conexão', render: r => r.Ultima_Conexao ? `<span class="detail-trigger cursor-pointer text-blue-600 hover:underline" data-type="logins" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Razao_Social.replace(/"/g, '&quot;')}">${utils.formatDate(r.Ultima_Conexao)}</span>` : 'N/A' }
         ]);
+
+        // --- ATUALIZAÇÃO: GARANTIR VISIBILIDADE DO BOTÃO VER TABELA ---
+        if (dom.viewTableBtn) {
+            dom.viewTableBtn.classList.remove('hidden');
+            dom.viewTableBtn.textContent = 'Ver Tabela Completa (Paginação)';
+        }
+
     } catch (error) {
         utils.showError(error.message);
     } finally {
@@ -237,6 +236,16 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
         renderCustomTable(result, 'Análise de Cancelamentos por Contato Técnico', columns);
+
+        // --- ATUALIZAÇÃO: GARANTIR VISIBILIDADE DO BOTÃO VER TABELA ---
+        if (dom.viewTableBtn) {
+            dom.viewTableBtn.classList.remove('hidden');
+            dom.viewTableBtn.textContent = 'Ver Tabela Completa (Paginação)';
+        }
+        
+        // --- ATUALIZAÇÃO: GARANTIR QUE O FILTRO DE RELEVÂNCIA (PERMANÊNCIA) ESTÁ VISÍVEL ---
+        if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
+        if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
 
     } catch (error) {
         utils.showError(error.message);
@@ -276,6 +285,16 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
         ];
         renderCustomTable(result, 'Análise de Negativação por Contato Técnico', columns);
 
+        // --- ATUALIZAÇÃO: GARANTIR VISIBILIDADE DO BOTÃO VER TABELA ---
+        if (dom.viewTableBtn) {
+            dom.viewTableBtn.classList.remove('hidden');
+            dom.viewTableBtn.textContent = 'Ver Tabela Completa (Paginação)';
+        }
+
+        // --- ATUALIZAÇÃO: GARANTIR QUE O FILTRO DE RELEVÂNCIA (PERMANÊNCIA) ESTÁ VISÍVEL ---
+        if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
+        if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
+
     } catch (error) {
         utils.showError(error.message);
     } finally {
@@ -284,7 +303,7 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
 } 
 
 /**
- * Busca e renderiza o Comparativo Diário (Estilo Planilha Excel com Cores).
+ * Busca e renderiza o Comparativo Diário.
  */
 export async function fetchAndRenderDailyComparison() {
     utils.showLoading(true);
@@ -293,7 +312,7 @@ export async function fetchAndRenderDailyComparison() {
     const url = `${state.API_BASE_URL}/api/comparison/daily`;
 
     try {
-        const response = await response_fetch_wrapper(url); 
+        const response = await fetch(url); 
         if (!response.ok) throw new Error("Falha ao buscar dados comparativos.");
         
         const result = await response.json();
@@ -314,7 +333,6 @@ export async function fetchAndRenderDailyComparison() {
             </div>
         `;
 
-        // --- NOVO: HTML DA LEGENDA ---
         const legendHtml = `
             <div class="comparison-legend">
                 <div class="legend-item"><div class="legend-box" style="background-color: #fef3c7;"></div> Fim de Semana</div>
@@ -354,9 +372,6 @@ export async function fetchAndRenderDailyComparison() {
                 `;
             });
 
-            const totalDiffClass = totalDiff < 0 ? 'text-neg' : 'text-pos';
-            
-            // --- NOVO: Classe row-total aplicada aqui ---
             const footerHtml = `
                 <tr class="row-total">
                     <td>Total</td>
@@ -437,9 +452,4 @@ export async function fetchAndRenderDailyComparison() {
     } finally {
         utils.showLoading(false);
     }
-}
-
-// Helper para simulação (se necessário)
-async function response_fetch_wrapper(url) {
-    return fetch(url); 
 }

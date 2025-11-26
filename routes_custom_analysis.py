@@ -1797,4 +1797,4 @@ def api_late_interest_analysis():
         if conn: conn.close()
 
         
-# --- FIM DA NOVA ROTA ---
+# --- FIM DA NOVA ROTA ---De
