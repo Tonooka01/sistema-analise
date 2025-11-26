@@ -1,50 +1,24 @@
 import * as dom from './dom.js';
 import * as grid from './grid.js';
 import * as analysis from './analysis.js';
-// Importa as funções de análise dos novos arquivos
 import * as customTables from './customAnalysisTables.js';
 import * as customCharts from './customAnalysisCharts.js';
 import * as behaviorAnalysis from './behaviorAnalysis.js';
-
-// Importa funções específicas de modals e utils
 import {
-    openModal,
-    closeModal,
-    fetchAndDisplayTableInModal,
-    openInvoiceDetailModal,
-    closeInvoiceDetailModal,
-    fetchAndDisplayInvoiceDetails,
-    openDetailsModal,
-    closeDetailsModal,
-    fetchAndRenderTabData,
-    openCancellationDetailModal,
-    closeCancellationDetailModal,
-    openSellerDetailModal,
-    closeSellerDetailModal,
-    fetchAndDisplaySellerDetails,
-    openCityDetailModal,
-    closeCityDetailModal,
-    fetchAndDisplayCityDetails,
-    openNeighborhoodDetailModal,
-    closeNeighborhoodDetailModal,
-    fetchAndDisplayNeighborhoodDetails,
-    openEquipmentDetailModal,
-    closeEquipmentDetailModal,
-    fetchAndDisplayEquipmentDetails,
-    openActiveEquipmentDetailModal,
-    closeActiveEquipmentDetailModal,
-    fetchAndDisplayActiveEquipmentDetails,
-    openSellerActivationDetailModal,
-    closeSellerActivationDetailModal,
-    fetchAndDisplaySellerActivationDetails
+    openModal, closeModal, fetchAndDisplayTableInModal, openInvoiceDetailModal, closeInvoiceDetailModal,
+    fetchAndDisplayInvoiceDetails, openDetailsModal, closeDetailsModal, fetchAndRenderTabData,
+    openCancellationDetailModal, closeCancellationDetailModal, openSellerDetailModal, closeSellerDetailModal,
+    fetchAndDisplaySellerDetails, openCityDetailModal, closeCityDetailModal, fetchAndDisplayCityDetails,
+    openNeighborhoodDetailModal, closeNeighborhoodDetailModal, fetchAndDisplayNeighborhoodDetails,
+    openEquipmentDetailModal, closeEquipmentDetailModal, fetchAndDisplayEquipmentDetails,
+    openActiveEquipmentDetailModal, closeActiveEquipmentDetailModal, fetchAndDisplayActiveEquipmentDetails,
+    openSellerActivationDetailModal, closeSellerActivationDetailModal, fetchAndDisplaySellerActivationDetails
 } from './modals.js';
 import * as state from './state.js';
 import * as utils from './utils.js';
 import { destroyAllMainCharts } from './charts.js';
 import { renderChartsForCurrentCollection } from './chartCollection.js';
-import { exportTableToCSV } from './utils.js'; // Função de exportação
-
-// --- Função Central para Lógica de Análise Personalizada ---
+import { exportTableToCSV } from './utils.js';
 
 /**
  * Lida com a mudança no seletor de Análise Personalizada.
@@ -86,9 +60,9 @@ function handleCustomAnalysisChange(page = 1) {
 
         case 'analise_juros_atraso':
             if (dom.latePaymentFiltersDiv) dom.latePaymentFiltersDiv.classList.remove('hidden');
-            const lateYear = dom.latePaymentYearFilter?.value || '';
-            const lateMonth = dom.latePaymentMonthFilter?.value || '';
-            customCharts.fetchAndRenderLateInterestAnalysis(lateYear, lateMonth);
+            const lateStart = dom.latePaymentStartDate?.value || '';
+            const lateEnd = dom.latePaymentEndDate?.value || '';
+            customCharts.fetchAndRenderLateInterestAnalysis(lateStart, lateEnd);
             break;
             
         case 'faturamento_por_cidade':
@@ -157,51 +131,49 @@ function handleCustomAnalysisChange(page = 1) {
 
         case 'vendedores':
             if (dom.sellerAnalysisFiltersDiv) dom.sellerAnalysisFiltersDiv.classList.remove('hidden');
-            const sellerYear = dom.sellerYearFilter?.value || '';
-            const sellerMonth = dom.sellerMonthFilter?.value || '';
-            customCharts.fetchAndRenderSellerAnalysis(sellerYear, sellerMonth);
+            const sellerStart = dom.sellerStartDate?.value || '';
+            const sellerEnd = dom.sellerEndDate?.value || '';
+            customCharts.fetchAndRenderSellerAnalysis(sellerStart, sellerEnd);
             break;
 
         case 'activations_by_seller':
             if (dom.activationSellerFiltersDiv) dom.activationSellerFiltersDiv.classList.remove('hidden');
             const activationCity = dom.activationSellerCityFilter?.value || '';
-            const activationYear = dom.activationSellerYearFilter?.value || '';
-            const activationMonth = dom.activationSellerMonthFilter?.value || '';
-            customCharts.fetchAndRenderActivationsBySeller(activationCity, activationYear, activationMonth);
+            const activationStart = dom.activationSellerStartDate?.value || '';
+            const activationEnd = dom.activationSellerEndDate?.value || '';
+            customCharts.fetchAndRenderActivationsBySeller(activationCity, activationStart, activationEnd);
             break;
 
         case 'cancellations_by_city':
             if (dom.cityCancellationFiltersDiv) dom.cityCancellationFiltersDiv.classList.remove('hidden');
-            const cityYear = dom.cityCancellationYearFilter?.value || '';
-            const cityMonth = dom.cityCancellationMonthFilter?.value || '';
+            const cityStart = dom.cityCancellationStartDate?.value || '';
+            const cityEnd = dom.cityCancellationEndDate?.value || '';
             const relevanceCity = dom.relevanceFilterCity?.value || '';
-            customCharts.fetchAndRenderCancellationsByCity(cityYear, cityMonth, relevanceCity);
+            customCharts.fetchAndRenderCancellationsByCity(cityStart, cityEnd, relevanceCity);
             break;
 
         case 'cancellations_by_neighborhood':
             if (dom.neighborhoodAnalysisFiltersDiv) dom.neighborhoodAnalysisFiltersDiv.classList.remove('hidden');
             const selectedCity = dom.neighborhoodAnalysisCityFilter?.value || '';
-            const neighborhoodYear = dom.neighborhoodAnalysisYearFilter?.value || '';
-            const neighborhoodMonth = dom.neighborhoodAnalysisMonthFilter?.value || '';
+            const neighborhoodStart = dom.neighborhoodAnalysisStartDate?.value || '';
+            const neighborhoodEnd = dom.neighborhoodAnalysisEndDate?.value || '';
             const relevanceNeighborhood = dom.relevanceFilterNeighborhood?.value || '';
-            customCharts.fetchAndRenderCancellationsByNeighborhood(selectedCity, neighborhoodYear, neighborhoodMonth, relevanceNeighborhood);
+            customCharts.fetchAndRenderCancellationsByNeighborhood(selectedCity, neighborhoodStart, neighborhoodEnd, relevanceNeighborhood);
             break;
 
         case 'cancellations_by_equipment':
             if (dom.equipmentAnalysisFiltersDiv) dom.equipmentAnalysisFiltersDiv.classList.remove('hidden');
-            if (dom.equipmentYearFilterContainer) dom.equipmentYearFilterContainer.classList.remove('hidden');
-            if (dom.equipmentMonthFilterContainer) dom.equipmentMonthFilterContainer.classList.remove('hidden');
-            const equipmentYear = dom.equipmentAnalysisYearFilter?.value || '';
-            const equipmentMonth = dom.equipmentAnalysisMonthFilter?.value || '';
+            if (dom.equipmentDateFilterContainer) dom.equipmentDateFilterContainer.classList.remove('hidden');
+            const equipmentStart = dom.equipmentAnalysisStartDate?.value || '';
+            const equipmentEnd = dom.equipmentAnalysisEndDate?.value || '';
             const equipmentCity = dom.equipmentAnalysisCityFilter?.value || '';
             const relevanceEquipment = dom.relevanceFilterEquipment?.value || '';
-            customCharts.fetchAndRenderCancellationsByEquipment(equipmentYear, equipmentMonth, equipmentCity, relevanceEquipment);
+            customCharts.fetchAndRenderCancellationsByEquipment(equipmentStart, equipmentEnd, equipmentCity, relevanceEquipment);
             break;
 
         case 'equipment_by_olt':
             if (dom.equipmentAnalysisFiltersDiv) dom.equipmentAnalysisFiltersDiv.classList.remove('hidden');
-            if (dom.equipmentYearFilterContainer) dom.equipmentYearFilterContainer.classList.add('hidden');
-            if (dom.equipmentMonthFilterContainer) dom.equipmentMonthFilterContainer.classList.add('hidden');
+            if (dom.equipmentDateFilterContainer) dom.equipmentDateFilterContainer.classList.add('hidden');
              if(dom.equipmentAnalysisCityFilter) dom.equipmentAnalysisCityFilter.closest('.flex-col')?.classList.remove('hidden');
             const equipmentOltCity = dom.equipmentAnalysisCityFilter?.value || '';
             customCharts.fetchAndRenderEquipmentByOlt(equipmentOltCity);
@@ -210,9 +182,9 @@ function handleCustomAnalysisChange(page = 1) {
         case 'cohort_retention':
             if (dom.cohortAnalysisFiltersDiv) dom.cohortAnalysisFiltersDiv.classList.remove('hidden');
             const cohortCity = dom.cohortCityFilter?.value || '';
-            const cohortYear = dom.cohortYearFilter?.value || '';
-            const cohortMonth = dom.cohortMonthFilter?.value || '';
-            customCharts.fetchAndRenderCohortAnalysis(cohortCity, cohortYear, cohortMonth);
+            const cohortStart = dom.cohortStartDate?.value || '';
+            const cohortEnd = dom.cohortEndDate?.value || '';
+            customCharts.fetchAndRenderCohortAnalysis(cohortCity, cohortStart, cohortEnd);
             break;
 
         case 'daily_evolution_by_city':
@@ -313,13 +285,13 @@ export function initializeEventListeners() {
     });
 
     const filterElementsToWatch = [
-        dom.yearFilterSelect, dom.monthFilterSelect, dom.cityFilterSelect,
+        dom.generalStartDate, dom.generalEndDate, dom.cityFilterSelect,
         dom.contractStatusFilter, 
         dom.accessStatusContainer, // Vigia o container de checkboxes (bubbling)
-        dom.sellerYearFilter, dom.sellerMonthFilter,
-        dom.cityCancellationYearFilter, dom.cityCancellationMonthFilter,
-        dom.neighborhoodAnalysisCityFilter, dom.neighborhoodAnalysisYearFilter, dom.neighborhoodAnalysisMonthFilter,
-        dom.equipmentAnalysisYearFilter, dom.equipmentAnalysisMonthFilter, dom.equipmentAnalysisCityFilter,
+        dom.sellerStartDate, dom.sellerEndDate,
+        dom.cityCancellationStartDate, dom.cityCancellationEndDate,
+        dom.neighborhoodAnalysisCityFilter, dom.neighborhoodAnalysisStartDate, dom.neighborhoodAnalysisEndDate,
+        dom.equipmentAnalysisStartDate, dom.equipmentAnalysisEndDate, dom.equipmentAnalysisCityFilter,
         dom.dailyEvolutionStartDate, dom.dailyEvolutionEndDate,
         
         dom.relevanceFilterSearch,
@@ -327,11 +299,11 @@ export function initializeEventListeners() {
         dom.relevanceFilterNeighborhood,
         dom.relevanceFilterEquipment,
 
-        dom.activationSellerCityFilter, dom.activationSellerYearFilter, dom.activationSellerMonthFilter,
-        dom.cohortCityFilter, dom.cohortYearFilter, dom.cohortMonthFilter,
+        dom.activationSellerCityFilter, dom.activationSellerStartDate, dom.activationSellerEndDate,
+        dom.cohortCityFilter, dom.cohortStartDate, dom.cohortEndDate,
         dom.faturamentoStartDate, dom.faturamentoEndDate, dom.faturamentoCityFilter,
 
-        dom.latePaymentYearFilter, dom.latePaymentMonthFilter
+        dom.latePaymentStartDate, dom.latePaymentEndDate
     ];
 
     filterElementsToWatch.forEach(el => {
@@ -350,8 +322,8 @@ export function initializeEventListeners() {
 
                 if (customSelectorValue && currentAnalysis) {
                     handleCustomAnalysisChange(1);
-                } else if (mainCollection && ['yearFilter', 'monthFilter', 'cityFilter'].includes(el.id)) {
-                    analysis.fetchAndRenderMainAnalysis(mainCollection, dom.yearFilterSelect?.value || '', dom.monthFilterSelect?.value || '', dom.cityFilterSelect?.value || '');
+                } else if (mainCollection && ['generalStartDate', 'generalEndDate', 'cityFilter'].includes(el.id)) {
+                    analysis.fetchAndRenderMainAnalysis(mainCollection, dom.generalStartDate?.value || '', dom.generalEndDate?.value || '', dom.cityFilterSelect?.value || '');
                 }
             });
         }
@@ -548,40 +520,40 @@ export function initializeEventListeners() {
         const sellerDetailTrigger = e.target.closest('.seller-detail-trigger');
         if (sellerDetailTrigger) {
             const { sellerId, sellerName, type } = sellerDetailTrigger.dataset;
-            const year = dom.sellerYearFilter?.value || '';
-            const month = dom.sellerMonthFilter?.value || '';
-            openSellerDetailModal(sellerId, sellerName, type, year, month);
+            const startDate = dom.sellerStartDate?.value || '';
+            const endDate = dom.sellerEndDate?.value || '';
+            openSellerDetailModal(sellerId, sellerName, type, startDate, endDate);
             return;
         }
 
         const cityDetailTrigger = e.target.closest('.city-detail-trigger');
         if (cityDetailTrigger) {
             const { city, type } = cityDetailTrigger.dataset;
-            const year = dom.cityCancellationYearFilter?.value || '';
-            const month = dom.cityCancellationMonthFilter?.value || '';
+            const startDate = dom.cityCancellationStartDate?.value || '';
+            const endDate = dom.cityCancellationEndDate?.value || '';
             const relevance = dom.relevanceFilterCity?.value || '';
-            openCityDetailModal(city, type, year, month, relevance);
+            openCityDetailModal(city, type, startDate, endDate, relevance);
             return;
         }
 
         const neighborhoodDetailTrigger = e.target.closest('.neighborhood-detail-trigger');
         if (neighborhoodDetailTrigger) {
             const { city, neighborhood, type } = neighborhoodDetailTrigger.dataset;
-            const year = dom.neighborhoodAnalysisYearFilter?.value || '';
-            const month = dom.neighborhoodAnalysisMonthFilter?.value || '';
+            const startDate = dom.neighborhoodAnalysisStartDate?.value || '';
+            const endDate = dom.neighborhoodAnalysisEndDate?.value || '';
             const relevance = dom.relevanceFilterNeighborhood?.value || '';
-            openNeighborhoodDetailModal(city, neighborhood, type, year, month, relevance);
+            openNeighborhoodDetailModal(city, neighborhood, type, startDate, endDate, relevance);
             return;
         }
 
         const equipmentDetailTrigger = e.target.closest('.equipment-detail-trigger');
         if (equipmentDetailTrigger) {
             const { equipmentName } = equipmentDetailTrigger.dataset;
-            const year = dom.equipmentAnalysisYearFilter?.value || '';
-            const month = dom.equipmentAnalysisMonthFilter?.value || '';
+            const startDate = dom.equipmentAnalysisStartDate?.value || '';
+            const endDate = dom.equipmentAnalysisEndDate?.value || '';
             const city = dom.equipmentAnalysisCityFilter?.value || '';
             const relevance = dom.relevanceFilterEquipment?.value || '';
-            openEquipmentDetailModal(equipmentName, year, month, city, relevance);
+            openEquipmentDetailModal(equipmentName, startDate, endDate, city, relevance);
             return;
         }
         
@@ -589,9 +561,9 @@ export function initializeEventListeners() {
         if (sellerActivationTrigger) {
             const { sellerId, sellerName, type } = sellerActivationTrigger.dataset;
             const city = dom.activationSellerCityFilter?.value || '';
-            const year = dom.activationSellerYearFilter?.value || '';
-            const month = dom.activationSellerMonthFilter?.value || '';
-            openSellerActivationDetailModal(sellerId, sellerName, type, city, year, month);
+            const startDate = dom.activationSellerStartDate?.value || '';
+            const endDate = dom.activationSellerEndDate?.value || '';
+            openSellerActivationDetailModal(sellerId, sellerName, type, city, startDate, endDate);
             return;
         }
 

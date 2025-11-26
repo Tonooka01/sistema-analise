@@ -1,24 +1,25 @@
 import * as state from './state.js';
 import * as dom from './dom.js';
 import * as utils from './utils.js';
-import { renderChartsForCurrentCollection } from './chartCollection.js'; // Importa a função específica
+import { renderChartsForCurrentCollection } from './chartCollection.js';
 import { destroyAllMainCharts } from './charts.js';
-import { getGridStack } from './state.js'; // Importa getter para gridStack
-// A importação de 'modals' não é mais necessária aqui, pois os cliques são tratados em events.js
+import { getGridStack } from './state.js';
 
 // --- Lógica Principal de Análise (Coleções Padrão) ---
 
 /**
  * Busca e renderiza as análises gráficas para uma coleção de dados padrão (botões azuis).
  * @param {string} collectionName - O nome da coleção (ex: 'Clientes').
- * @param {string} year - O ano para filtrar os dados (opcional).
- * @param {string} month - O mês para filtrar os dados (opcional).
- * @param {string} city - A cidade para filtrar os dados (opcional, usado em 'OS' e 'Contratos').
+ * @param {string} startDate - Data inicial para filtrar os dados (opcional).
+ * @param {string} endDate - Data final para filtrar os dados (opcional).
+ * @param {string} city - A cidade para filtrar os dados (opcional, usado em 'OS', 'Contratos', 'Contas a Receber').
  */
-export async function fetchAndRenderMainAnalysis(collectionName, year = '', month = '', city = '') {
+export async function fetchAndRenderMainAnalysis(collectionName, startDate = '', endDate = '', city = '') {
     utils.showLoading(true);
+    
     // Limpa apenas a área de conteúdo principal, mantendo a área de gráficos
     if (dom.dashboardContentDiv) dom.dashboardContentDiv.innerHTML = '';
+    
     // Garante que a área de gráficos esteja visível e seja adicionada se removida
     if (dom.mainChartsArea) {
          if (dom.dashboardContentDiv && !dom.dashboardContentDiv.contains(dom.mainChartsArea)) {
@@ -38,10 +39,8 @@ export async function fetchAndRenderMainAnalysis(collectionName, year = '', mont
      const grid = getGridStack();
      if (grid) grid.removeAll();
 
-
     state.setModalCurrentCollection(collectionName);
-    state.setCurrentSelectedYear(year);
-    state.setCurrentSelectedMonth(month);
+    // Atualiza a cidade selecionada no estado global
     state.setCurrentSelectedCity(city);
 
     const apiCollectionName = collectionName.replace(/ /g, '_');
@@ -54,7 +53,7 @@ export async function fetchAndRenderMainAnalysis(collectionName, year = '', mont
         'Atendimentos': 'atendimento_summary',
         'OS': 'os_summary',
         'Logins': 'summary',
-        'Cidade': 'summary', // Assumindo endpoints genéricos para estes
+        'Cidade': 'summary', 
         'Vendedor': 'summary',
     };
 
@@ -72,13 +71,14 @@ export async function fetchAndRenderMainAnalysis(collectionName, year = '', mont
         return;
     }
 
-    // Constrói a URL da API com parâmetros de filtro
+    // Constrói a URL da API com parâmetros de filtro de DATA
     let url = `${state.API_BASE_URL}/api/${endpoint}/${apiCollectionName}`;
     const params = new URLSearchParams();
-    if (year) params.append('year', year);
-    if (month) params.append('month', month);
+    
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
 
-    // Adiciona filtro de cidade para coleções específicas
+    // Adiciona filtro de cidade para coleções específicas que suportam
     const collectionsWithCityFilterAPI = ['OS', 'Contratos', 'Contas a Receber'];
     if (city && collectionsWithCityFilterAPI.includes(collectionName)) {
         params.append('city', city);
@@ -97,18 +97,18 @@ export async function fetchAndRenderMainAnalysis(collectionName, year = '', mont
         const analysisData = await response.json();
         state.setGlobalCurrentAnalysisData(analysisData); // Salva os dados no estado global
 
-        // --- Lógica para Exibir Filtros ---
-        const hasDateData = analysisData.years && Array.isArray(analysisData.years) && analysisData.years.length > 0;
+        // --- Lógica para Exibir Filtros (Atualizada para Datas) ---
+        // Coleções que suportam filtro de data (anteriormente ano/mês, agora range completo)
         const collectionsWithDateFilter = ['Contas a Receber', 'Atendimentos', 'OS', 'Clientes', 'Contratos', 'Logins'];
 
         if (dom.financialFiltersDiv) {
-             // Mostra filtros de Ano/Mês se a coleção permitir e houver dados de ano
-             const showDateFilters = collectionsWithDateFilter.includes(collectionName) && hasDateData;
+             const showDateFilters = collectionsWithDateFilter.includes(collectionName);
              dom.financialFiltersDiv.classList.toggle('hidden', !showDateFilters);
-             if (showDateFilters && dom.yearFilterSelect) {
-                 utils.populateYearFilter(dom.yearFilterSelect, analysisData.years, state.getCurrentSelectedYear());
-                 // Garante que o valor do mês seja mantido ou resetado
-                 if (dom.monthFilterSelect) dom.monthFilterSelect.value = state.getCurrentSelectedMonth() || '';
+             
+             // Preenche os inputs de data com os valores atuais se o filtro estiver visível
+             if (showDateFilters) {
+                 if (dom.generalStartDate) dom.generalStartDate.value = startDate;
+                 if (dom.generalEndDate) dom.generalEndDate.value = endDate;
              }
         }
 
@@ -117,13 +117,14 @@ export async function fetchAndRenderMainAnalysis(collectionName, year = '', mont
         if (dom.cityFilterContainer) {
              const showCityFilter = collectionsWithCityFilterUI.includes(collectionName);
              dom.cityFilterContainer.classList.toggle('hidden', !showCityFilter);
+             
+             // Popula o select de cidades se houver dados retornados pela API
              if (showCityFilter && analysisData.cities && dom.cityFilterSelect) {
                  utils.populateCityFilter(dom.cityFilterSelect, analysisData.cities, state.getCurrentSelectedCity());
              }
         }
 
-
-        // Renderiza os gráficos usando a função do chartCollection.js
+        // Renderiza os gráficos usando a função central do chartCollection.js
         renderChartsForCurrentCollection();
 
         if (dom.viewTableBtn) dom.viewTableBtn.classList.remove('hidden'); // Mostra o botão da tabela

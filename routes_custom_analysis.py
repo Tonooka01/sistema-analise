@@ -37,6 +37,17 @@ def parse_relevance_filter(relevance_str):
         print(f"Valor de relevância inválido: {relevance_str}")
         return (None, None)
 
+def add_date_range_filter(where_list, params, date_col, start_date, end_date):
+    """
+    Helper para adicionar filtros de data SQL de forma segura e consistente.
+    """
+    if start_date:
+        where_list.append(f"DATE({date_col}) >= ?")
+        params.append(start_date)
+    if end_date:
+        where_list.append(f"DATE({date_col}) <= ?")
+        params.append(end_date)
+
 
 # --- Definição das Rotas ---
 @custom_analysis_bp.route('/contas_a_receber')
@@ -374,8 +385,8 @@ def api_negativacao_analysis():
 def api_seller_analysis():
     conn = get_db()
     try:
-        year = request.args.get('year', '')
-        month = request.args.get('month', '')
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
         # Este filtro não usa relevância, então permanece o mesmo
 
         # Parâmetros e cláusulas WHERE para cada fonte de dados
@@ -383,25 +394,24 @@ def api_seller_analysis():
         params_negativados_cn = []
         params_negativados_c = []
 
-        where_cancelados = "WHERE C.Status_contrato = 'Inativo' AND C.Status_acesso = 'Desativado'"
-        if year: where_cancelados += " AND STRFTIME('%Y', C.Data_cancelamento) = ?"; params_cancelados.append(year)
-        if month: where_cancelados += " AND STRFTIME('%m', C.Data_cancelamento) = ?"; params_cancelados.append(f'{int(month):02d}')
+        where_cancelados_list = ["Status_contrato = 'Inativo'", "Status_acesso = 'Desativado'"]
+        add_date_range_filter(where_cancelados_list, params_cancelados, "Data_cancelamento", start_date, end_date)
+        where_cancelados = " AND ".join(where_cancelados_list)
 
-        where_negativados_cn = "WHERE CN.Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"
-        if year: where_negativados_cn += " AND STRFTIME('%Y', CN.Data_negativa_o) = ?"; params_negativados_cn.append(year)
-        if month: where_negativados_cn += " AND STRFTIME('%m', CN.Data_negativa_o) = ?"; params_negativados_cn.append(f'{int(month):02d}')
+        where_negativados_cn_list = ["Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
+        add_date_range_filter(where_negativados_cn_list, params_negativados_cn, "Data_negativa_o", start_date, end_date)
+        where_negativados_cn = " AND ".join(where_negativados_cn_list)
 
-        where_negativados_c = "WHERE C.Status_contrato = 'Negativado' AND C.Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"
-        # Usando Data_cancelamento para Contratos com status Negativado
-        if year: where_negativados_c += " AND STRFTIME('%Y', C.Data_cancelamento) = ?"; params_negativados_c.append(year)
-        if month: where_negativados_c += " AND STRFTIME('%m', C.Data_cancelamento) = ?"; params_negativados_c.append(f'{int(month):02d}')
+        where_negativados_c_list = ["Status_contrato = 'Negativado'", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
+        add_date_range_filter(where_negativados_c_list, params_negativados_c, "Data_cancelamento", start_date, end_date)
+        where_negativados_c = " AND ".join(where_negativados_c_list)
 
         # Executa as queries separadamente
-        df_cancelados = pd.read_sql_query(f"SELECT Vendedor AS Vendedor_ID, 'Cancelado' AS Status FROM Contratos C {where_cancelados}", conn, params=tuple(params_cancelados))
-        df_negativados_c = pd.read_sql_query(f"SELECT Vendedor AS Vendedor_ID, 'Negativado' AS Status FROM Contratos C {where_negativados_c}", conn, params=tuple(params_negativados_c))
+        df_cancelados = pd.read_sql_query(f"SELECT Vendedor AS Vendedor_ID, 'Cancelado' AS Status FROM Contratos WHERE {where_cancelados}", conn, params=tuple(params_cancelados))
+        df_negativados_c = pd.read_sql_query(f"SELECT Vendedor AS Vendedor_ID, 'Negativado' AS Status FROM Contratos WHERE {where_negativados_c}", conn, params=tuple(params_negativados_c))
         df_negativados_cn = pd.DataFrame()
         try:
-            df_negativados_cn = pd.read_sql_query(f"SELECT Vendedor AS Vendedor_ID, 'Negativado' AS Status FROM Contratos_Negativacao CN {where_negativados_cn}", conn, params=tuple(params_negativados_cn))
+            df_negativados_cn = pd.read_sql_query(f"SELECT Vendedor AS Vendedor_ID, 'Negativado' AS Status FROM Contratos_Negativacao WHERE {where_negativados_cn}", conn, params=tuple(params_negativados_cn))
         except pd.io.sql.DatabaseError as e:
             if "no such table" not in str(e): raise e
             print("Aviso: Tabela Contratos_Negativacao não encontrada.")
@@ -453,29 +463,26 @@ def api_seller_analysis():
 def api_cancellations_by_city():
     conn = get_db()
     try:
-        year = request.args.get('year', '')
-        month = request.args.get('month', '')
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
         relevance = request.args.get('relevance', '') # <-- NOVO FILTRO
 
         # Filtros para Cancelados
         params_cancelados = []
         where_cancelados_list = ["Status_contrato = 'Inativo'", "Status_acesso = 'Desativado'", "Cidade IS NOT NULL", "TRIM(Cidade) != ''"]
-        if year: where_cancelados_list.append("STRFTIME('%Y', Data_cancelamento) = ?"); params_cancelados.append(year)
-        if month: where_cancelados_list.append("STRFTIME('%m', Data_cancelamento) = ?"); params_cancelados.append(f'{int(month):02d}')
+        add_date_range_filter(where_cancelados_list, params_cancelados, "Data_cancelamento", start_date, end_date)
         where_cancelados = " AND ".join(where_cancelados_list)
 
         # Filtros para Negativados de Contratos_Negativacao
         params_negativados_cn = []
         where_negativados_cn_list = ["Cidade IS NOT NULL", "TRIM(Cidade) != ''", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
-        if year: where_negativados_cn_list.append("STRFTIME('%Y', Data_negativa_o) = ?"); params_negativados_cn.append(year)
-        if month: where_negativados_cn_list.append("STRFTIME('%m', Data_negativa_o) = ?"); params_negativados_cn.append(f'{int(month):02d}')
+        add_date_range_filter(where_negativados_cn_list, params_negativados_cn, "Data_negativa_o", start_date, end_date)
         where_negativados_cn = " AND ".join(where_negativados_cn_list)
 
         # Filtros para Negativados de Contratos
         params_negativados_c = []
         where_negativados_c_list = ["Status_contrato = 'Negativado'", "Cidade IS NOT NULL", "TRIM(Cidade) != ''", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
-        if year: where_negativados_c_list.append("STRFTIME('%Y', Data_cancelamento) = ?"); params_negativados_c.append(year)
-        if month: where_negativados_c_list.append("STRFTIME('%m', Data_cancelamento) = ?"); params_negativados_c.append(f'{int(month):02d}')
+        add_date_range_filter(where_negativados_c_list, params_negativados_c, "Data_cancelamento", start_date, end_date)
         where_negativados_c = " AND ".join(where_negativados_c_list)
 
         # --- MODIFICADO: Adiciona Data_ativa_o e end_date ---
@@ -549,49 +556,66 @@ def api_cancellations_by_neighborhood():
     conn = get_db()
     try:
         selected_city = request.args.get('city', '')
-        year = request.args.get('year', '')
-        month = request.args.get('month', '')
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
         relevance = request.args.get('relevance', '') # <-- NOVO FILTRO
 
         # Queries para filtros (não dependem da relevância)
+        # Busca TODAS as cidades disponíveis (usadas para popular o dropdown no frontend)
         cities_query = "SELECT DISTINCT Cidade FROM ( SELECT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' UNION SELECT Cidade FROM Contratos_Negativacao WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' ) ORDER BY Cidade;"
-        cities_data = conn.execute(cities_query).fetchall()
+        try:
+             cities_data = conn.execute(cities_query).fetchall()
+        except sqlite3.Error:
+             # Fallback se Contratos_Negativacao não existir
+             cities_data = conn.execute("SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' ORDER BY Cidade").fetchall()
 
         years_query = "SELECT DISTINCT Year FROM ( SELECT STRFTIME('%Y', \"Data_cancelamento\") AS Year FROM Contratos WHERE \"Data_cancelamento\" IS NOT NULL UNION SELECT STRFTIME('%Y', \"Data_negativa_o\") AS Year FROM Contratos_Negativacao WHERE \"Data_negativa_o\" IS NOT NULL ) WHERE Year IS NOT NULL ORDER BY Year DESC"
-        years_data = conn.execute(years_query).fetchall()
+        try:
+             years_data = conn.execute(years_query).fetchall()
+        except sqlite3.Error:
+             years_data = conn.execute("SELECT DISTINCT STRFTIME('%Y', Data_cancelamento) AS Year FROM Contratos WHERE Data_cancelamento IS NOT NULL ORDER BY Year DESC").fetchall()
 
         data_list = []
         total_cancelados = 0
         total_negativados = 0
 
+        # Se nenhuma cidade foi selecionada, retorna apenas as listas de filtros para popular a UI
+        if not selected_city:
+             return jsonify({
+                "data": [],
+                "cities": [row[0] for row in cities_data if row[0]],
+                "years": [row[0] for row in years_data if row[0]],
+                "total_cancelados": 0,
+                "total_negativados": 0,
+                "grand_total": 0
+            })
+
         if selected_city:
             # Filtros para Cancelados
             params_cancelados = [selected_city]
-            where_cancelados_list = ["Cidade = ?", "Status_contrato = 'Inativo'", "Status_acesso = 'Desativado'", "Bairro IS NOT NULL", "TRIM(Bairro) != ''"]
-            if year: where_cancelados_list.append("STRFTIME('%Y', Data_cancelamento) = ?"); params_cancelados.append(year)
-            if month: where_cancelados_list.append("STRFTIME('%m', Data_cancelamento) = ?"); params_cancelados.append(f'{int(month):02d}')
+            where_cancelados_list = ["TRIM(Cidade) = ?", "Status_contrato = 'Inativo'", "Status_acesso = 'Desativado'", "Bairro IS NOT NULL", "TRIM(Bairro) != ''"]
+            add_date_range_filter(where_cancelados_list, params_cancelados, "Data_cancelamento", start_date, end_date)
             where_cancelados = " AND ".join(where_cancelados_list)
 
             # Filtros para Negativados de Contratos_Negativacao
             params_negativados_cn = [selected_city]
-            where_negativados_cn_list = ["Cidade = ?", "Bairro IS NOT NULL", "TRIM(Bairro) != ''", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
-            if year: where_negativados_cn_list.append("STRFTIME('%Y', Data_negativa_o) = ?"); params_negativados_cn.append(year)
-            if month: where_negativados_cn_list.append("STRFTIME('%m', Data_negativa_o) = ?"); params_negativados_cn.append(f'{int(month):02d}')
+            where_negativados_cn_list = ["TRIM(Cidade) = ?", "Bairro IS NOT NULL", "TRIM(Bairro) != ''", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
+            add_date_range_filter(where_negativados_cn_list, params_negativados_cn, "Data_negativa_o", start_date, end_date)
             where_negativados_cn = " AND ".join(where_negativados_cn_list)
 
             # Filtros para Negativados de Contratos
             params_negativados_c = [selected_city]
-            where_negativados_c_list = ["Cidade = ?", "Status_contrato = 'Negativado'", "Bairro IS NOT NULL", "TRIM(Bairro) != ''", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
-            if year: where_negativados_c_list.append("STRFTIME('%Y', Data_cancelamento) = ?"); params_negativados_c.append(year)
-            if month: where_negativados_c_list.append("STRFTIME('%m', Data_cancelamento) = ?"); params_negativados_c.append(f'{int(month):02d}')
+            where_negativados_c_list = ["TRIM(Cidade) = ?", "Status_contrato = 'Negativado'", "Bairro IS NOT NULL", "TRIM(Bairro) != ''", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
+            add_date_range_filter(where_negativados_c_list, params_negativados_c, "Data_cancelamento", start_date, end_date)
             where_negativados_c = " AND ".join(where_negativados_c_list)
 
             # --- MODIFICADO: Adiciona Data_ativa_o e end_date ---
-            df_cancelados = pd.read_sql_query(f"SELECT Bairro, 'Cancelado' AS Status, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos WHERE {where_cancelados}", conn, params=tuple(params_cancelados))
-            df_negativados_c = pd.read_sql_query(f"SELECT Bairro, 'Negativado' AS Status, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos WHERE {where_negativados_c}", conn, params=tuple(params_negativados_c))
+            # AS Bairro garante que o nome da coluna seja consistente
+            df_cancelados = pd.read_sql_query(f"SELECT Bairro AS Bairro, 'Cancelado' AS Status, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos WHERE {where_cancelados}", conn, params=tuple(params_cancelados))
+            df_negativados_c = pd.read_sql_query(f"SELECT Bairro AS Bairro, 'Negativado' AS Status, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos WHERE {where_negativados_c}", conn, params=tuple(params_negativados_c))
             df_negativados_cn = pd.DataFrame()
             try:
-                df_negativados_cn = pd.read_sql_query(f"SELECT Bairro, 'Negativado' AS Status, Data_ativa_o, Data_negativa_o AS end_date FROM Contratos_Negativacao WHERE {where_negativados_cn}", conn, params=tuple(params_negativados_cn))
+                df_negativados_cn = pd.read_sql_query(f"SELECT Bairro AS Bairro, 'Negativado' AS Status, Data_ativa_o, Data_negativa_o AS end_date FROM Contratos_Negativacao WHERE {where_negativados_cn}", conn, params=tuple(params_negativados_cn))
             except pd.io.sql.DatabaseError as e:
                 if "no such table" not in str(e): raise e
                 print("Aviso: Tabela Contratos_Negativacao não encontrada.")
@@ -614,6 +638,7 @@ def api_cancellations_by_neighborhood():
             # --- FIM DA LÓGICA ---
 
             if not df_all.empty:
+                # Garante que 'Bairro' é a coluna usada para agrupar (case sensitive no pandas)
                 df_grouped = df_all.groupby('Bairro').agg(
                     Cancelados=('Status', lambda x: (x == 'Cancelado').sum()),
                     Negativados=('Status', lambda x: (x == 'Negativado').sum())
@@ -626,8 +651,8 @@ def api_cancellations_by_neighborhood():
 
         return jsonify({
             "data": data_list,
-            "cities": [row[0] for row in cities_data],
-            "years": [row[0] for row in years_data],
+            "cities": [row[0] for row in cities_data if row[0]],
+            "years": [row[0] for row in years_data if row[0]],
             "total_cancelados": int(total_cancelados),
             "total_negativados": int(total_negativados),
             "grand_total": int(total_cancelados + total_negativados)
@@ -637,6 +662,7 @@ def api_cancellations_by_neighborhood():
         return jsonify({"error": f"Erro interno ao processar a análise por bairro. Detalhe: {e}"}), 500
     except Exception as e:
         print(f"Erro inesperado na análise por bairro: {e}")
+        traceback.print_exc()
         return jsonify({"error": f"Erro interno inesperado ao processar a análise por bairro. Detalhe: {e}"}), 500
     finally:
         if conn: conn.close()
@@ -646,31 +672,34 @@ def api_cancellations_by_neighborhood():
 def api_cancellations_by_equipment():
     conn = get_db()
     try:
-        year = request.args.get('year', '')
-        month = request.args.get('month', '')
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
         city = request.args.get('city', '')
         relevance = request.args.get('relevance', '') # <-- NOVO FILTRO
 
         # --- CONSTRUÇÃO DOS FILTROS DINÂMICOS ---
         params_cancelados = []
         where_cancelados_list = ["C.Status_contrato = 'Inativo'", "C.Status_acesso = 'Desativado'"]
-        if year: where_cancelados_list.append("STRFTIME('%Y', C.Data_cancelamento) = ?"); params_cancelados.append(year)
-        if month: where_cancelados_list.append("STRFTIME('%m', C.Data_cancelamento) = ?"); params_cancelados.append(f'{int(month):02d}')
-        if city: where_cancelados_list.append("C.Cidade = ?"); params_cancelados.append(city)
+        add_date_range_filter(where_cancelados_list, params_cancelados, "C.Data_cancelamento", start_date, end_date)
+        if city: 
+            where_cancelados_list.append("C.Cidade = ?")
+            params_cancelados.append(city)
         where_cancelados_sql = " AND ".join(where_cancelados_list)
 
         params_negativados_cn = []
         where_negativados_cn_list = ["CN.Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
-        if year: where_negativados_cn_list.append("STRFTIME('%Y', CN.Data_negativa_o) = ?"); params_negativados_cn.append(year)
-        if month: where_negativados_cn_list.append("STRFTIME('%m', CN.Data_negativa_o) = ?"); params_negativados_cn.append(f'{int(month):02d}')
-        if city: where_negativados_cn_list.append("CN.Cidade = ?"); params_negativados_cn.append(city)
+        add_date_range_filter(where_negativados_cn_list, params_negativados_cn, "CN.Data_negativa_o", start_date, end_date)
+        if city: 
+            where_negativados_cn_list.append("CN.Cidade = ?")
+            params_negativados_cn.append(city)
         where_negativados_cn_sql = " AND ".join(where_negativados_cn_list)
 
         params_negativados_c = []
         where_negativados_c_list = ["C.Status_contrato = 'Negativado'", "C.Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
-        if year: where_negativados_c_list.append("STRFTIME('%Y', C.Data_cancelamento) = ?"); params_negativados_c.append(year)
-        if month: where_negativados_c_list.append("STRFTIME('%m', C.Data_cancelamento) = ?"); params_negativados_c.append(f'{int(month):02d}')
-        if city: where_negativados_c_list.append("C.Cidade = ?"); params_negativados_c.append(city)
+        add_date_range_filter(where_negativados_c_list, params_negativados_c, "C.Data_cancelamento", start_date, end_date)
+        if city: 
+            where_negativados_c_list.append("C.Cidade = ?")
+            params_negativados_c.append(city)
         where_negativados_c_sql = " AND ".join(where_negativados_c_list)
 
         # --- MODIFICADO: Adiciona Data_ativa_o e end_date ---
@@ -852,8 +881,8 @@ def api_cohort_analysis():
     try:
         # --- 1. Obter Filtros ---
         city = request.args.get('city', '')
-        year = request.args.get('year', '')
-        month = request.args.get('month', '')
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
 
         # --- 2. Buscar Cidades e Anos para os Filtros (sempre fazer isso) ---
         try:
@@ -899,12 +928,8 @@ def api_cohort_analysis():
         if city:
             where_clauses.append("C.Cidade = ?")
             params.append(city)
-        if year:
-            where_clauses.append("STRFTIME('%Y', C.Data_ativa_o) = ?")
-            params.append(year)
-        if month:
-            where_clauses.append("STRFTIME('%m', C.Data_ativa_o) = ?")
-            params.append(f'{int(month):02d}')
+        add_date_range_filter(where_clauses, params, "C.Data_ativa_o", start_date, end_date)
+        
         where_sql = " AND ".join(where_clauses)
 
         # --- 4. Determinar se a tabela Contratos_Negativacao existe ---
@@ -1489,8 +1514,8 @@ def api_activations_by_seller():
     conn = get_db()
     try:
         city = request.args.get('city', '')
-        year = request.args.get('year', '')
-        month = request.args.get('month', '')
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
 
         # --- 1. Constrói filtros para a query de Contratos ---
         params_contracts = []
@@ -1499,12 +1524,8 @@ def api_activations_by_seller():
         if city:
             where_contracts_list.append("Cidade = ?")
             params_contracts.append(city)
-        if year:
-            where_contracts_list.append("STRFTIME('%Y', Data_ativa_o) = ?")
-            params_contracts.append(year)
-        if month:
-            where_contracts_list.append("STRFTIME('%m', Data_ativa_o) = ?")
-            params_contracts.append(f'{int(month):02d}')
+        
+        add_date_range_filter(where_contracts_list, params_contracts, "Data_ativa_o", start_date, end_date)
         
         # Substitui C. por "" nos nomes de colunas para funcionar no Contratos_Negativacao
         where_contracts_sql_union = " AND ".join(where_contracts_list).replace("C.", "")
@@ -1673,8 +1694,8 @@ def api_late_interest_analysis():
     """
     conn = get_db()
     try:
-        year = request.args.get('year', '')
-        month = request.args.get('month', '')
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
 
         params = []
         where_clauses = [
@@ -1684,12 +1705,7 @@ def api_late_interest_analysis():
             "(CR.Valor_recebido - CR.Valor) > 0.01" # Garante que houve juros/multa (evita erros de float)
         ]
 
-        if year:
-            where_clauses.append("STRFTIME('%Y', CR.Data_pagamento) = ?")
-            params.append(year)
-        if month:
-            where_clauses.append("STRFTIME('%m', CR.Data_pagamento) = ?")
-            params.append(f'{int(month):02d}')
+        add_date_range_filter(where_clauses, params, "CR.Data_pagamento", start_date, end_date)
         
         where_sql = " AND ".join(where_clauses)
 

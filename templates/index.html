@@ -117,7 +117,6 @@
     </div>
     
     <!-- FILTROS SAÚDE FINANCEIRA / EVOLUÇÃO ATIVOS -->
-    <!-- ATUALIZADO: Adicionado items-end, checkbox container e botão filtrar -->
     <div id="financial-health-filters" class="flex flex-wrap justify-center items-end gap-6 my-4 hidden">
         <!-- Status do Contrato (Select) -->
         <div class="flex flex-col">
@@ -141,6 +140,7 @@
         </button>
     </div>
     
+    <!-- FILTROS FATURAMENTO CIDADE (JÁ USAVA DATA) -->
     <div id="faturamento-cidade-filters" class="flex flex-wrap justify-center items-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="faturamentoStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
@@ -158,31 +158,15 @@
         </div>
     </div>
 
-
+    <!-- FILTROS FINANCEIROS / PRINCIPAL (ALTERADO PARA DATAS) -->
     <div id="financial-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
-            <label for="yearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano:</label>
-            <select id="yearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Anos</option>
-            </select>
+            <label for="generalStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
+            <input type="date" id="generalStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="monthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês:</label>
-            <select id="monthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Meses</option>
-                <option value="1">Janeiro</option>
-                <option value="2">Fevereiro</option>
-                <option value="3">Março</option>
-                <option value="4">Abril</option>
-                <option value="5">Maio</option>
-                <option value="6">Junho</option>
-                <option value="7">Julho</option>
-                <option value="8">Agosto</option>
-                <option value="9">Setembro</option>
-                <option value="10">Outubro</option>
-                <option value="11">Novembro</option>
-                <option value="12">Dezembro</option>
-            </select>
+            <label for="generalEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <input type="date" id="generalEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div id="city-filter-container" class="flex flex-col items-center hidden">
             <label for="cityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
@@ -192,24 +176,19 @@
         </div>
     </div>
 
-    <!-- FILTROS PARA ANÁLISE DE VENDEDORES (CHURN) -->
+    <!-- FILTROS PARA ANÁLISE DE VENDEDORES (CHURN) (ALTERADO PARA DATAS) -->
     <div id="seller-analysis-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
-            <label for="sellerYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano:</label>
-            <select id="sellerYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Anos</option>
-            </select>
+            <label for="sellerStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
+            <input type="date" id="sellerStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="sellerMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês:</label>
-            <select id="sellerMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Meses</option>
-                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
-            </select>
+            <label for="sellerEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <input type="date" id="sellerEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
     </div>
 
-    <!-- FILTROS PARA ATIVAÇÃO POR VENDEDOR -->
+    <!-- FILTROS PARA ATIVAÇÃO POR VENDEDOR (ALTERADO PARA DATAS) -->
     <div id="activation-seller-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="activationSellerCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
@@ -218,22 +197,17 @@
             </select>
         </div>
         <div class="flex flex-col items-center">
-            <label for="activationSellerYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano (Ativação):</label>
-            <select id="activationSellerYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Anos</option>
-            </select>
+            <label for="activationSellerStartDate" class="text-gray-700 font-medium mb-2">Data Inicial (Ativação):</label>
+            <input type="date" id="activationSellerStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="activationSellerMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês (Ativação):</label>
-            <select id="activationSellerMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Meses</option>
-                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
-            </select>
+            <label for="activationSellerEndDate" class="text-gray-700 font-medium mb-2">Data Final (Ativação):</label>
+            <input type="date" id="activationSellerEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
     </div>
 
     
-    <!-- FILTROS PARA GRÁFICO DE RETENÇÃO (COORTE) -->
+    <!-- FILTROS PARA GRÁFICO DE RETENÇÃO (COORTE) (ALTERADO PARA DATAS) -->
     <div id="cohort-analysis-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="cohortCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
@@ -242,36 +216,26 @@
             </select>
         </div>
         <div class="flex flex-col items-center">
-            <label for="cohortYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano (Ativação):</label>
-            <select id="cohortYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Anos</option>
-            </select>
+            <label for="cohortStartDate" class="text-gray-700 font-medium mb-2">Data Inicial (Ativação):</label>
+            <input type="date" id="cohortStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="cohortMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês (Ativação):</label>
-            <select id="cohortMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Meses</option>
-                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
-            </select>
+            <label for="cohortEndDate" class="text-gray-700 font-medium mb-2">Data Final (Ativação):</label>
+            <input type="date" id="cohortEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
     </div>
     
-    <!-- FILTROS PARA CANCELAMENTO/NEGATIVAÇÃO POR CIDADE -->
+    <!-- FILTROS PARA CANCELAMENTO/NEGATIVAÇÃO POR CIDADE (ALTERADO PARA DATAS) -->
     <div id="city-cancellation-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
-            <label for="cityCancellationYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano:</label>
-            <select id="cityCancellationYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Anos</option>
-            </select>
+            <label for="cityCancellationStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
+            <input type="date" id="cityCancellationStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="cityCancellationMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês:</label>
-            <select id="cityCancellationMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Meses</option>
-                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
-            </select>
+            <label for="cityCancellationEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <input type="date" id="cityCancellationEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
-        <!-- FILTRO DE RELEVÂNCIA (PARA CIDADE) -->
+        <!-- FILTRO DE RELEVÂNCIA -->
         <div class="flex flex-col items-center">
             <label for="relevanceFilterCity" class="text-gray-700 font-medium mb-2 whitespace-nowrap text-sm">Relevância (Meses Pós-Ativação):</label>
             <select id="relevanceFilterCity" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
@@ -285,7 +249,7 @@
         </div>
     </div>
 
-    <!-- FILTROS PARA CANCELAMENTO/NEGATIVAÇÃO POR BAIRRO -->
+    <!-- FILTROS PARA CANCELAMENTO/NEGATIVAÇÃO POR BAIRRO (ALTERADO PARA DATAS) -->
     <div id="neighborhood-analysis-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="neighborhoodAnalysisCityFilter" class="text-gray-700 font-medium mb-2">Selecione a Cidade:</label>
@@ -294,19 +258,14 @@
             </select>
         </div>
         <div class="flex flex-col items-center">
-            <label for="neighborhoodAnalysisYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano:</label>
-            <select id="neighborhoodAnalysisYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Anos</option>
-            </select>
+            <label for="neighborhoodAnalysisStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
+            <input type="date" id="neighborhoodAnalysisStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="neighborhoodAnalysisMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês:</label>
-            <select id="neighborhoodAnalysisMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Meses</option>
-                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
-            </select>
+            <label for="neighborhoodAnalysisEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <input type="date" id="neighborhoodAnalysisEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
-        <!-- FILTRO DE RELEVÂNCIA (PARA BAIRRO) -->
+        <!-- FILTRO DE RELEVÂNCIA -->
         <div class="flex flex-col items-center">
             <label for="relevanceFilterNeighborhood" class="text-gray-700 font-medium mb-2 whitespace-nowrap text-sm">Relevância (Meses Pós-Ativação):</label>
             <select id="relevanceFilterNeighborhood" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
@@ -320,7 +279,7 @@
         </div>
     </div>
 
-    <!-- FILTROS PARA ANÁLISE DE EQUIPAMENTO -->
+    <!-- FILTROS PARA ANÁLISE DE EQUIPAMENTO (ALTERADO PARA DATAS) -->
     <div id="equipment-analysis-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="equipmentAnalysisCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
@@ -328,20 +287,17 @@
                 <option value="">Todas as Cidades</option>
             </select>
         </div>
-        <div id="equipmentYearFilterContainer" class="flex flex-col items-center">
-                <label for="equipmentAnalysisYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano:</label>
-                <select id="equipmentAnalysisYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                    <option value="">Todos os Anos</option>
-                </select>
+        <div id="equipmentDateFilterContainer" class="flex gap-4">
+            <div class="flex flex-col items-center">
+                <label for="equipmentAnalysisStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
+                <input type="date" id="equipmentAnalysisStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div class="flex flex-col items-center">
+                <label for="equipmentAnalysisEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+                <input type="date" id="equipmentAnalysisEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
         </div>
-        <div id="equipmentMonthFilterContainer" class="flex flex-col items-center">
-            <label for="equipmentAnalysisMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês:</label>
-            <select id="equipmentAnalysisMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Meses</option>
-                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
-            </select>
-        </div>
-        <!-- FILTRO DE RELEVÂNCIA (PARA EQUIPAMENTO) -->
+        <!-- FILTRO DE RELEVÂNCIA -->
         <div class="flex flex-col items-center">
             <label for="relevanceFilterEquipment" class="text-gray-700 font-medium mb-2 whitespace-nowrap text-sm">Relevância (Meses Pós-Ativação):</label>
             <select id="relevanceFilterEquipment" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
@@ -355,6 +311,7 @@
         </div>
     </div>
     
+    <!-- FILTROS EVOLUÇÃO DIÁRIA (JÁ USAVA DATAS) -->
     <div id="daily-evolution-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="dailyEvolutionStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
@@ -366,20 +323,15 @@
         </div>
     </div>
 
-    <!-- FILTROS PARA ANÁLISE DE JUROS POR ATRASO -->
+    <!-- FILTROS PARA ANÁLISE DE JUROS POR ATRASO (ALTERADO PARA DATAS) -->
     <div id="late-payment-filters" class="flex flex-wrap justify-center gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
-            <label for="latePaymentYearFilter" class="text-gray-700 font-medium mb-2">Filtrar por Ano (Pagamento):</label>
-            <select id="latePaymentYearFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Anos</option>
-            </select>
+            <label for="latePaymentStartDate" class="text-gray-700 font-medium mb-2">Data Inicial (Pagamento):</label>
+            <input type="date" id="latePaymentStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="latePaymentMonthFilter" class="text-gray-700 font-medium mb-2">Filtrar por Mês (Pagamento):</label>
-            <select id="latePaymentMonthFilter" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                <option value="">Todos os Meses</option>
-                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option><option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option><option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
-            </select>
+            <label for="latePaymentEndDate" class="text-gray-700 font-medium mb-2">Data Final (Pagamento):</label>
+            <input type="date" id="latePaymentEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
     </div>
 

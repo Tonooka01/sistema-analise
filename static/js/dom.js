@@ -17,10 +17,10 @@ export let viewTableBtn;
 
 // --- Filtros Específicos por Análise ---
 
-// Filtros Análise Principal (Coleções)
+// Filtros Análise Principal (Coleções) - AGORA COM DATA
 export let financialFiltersDiv;
-export let yearFilterSelect;
-export let monthFilterSelect;
+export let generalStartDate; // Renomeado de yearFilter
+export let generalEndDate;   // Renomeado de monthFilter
 export let cityFilterSelect;
 export let cityFilterContainer;
 
@@ -28,51 +28,49 @@ export let cityFilterContainer;
 export let customSearchFilterDiv;
 export let clientSearchInput;
 export let applyClientSearchBtn;
-export let relevanceFilterSearch; // NOVO FILTRO DE RELEVÂNCIA
+export let relevanceFilterSearch;
 
 // Filtros Saúde Financeira / Evolução Ativos
 export let financialHealthFiltersDiv;
 export let contractStatusFilter;
-export let accessStatusContainer; // <-- ATUALIZADO: Agora é um container para checkboxes
-export let filterActiveClientsBtn; // <-- NOVO: Botão Filtrar
+export let accessStatusContainer;
+export let filterActiveClientsBtn;
 
-// Filtros Análise Vendedores
+// Filtros Análise Vendedores - AGORA COM DATA
 export let sellerAnalysisFiltersDiv;
-export let sellerYearFilter;
-export let sellerMonthFilter;
+export let sellerStartDate;
+export let sellerEndDate;
 
-// Filtros Cancelamento/Negativação por Cidade
+// Filtros Cancelamento/Negativação por Cidade - AGORA COM DATA
 export let cityCancellationFiltersDiv;
-export let cityCancellationYearFilter;
-export let cityCancellationMonthFilter;
-export let relevanceFilterCity; // NOVO FILTRO DE RELEVÂNCIA
+export let cityCancellationStartDate;
+export let cityCancellationEndDate;
+export let relevanceFilterCity;
 
-// Filtros Cancelamento/Negativação por Bairro
+// Filtros Cancelamento/Negativação por Bairro - AGORA COM DATA
 export let neighborhoodAnalysisFiltersDiv;
 export let neighborhoodAnalysisCityFilter;
-export let neighborhoodAnalysisYearFilter;
-export let neighborhoodAnalysisMonthFilter;
-export let relevanceFilterNeighborhood; // NOVO FILTRO DE RELEVÂNCIA
+export let neighborhoodAnalysisStartDate;
+export let neighborhoodAnalysisEndDate;
+export let relevanceFilterNeighborhood;
 
-// Filtros Análise de Equipamento (Cancelamento e Ativo por OLT)
+// Filtros Análise de Equipamento - AGORA COM DATA
 export let equipmentAnalysisFiltersDiv;
-export let equipmentAnalysisYearFilter;
-export let equipmentAnalysisMonthFilter;
+export let equipmentAnalysisStartDate;
+export let equipmentAnalysisEndDate;
 export let equipmentAnalysisCityFilter;
-export let equipmentYearFilterContainer;
-export let equipmentMonthFilterContainer;
-export let relevanceFilterEquipment; // NOVO FILTRO DE RELEVÂNCIA
+export let equipmentDateFilterContainer; // Container para datas
+export let relevanceFilterEquipment;
 
 // Filtros Evolução Diária
 export let dailyEvolutionFiltersDiv;
 export let dailyEvolutionStartDate;
 export let dailyEvolutionEndDate;
 
-// Filtros Análise de Comportamento (Dentro das Abas)
+// Filtros Análise de Comportamento
 export let behaviorAnalysisContainer;
 export let behaviorAnalysisTabs;
 export let behaviorAnalysisTabContent;
-// Elementos específicos das abas (serão buscados dentro das funções de renderização das abas)
 
 // Filtros Faturamento por Cidade/Período
 export let faturamentoCidadeFiltersDiv;
@@ -80,27 +78,25 @@ export let faturamentoStartDate;
 export let faturamentoEndDate;
 export let faturamentoCityFilter;
 
-// NOVOS FILTROS DE ATIVAÇÃO POR VENDEDOR
+// NOVOS FILTROS DE ATIVAÇÃO POR VENDEDOR - AGORA COM DATA
 export let activationSellerFiltersDiv;
 export let activationSellerCityFilter;
-export let activationSellerYearFilter;
-export let activationSellerMonthFilter;
+export let activationSellerStartDate;
+export let activationSellerEndDate;
 
-// NOVOS FILTROS DE COORTE
+// NOVOS FILTROS DE COORTE - AGORA COM DATA
 export let cohortAnalysisFiltersDiv;
 export let cohortCityFilter;
-export let cohortYearFilter;
-export let cohortMonthFilter;
+export let cohortStartDate;
+export let cohortEndDate;
 
-// NOVOS FILTROS DE ANÁLISE DE JUROS
+// NOVOS FILTROS DE ANÁLISE DE JUROS - AGORA COM DATA
 export let latePaymentFiltersDiv;
-export let latePaymentYearFilter;
-export let latePaymentMonthFilter;
+export let latePaymentStartDate;
+export let latePaymentEndDate;
 
 
 // --- Elementos dos Modais ---
-
-// Modal Principal (Tabela Genérica)
 export let tableModal;
 export let modalTitle;
 export let modalTableHead;
@@ -115,7 +111,6 @@ export let modalPageInfoSpan;
 export let modalCloseButton;
 export let exportTableBtn;
 
-// Modal Detalhes da Fatura (Atrasos/Não Pagas)
 export let invoiceDetailModal;
 export let invoiceDetailModalTitle;
 export let invoiceDetailCloseButton;
@@ -129,14 +124,12 @@ export let invoiceDetailPrevPageBtn;
 export let invoiceDetailNextPageBtn;
 export let invoiceDetailPageInfo;
 
-// Modal Unificado de Detalhes com Abas (Financeiro, OS, Atend., Logins, Comodato)
 export let detailsModal;
 export let detailsModalTitle;
 export let detailsModalCloseButton;
 export let detailsModalTabs;
-export let detailsModalTabContent; // O container das abas
+export let detailsModalTabContent;
 
-// Modal Detalhes Cancelamento/Negativação (Histórico Cliente)
 export let cancellationDetailModal;
 export let cancellationDetailModalTitle;
 export let cancellationDetailCloseButton;
@@ -144,9 +137,7 @@ export let cancellationDetailContent;
 export let cancellationDetailLoading;
 export let cancellationDetailErrorDiv;
 export let cancellationDetailErrorText;
-// (Não tem paginação própria, mostra tudo)
 
-// Modal Detalhes do Vendedor
 export let sellerDetailModal;
 export let sellerDetailModalTitle;
 export let sellerDetailCloseButton;
@@ -159,7 +150,6 @@ export let sellerDetailPrevPageBtn;
 export let sellerDetailNextPageBtn;
 export let sellerDetailPageInfo;
 
-// Modal Detalhes da Cidade
 export let cityDetailModal;
 export let cityDetailModalTitle;
 export let cityDetailCloseButton;
@@ -172,7 +162,6 @@ export let cityDetailPrevPageBtn;
 export let cityDetailNextPageBtn;
 export let cityDetailPageInfo;
 
-// Modal Detalhes do Bairro
 export let neighborhoodDetailModal;
 export let neighborhoodDetailModalTitle;
 export let neighborhoodDetailCloseButton;
@@ -185,14 +174,11 @@ export let neighborhoodDetailPrevPageBtn;
 export let neighborhoodDetailNextPageBtn;
 export let neighborhoodDetailPageInfo;
 
-// Modal Detalhes do Equipamento (Cancelamento)
 export let equipmentDetailModal;
 export let equipmentDetailModalTitle;
 export let equipmentDetailCloseButton;
-export let equipmentDetailBody; // Referência direta ao body para innerHTML
-// (Paginação é adicionada dinamicamente ao body)
+export let equipmentDetailBody;
 
-// NOVO MODAL - Detalhes de Ativação do Vendedor
 export let sellerActivationDetailModal;
 export let sellerActivationDetailModalTitle;
 export let sellerActivationDetailCloseButton;
@@ -205,7 +191,6 @@ export let sellerActivationDetailPrevPageBtn;
 export let sellerActivationDetailNextPageBtn;
 export let sellerActivationDetailPageInfo;
 
-// Modal Detalhes Equipamento Ativo
 export let activeEquipmentDetailModal;
 export let activeEquipmentDetailModalTitle;
 export let activeEquipmentDetailCloseButton;
@@ -218,7 +203,6 @@ export let activeEquipmentDetailPrevPageBtn;
 export let activeEquipmentDetailNextPageBtn;
 export let activeEquipmentDetailPageInfo;
 
-// Elementos do Admin
 export let adminSettingsModal;
 export let openAdminSettingsModalBtn;
 export let closeAdminSettingsModalBtn;
@@ -238,7 +222,6 @@ export let createUserFormContainer;
 export function initializeDom() {
     console.log("Inicializando referências do DOM...");
 
-    // Elementos Principais
     dashboardContentWrapper = document.getElementById('dashboard-content-wrapper');
     dashboardContentDiv = document.getElementById('dashboard-content');
     mainChartsArea = document.getElementById('main-charts-area');
@@ -246,11 +229,6 @@ export function initializeDom() {
     chartErrorMsgDiv = document.getElementById('chart-error-message');
     chartErrorTextSpan = document.getElementById('chart-error-text');
 
-    // --- DEBUG LOG ---
-    console.log("Elemento 'dashboard-content' encontrado:", dashboardContentDiv);
-    // --- FIM DEBUG LOG ---
-
-    // Seletores Principais
     collectionSelectorButtons = document.querySelectorAll('.collection-selector button:not(#saveLayoutBtn)');
     customAnalysisSelector = document.getElementById('customAnalysisSelector');
     saveLayoutBtn = document.getElementById('saveLayoutBtn');
@@ -258,84 +236,75 @@ export function initializeDom() {
 
     // Filtros Análise Principal
     financialFiltersDiv = document.getElementById('financial-filters');
-    yearFilterSelect = document.getElementById('yearFilter');
-    monthFilterSelect = document.getElementById('monthFilter');
+    generalStartDate = document.getElementById('generalStartDate'); // NOVO
+    generalEndDate = document.getElementById('generalEndDate');     // NOVO
     cityFilterSelect = document.getElementById('cityFilter');
     cityFilterContainer = document.getElementById('city-filter-container');
 
-    // Filtros Análise Personalizada Geral
     customSearchFilterDiv = document.getElementById('custom-search-filter');
     clientSearchInput = document.getElementById('clientSearchInput');
     applyClientSearchBtn = document.getElementById('applyClientSearch');
-    relevanceFilterSearch = document.getElementById('relevanceFilterSearch'); // NOVO
+    relevanceFilterSearch = document.getElementById('relevanceFilterSearch');
 
-    // Filtros Saúde Financeira / Evolução Ativos
     financialHealthFiltersDiv = document.getElementById('financial-health-filters');
     contractStatusFilter = document.getElementById('contractStatusFilter');
-    accessStatusContainer = document.getElementById('accessStatusContainer'); // <-- ATUALIZADO: Busca o container
-    filterActiveClientsBtn = document.getElementById('filterActiveClientsBtn'); // <-- NOVO: Botão Filtrar
+    accessStatusContainer = document.getElementById('accessStatusContainer');
+    filterActiveClientsBtn = document.getElementById('filterActiveClientsBtn');
 
     // Filtros Análise Vendedores
     sellerAnalysisFiltersDiv = document.getElementById('seller-analysis-filters');
-    sellerYearFilter = document.getElementById('sellerYearFilter');
-    sellerMonthFilter = document.getElementById('sellerMonthFilter');
+    sellerStartDate = document.getElementById('sellerStartDate'); // NOVO
+    sellerEndDate = document.getElementById('sellerEndDate');     // NOVO
 
     // Filtros Cancelamento/Negativação por Cidade
     cityCancellationFiltersDiv = document.getElementById('city-cancellation-filters');
-    cityCancellationYearFilter = document.getElementById('cityCancellationYearFilter');
-    cityCancellationMonthFilter = document.getElementById('cityCancellationMonthFilter');
-    relevanceFilterCity = document.getElementById('relevanceFilterCity'); // NOVO
+    cityCancellationStartDate = document.getElementById('cityCancellationStartDate'); // NOVO
+    cityCancellationEndDate = document.getElementById('cityCancellationEndDate');     // NOVO
+    relevanceFilterCity = document.getElementById('relevanceFilterCity');
 
     // Filtros Cancelamento/Negativação por Bairro
     neighborhoodAnalysisFiltersDiv = document.getElementById('neighborhood-analysis-filters');
     neighborhoodAnalysisCityFilter = document.getElementById('neighborhoodAnalysisCityFilter');
-    neighborhoodAnalysisYearFilter = document.getElementById('neighborhoodAnalysisYearFilter');
-    neighborhoodAnalysisMonthFilter = document.getElementById('neighborhoodAnalysisMonthFilter');
-    relevanceFilterNeighborhood = document.getElementById('relevanceFilterNeighborhood'); // NOVO
+    neighborhoodAnalysisStartDate = document.getElementById('neighborhoodAnalysisStartDate'); // NOVO
+    neighborhoodAnalysisEndDate = document.getElementById('neighborhoodAnalysisEndDate');     // NOVO
+    relevanceFilterNeighborhood = document.getElementById('relevanceFilterNeighborhood');
 
     // Filtros Análise de Equipamento
     equipmentAnalysisFiltersDiv = document.getElementById('equipment-analysis-filters');
-    equipmentAnalysisYearFilter = document.getElementById('equipmentAnalysisYearFilter');
-    equipmentAnalysisMonthFilter = document.getElementById('equipmentAnalysisMonthFilter');
+    equipmentAnalysisStartDate = document.getElementById('equipmentAnalysisStartDate'); // NOVO
+    equipmentAnalysisEndDate = document.getElementById('equipmentAnalysisEndDate');     // NOVO
     equipmentAnalysisCityFilter = document.getElementById('equipmentAnalysisCityFilter');
-    equipmentYearFilterContainer = document.getElementById('equipmentYearFilterContainer');
-    equipmentMonthFilterContainer = document.getElementById('equipmentMonthFilterContainer');
-    relevanceFilterEquipment = document.getElementById('relevanceFilterEquipment'); // NOVO
+    equipmentDateFilterContainer = document.getElementById('equipmentDateFilterContainer'); // NOVO
+    relevanceFilterEquipment = document.getElementById('relevanceFilterEquipment');
 
-    // Filtros Evolução Diária
     dailyEvolutionFiltersDiv = document.getElementById('daily-evolution-filters');
     dailyEvolutionStartDate = document.getElementById('dailyEvolutionStartDate');
     dailyEvolutionEndDate = document.getElementById('dailyEvolutionEndDate');
 
-    // Filtros Análise de Comportamento
     behaviorAnalysisContainer = document.getElementById('behavior-analysis-container');
     behaviorAnalysisTabs = document.getElementById('behavior-analysis-tabs');
     behaviorAnalysisTabContent = document.getElementById('behavior-analysis-tab-content');
 
-    // Filtros Faturamento por Cidade/Período
     faturamentoCidadeFiltersDiv = document.getElementById('faturamento-cidade-filters');
     faturamentoStartDate = document.getElementById('faturamentoStartDate');
     faturamentoEndDate = document.getElementById('faturamentoEndDate');
     faturamentoCityFilter = document.getElementById('faturamentoCityFilter');
 
-    // NOVOS FILTROS DE ATIVAÇÃO POR VENDEDOR
     activationSellerFiltersDiv = document.getElementById('activation-seller-filters');
     activationSellerCityFilter = document.getElementById('activationSellerCityFilter');
-    activationSellerYearFilter = document.getElementById('activationSellerYearFilter');
-    activationSellerMonthFilter = document.getElementById('activationSellerMonthFilter');
+    activationSellerStartDate = document.getElementById('activationSellerStartDate'); // NOVO
+    activationSellerEndDate = document.getElementById('activationSellerEndDate');     // NOVO
 
-    // NOVOS FILTROS DE COORTE
     cohortAnalysisFiltersDiv = document.getElementById('cohort-analysis-filters');
     cohortCityFilter = document.getElementById('cohortCityFilter');
-    cohortYearFilter = document.getElementById('cohortYearFilter');
-    cohortMonthFilter = document.getElementById('cohortMonthFilter');
+    cohortStartDate = document.getElementById('cohortStartDate'); // NOVO
+    cohortEndDate = document.getElementById('cohortEndDate');     // NOVO
 
-    // NOVOS FILTROS DE ANÁLISE DE JUROS
     latePaymentFiltersDiv = document.getElementById('late-payment-filters');
-    latePaymentYearFilter = document.getElementById('latePaymentYearFilter');
-    latePaymentMonthFilter = document.getElementById('latePaymentMonthFilter');
+    latePaymentStartDate = document.getElementById('latePaymentStartDate'); // NOVO
+    latePaymentEndDate = document.getElementById('latePaymentEndDate');     // NOVO
 
-    // --- Elementos dos Modais ---
+    // Modais (IDs mantidos)
     tableModal = document.getElementById('tableModal');
     modalTitle = document.getElementById('modalTitle');
     const modalTable = document.getElementById('modalTable');
@@ -419,7 +388,6 @@ export function initializeDom() {
     equipmentDetailCloseButton = document.getElementById('equipmentDetailCloseButton');
     equipmentDetailBody = equipmentDetailModal ? equipmentDetailModal.querySelector('.modal-body') : null;
 
-    // NOVO MODAL - Detalhes de Ativação do Vendedor
     sellerActivationDetailModal = document.getElementById('sellerActivationDetailModal');
     sellerActivationDetailModalTitle = document.getElementById('sellerActivationDetailModalTitle');
     sellerActivationDetailCloseButton = document.getElementById('sellerActivationDetailCloseButton');
@@ -444,7 +412,6 @@ export function initializeDom() {
     activeEquipmentDetailNextPageBtn = document.getElementById('activeEquipmentDetailNextPageBtn');
     activeEquipmentDetailPageInfo = document.getElementById('activeEquipmentDetailPageInfo');
 
-    // Referências Admin
     adminSettingsModal = document.getElementById('adminSettingsModal');
     openAdminSettingsModalBtn = document.getElementById('openAdminSettingsModalBtn');
     closeAdminSettingsModalBtn = document.getElementById('closeAdminSettingsModalBtn');
@@ -457,9 +424,4 @@ export function initializeDom() {
     createUserFormContainer = document.getElementById('createUserFormContainer');
 
     console.log("Referências do DOM inicializadas.");
-
-    // Verifica se algum elemento essencial não foi encontrado
-    if (!dashboardContentWrapper || !customAnalysisSelector || !tableModal || !dashboardContentDiv || !chartLoadingDiv || !chartErrorMsgDiv) {
-        console.error("ERRO: Um ou mais elementos essenciais do DOM não foram encontrados. Verifique os IDs no HTML.");
-    }
 }

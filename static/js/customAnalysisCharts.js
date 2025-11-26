@@ -5,13 +5,26 @@ import { renderChart, destroyAllMainCharts, addAndRenderChartWidget, populateCha
 import { getGridStack } from './state.js';
 import * as modals from './modals.js';
 
+// --- Helper para configurar área de gráficos ---
+function setupChartsArea() {
+    if (dom.mainChartsArea) {
+        if (dom.dashboardContentDiv && !dom.dashboardContentDiv.contains(dom.mainChartsArea)) {
+            dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
+        }
+        dom.mainChartsArea.classList.remove('hidden');
+        destroyAllMainCharts();
+        const grid = getGridStack();
+        if(grid) grid.removeAll();
+    }
+}
+
 /**
  * Busca e renderiza a análise de "Vendedores" com cards e tabela.
  */
-export async function fetchAndRenderSellerAnalysis(year = '', month = '') {
+export async function fetchAndRenderSellerAnalysis(startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentAnalysis: 'vendedores', currentPage: 1 });
-    const url = `${state.API_BASE_URL}/api/custom_analysis/sellers?year=${year}&month=${month}`;
+    const url = `${state.API_BASE_URL}/api/custom_analysis/sellers?start_date=${startDate}&end_date=${endDate}`;
     try {
         const response = await fetch(url);
         if (!response.ok) {
@@ -20,10 +33,8 @@ export async function fetchAndRenderSellerAnalysis(year = '', month = '') {
         }
         const result = await response.json();
 
-        if (dom.sellerYearFilter && result.years) {
-            utils.populateYearFilter(dom.sellerYearFilter, result.years, year);
-        }
-        if (dom.sellerMonthFilter) dom.sellerMonthFilter.value = month || '';
+        if (dom.sellerStartDate) dom.sellerStartDate.value = startDate;
+        if (dom.sellerEndDate) dom.sellerEndDate.value = endDate;
 
         if (!dom.dashboardContentDiv) return;
         dom.dashboardContentDiv.innerHTML = '';
@@ -81,13 +92,13 @@ export async function fetchAndRenderSellerAnalysis(year = '', month = '') {
 /**
  * Busca e renderiza a análise de "Cancelamento/Negativação por Cidade".
  */
-export async function fetchAndRenderCancellationsByCity(year = '', month = '', relevance = '') {
+export async function fetchAndRenderCancellationsByCity(startDate = '', endDate = '', relevance = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentAnalysis: 'cancellations_by_city', currentPage: 1 });
 
     const params = new URLSearchParams();
-    if (year) params.append('year', year);
-    if (month) params.append('month', month);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
     if (relevance) params.append('relevance', relevance);
     const url = `${state.API_BASE_URL}/api/custom_analysis/cancellations_by_city?${params.toString()}`;
 
@@ -99,8 +110,8 @@ export async function fetchAndRenderCancellationsByCity(year = '', month = '', r
         }
         const result = await response.json();
 
-        if(dom.cityCancellationYearFilter && result.years) utils.populateYearFilter(dom.cityCancellationYearFilter, result.years, year);
-        if(dom.cityCancellationMonthFilter) dom.cityCancellationMonthFilter.value = month || '';
+        if(dom.cityCancellationStartDate) dom.cityCancellationStartDate.value = startDate;
+        if(dom.cityCancellationEndDate) dom.cityCancellationEndDate.value = endDate;
 
         if (!dom.dashboardContentDiv) throw new Error("Área principal do dashboard não encontrada.");
         dom.dashboardContentDiv.innerHTML = '';
@@ -111,13 +122,8 @@ export async function fetchAndRenderCancellationsByCity(year = '', month = '', r
             { title: 'Soma Geral', value: result.grand_total || 0, colorClass: 'bg-gray-100' }
         ]);
 
-        if (!dom.mainChartsArea) throw new Error("Área de gráficos não encontrada.");
-        dom.mainChartsArea.innerHTML = '';
-        dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
-        dom.mainChartsArea.classList.remove('hidden');
-        destroyAllMainCharts();
+        setupChartsArea();
         const grid = getGridStack();
-        if(grid) grid.removeAll();
 
         if(!result.data || result.data.length === 0) {
             dom.mainChartsArea.innerHTML = '<p class="text-center text-gray-500 mt-4">Nenhum dado encontrado para os filtros selecionados.</p>';
@@ -130,8 +136,7 @@ export async function fetchAndRenderCancellationsByCity(year = '', month = '', r
             { label: 'Negativados', data: result.data.map(d => d.Negativados || 0), backgroundColor: '#f97316' }
         ];
 
-        const filterText = `(${year || 'Todos'}${month ? '/' + month : ''})`;
-        const title = `Cancelamentos e Negativações por Cidade ${filterText}`;
+        const title = `Cancelamentos e Negativações por Cidade`;
 
         const content = `
             <div class="grid-stack-item-content">
@@ -152,10 +157,10 @@ export async function fetchAndRenderCancellationsByCity(year = '', month = '', r
                     const element = elements[0];
                     const clickedCity = chart.data.labels[element.index];
                     const type = chart.data.datasets[element.datasetIndex].label === 'Cancelados' ? 'cancelado' : 'negativado';
-                    const currentYear = dom.cityCancellationYearFilter?.value || '';
-                    const currentMonth = dom.cityCancellationMonthFilter?.value || '';
-                    const currentRelevance = dom.relevanceFilterCity?.value || '';
-                    modals.openCityDetailModal(clickedCity, type, currentYear, currentMonth, currentRelevance);
+                    const cStartDate = dom.cityCancellationStartDate?.value || '';
+                    const cEndDate = dom.cityCancellationEndDate?.value || '';
+                    const cRelevance = dom.relevanceFilterCity?.value || '';
+                    modals.openCityDetailModal(clickedCity, type, cStartDate, cEndDate, cRelevance);
                 }
             }
         });
@@ -170,13 +175,13 @@ export async function fetchAndRenderCancellationsByCity(year = '', month = '', r
 /**
  * Busca e renderiza a análise de "Cancelamento/Negativação por Bairro".
  */
-export async function fetchAndRenderCancellationsByNeighborhood(city = '', year = '', month = '', relevance = '') {
+export async function fetchAndRenderCancellationsByNeighborhood(city = '', startDate = '', endDate = '', relevance = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentAnalysis: 'cancellations_by_neighborhood', currentPage: 1 });
 
     const params = new URLSearchParams({ city: city });
-    if (year) params.append('year', year);
-    if (month) params.append('month', month);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
     if (relevance) params.append('relevance', relevance);
     const url = `${state.API_BASE_URL}/api/custom_analysis/cancellations_by_neighborhood?${params.toString()}`;
 
@@ -189,8 +194,8 @@ export async function fetchAndRenderCancellationsByNeighborhood(city = '', year 
         const result = await response.json();
 
         if(dom.neighborhoodAnalysisCityFilter && result.cities) utils.populateCityFilter(dom.neighborhoodAnalysisCityFilter, result.cities, city);
-        if(dom.neighborhoodAnalysisYearFilter && result.years) utils.populateYearFilter(dom.neighborhoodAnalysisYearFilter, result.years, year);
-        if(dom.neighborhoodAnalysisMonthFilter) dom.neighborhoodAnalysisMonthFilter.value = month || '';
+        if(dom.neighborhoodAnalysisStartDate) dom.neighborhoodAnalysisStartDate.value = startDate;
+        if(dom.neighborhoodAnalysisEndDate) dom.neighborhoodAnalysisEndDate.value = endDate;
 
         if (!dom.dashboardContentDiv) throw new Error("Área principal do dashboard não encontrada.");
         dom.dashboardContentDiv.innerHTML = '';
@@ -203,13 +208,8 @@ export async function fetchAndRenderCancellationsByNeighborhood(city = '', year 
             ]);
         }
 
-        if (!dom.mainChartsArea) throw new Error("Área de gráficos não encontrada.");
-        dom.mainChartsArea.innerHTML = '';
-        dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
-        dom.mainChartsArea.classList.remove('hidden');
-        destroyAllMainCharts();
+        setupChartsArea();
         const grid = getGridStack();
-        if(grid) grid.removeAll();
 
         if (!city) {
             dom.mainChartsArea.innerHTML = '<p class="text-center text-gray-500 mt-4">Por favor, selecione uma cidade no filtro acima para ver a análise por bairro.</p>';
@@ -227,8 +227,7 @@ export async function fetchAndRenderCancellationsByNeighborhood(city = '', year 
             { label: 'Negativados', data: result.data.map(d => d.Negativados || 0), backgroundColor: '#f97316' }
         ];
 
-        const filterText = `(${year || 'Todos'}${month ? '/' + month : ''})`;
-        const title = `Cancelamentos/Negativações por Bairro em ${city} ${filterText}`;
+        const title = `Cancelamentos/Negativações por Bairro em ${city}`;
 
         const content = `
             <div class="grid-stack-item-content">
@@ -249,10 +248,10 @@ export async function fetchAndRenderCancellationsByNeighborhood(city = '', year 
                     const element = elements[0];
                     const neighborhood = chart.data.labels[element.index];
                     const type = chart.data.datasets[element.datasetIndex].label === 'Cancelados' ? 'cancelado' : 'negativado';
-                    const currentYear = dom.neighborhoodAnalysisYearFilter?.value || '';
-                    const currentMonth = dom.neighborhoodAnalysisMonthFilter?.value || '';
-                    const currentRelevance = dom.relevanceFilterNeighborhood?.value || '';
-                     modals.openNeighborhoodDetailModal(city, neighborhood, type, currentYear, currentMonth, currentRelevance);
+                    const nStartDate = dom.neighborhoodAnalysisStartDate?.value || '';
+                    const nEndDate = dom.neighborhoodAnalysisEndDate?.value || '';
+                    const nRelevance = dom.relevanceFilterNeighborhood?.value || '';
+                     modals.openNeighborhoodDetailModal(city, neighborhood, type, nStartDate, nEndDate, nRelevance);
                 }
             }
         });
@@ -267,13 +266,13 @@ export async function fetchAndRenderCancellationsByNeighborhood(city = '', year 
 /**
  * Busca e renderiza a análise de "Cancelamento por Equipamento".
  */
-export async function fetchAndRenderCancellationsByEquipment(year = '', month = '', city = '', relevance = '') {
+export async function fetchAndRenderCancellationsByEquipment(startDate = '', endDate = '', city = '', relevance = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentAnalysis: 'cancellations_by_equipment', currentPage: 1 });
 
     const params = new URLSearchParams();
-    if (year) params.append('year', year);
-    if (month) params.append('month', month);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
     if (city) params.append('city', city);
     if (relevance) params.append('relevance', relevance);
     const url = `${state.API_BASE_URL}/api/custom_analysis/cancellations_by_equipment?${params.toString()}`;
@@ -286,9 +285,9 @@ export async function fetchAndRenderCancellationsByEquipment(year = '', month = 
         }
         const result = await response.json();
 
-        if(dom.equipmentAnalysisYearFilter && result.years) utils.populateYearFilter(dom.equipmentAnalysisYearFilter, result.years, year);
+        if(dom.equipmentAnalysisStartDate) dom.equipmentAnalysisStartDate.value = startDate;
+        if(dom.equipmentAnalysisEndDate) dom.equipmentAnalysisEndDate.value = endDate;
         if(dom.equipmentAnalysisCityFilter && result.cities) utils.populateCityFilter(dom.equipmentAnalysisCityFilter, result.cities, city);
-        if(dom.equipmentAnalysisMonthFilter) dom.equipmentAnalysisMonthFilter.value = month || '';
 
         if (!dom.dashboardContentDiv) throw new Error("Área principal do dashboard não encontrada.");
         dom.dashboardContentDiv.innerHTML = '';
@@ -297,13 +296,8 @@ export async function fetchAndRenderCancellationsByEquipment(year = '', month = 
             { title: 'Total de Equipamentos Devolvidos', value: result.total_equipments || 0, colorClass: 'bg-purple-50' }
         ]);
 
-        if (!dom.mainChartsArea) throw new Error("Área de gráficos não encontrada.");
-        dom.mainChartsArea.innerHTML = '';
-        dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
-        dom.mainChartsArea.classList.remove('hidden');
-        destroyAllMainCharts();
+        setupChartsArea();
         const grid = getGridStack();
-        if(grid) grid.removeAll();
 
         if (!result.data || result.data.length === 0) {
             dom.mainChartsArea.innerHTML = `<p class="text-center text-gray-500 mt-4">Nenhum cancelamento associado a equipamentos encontrado para os filtros selecionados.</p>`;
@@ -315,8 +309,7 @@ export async function fetchAndRenderCancellationsByEquipment(year = '', month = 
             { label: 'Cancelamentos', data: result.data.map(d => d.Count || 0), backgroundColor: '#d946ef' }
         ];
 
-        const filterText = `(${year || 'Todos'}${month ? '/' + month : ''}${city ? '/' + city : ''})`;
-        const title = `Top Cancelamentos por Modelo de Equipamento ${filterText}`;
+        const title = `Top Cancelamentos por Modelo de Equipamento`;
 
         const content = `
             <div class="grid-stack-item-content">
@@ -336,11 +329,11 @@ export async function fetchAndRenderCancellationsByEquipment(year = '', month = 
                     const chart = currentCharts['equipmentChart'];
                     const element = elements[0];
                     const equipmentName = chart.data.labels[element.index];
-                    const currentYear = dom.equipmentAnalysisYearFilter?.value || '';
-                    const currentMonth = dom.equipmentAnalysisMonthFilter?.value || '';
-                    const currentCity = dom.equipmentAnalysisCityFilter?.value || '';
-                    const currentRelevance = dom.relevanceFilterEquipment?.value || '';
-                     modals.openEquipmentDetailModal(equipmentName, currentYear, currentMonth, currentCity, currentRelevance);
+                    const eStartDate = dom.equipmentAnalysisStartDate?.value || '';
+                    const eEndDate = dom.equipmentAnalysisEndDate?.value || '';
+                    const eCity = dom.equipmentAnalysisCityFilter?.value || '';
+                    const eRelevance = dom.relevanceFilterEquipment?.value || '';
+                     modals.openEquipmentDetailModal(equipmentName, eStartDate, eEndDate, eCity, eRelevance);
                 }
             }
         });
@@ -375,13 +368,9 @@ export async function fetchAndRenderEquipmentByOlt(city = '') {
 
         if (!dom.dashboardContentDiv) throw new Error("Área principal do dashboard não encontrada.");
         dom.dashboardContentDiv.innerHTML = '';
-        if (!dom.mainChartsArea) throw new Error("Área de gráficos não encontrada.");
-        dom.mainChartsArea.innerHTML = '';
-        dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
-        dom.mainChartsArea.classList.remove('hidden');
-        destroyAllMainCharts();
+        
+        setupChartsArea();
         const grid = getGridStack();
-        if(grid) grid.removeAll();
 
         if (!result.data || result.data.length === 0) {
             let message = 'Nenhum equipamento em comodato ativo encontrado.';
@@ -432,14 +421,14 @@ export async function fetchAndRenderEquipmentByOlt(city = '') {
 /**
  * Busca os dados da API e renderiza o gráfico de coorte de retenção.
  */
-export async function fetchAndRenderCohortAnalysis(city = '', year = '', month = '') {
+export async function fetchAndRenderCohortAnalysis(city = '', startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentAnalysis: 'cohort_retention', currentPage: 1 });
 
     const params = new URLSearchParams();
     if (city) params.append('city', city);
-    if (year) params.append('year', year);
-    if (month) params.append('month', month);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
     const url = `${state.API_BASE_URL}/api/custom_analysis/cohort?${params.toString()}`;
 
     try {
@@ -453,20 +442,14 @@ export async function fetchAndRenderCohortAnalysis(city = '', year = '', month =
         if (dom.cohortCityFilter && result.cities) {
             utils.populateCityFilter(dom.cohortCityFilter, result.cities, city);
         }
-        if (dom.cohortYearFilter && result.years) {
-            utils.populateYearFilter(dom.cohortYearFilter, result.years, year);
-        }
-        if (dom.cohortMonthFilter) dom.cohortMonthFilter.value = month || '';
+        if (dom.cohortStartDate) dom.cohortStartDate.value = startDate;
+        if (dom.cohortEndDate) dom.cohortEndDate.value = endDate;
 
         if (!dom.dashboardContentDiv) throw new Error("Área principal do dashboard não encontrada.");
         dom.dashboardContentDiv.innerHTML = '';
-        if (!dom.mainChartsArea) throw new Error("Área de gráficos não encontrada.");
-        dom.mainChartsArea.innerHTML = '';
-        dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
-        dom.mainChartsArea.classList.remove('hidden');
-        destroyAllMainCharts();
+        
+        setupChartsArea();
         const grid = getGridStack();
-        if(grid) grid.removeAll();
 
         if (!result.datasets || result.datasets.length === 0) {
             dom.mainChartsArea.innerHTML = '<p class="text-center text-gray-500 mt-4">Nenhum dado encontrado para a análise de coorte.</p>';
@@ -591,13 +574,9 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
         if (dom.dailyEvolutionFiltersDiv && !dom.dashboardContentDiv.contains(dom.dailyEvolutionFiltersDiv)) {
              dom.dashboardContentDiv.appendChild(dom.dailyEvolutionFiltersDiv);
         }
-        if (!dom.mainChartsArea) throw new Error("Área de gráficos não encontrada.");
-        dom.mainChartsArea.innerHTML = '';
-        dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
-        dom.mainChartsArea.classList.remove('hidden');
-        destroyAllMainCharts();
+        
+        setupChartsArea();
         const grid = getGridStack();
-        if(grid) grid.removeAll();
 
         if (!result.data || Object.keys(result.data).length === 0) {
             dom.mainChartsArea.innerHTML = `<p class="text-center text-gray-500 mt-4">Nenhum dado de evolução diária encontrado para o período selecionado.</p>`;
@@ -727,13 +706,9 @@ export async function fetchAndRenderBillingByCityAnalysis(startDate = '', endDat
 
         if (!dom.dashboardContentDiv) throw new Error("Área principal não encontrada.");
         dom.dashboardContentDiv.innerHTML = '';
-        if (!dom.mainChartsArea) throw new Error("Área de gráficos não encontrada.");
-        dom.mainChartsArea.innerHTML = '';
-        dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
-        dom.mainChartsArea.classList.remove('hidden');
-        destroyAllMainCharts();
+        
+        setupChartsArea();
         const grid = getGridStack();
-        if(grid) grid.removeAll();
 
         const renderBillingChart = (id, title, data, typeOptions, chartOptions, widgetConfig) => {
             const grid = getGridStack();
@@ -882,13 +857,9 @@ export async function fetchAndRenderActiveClientsEvolution(startDate = '', endDa
 
         if (!dom.dashboardContentDiv) throw new Error("Área principal não encontrada.");
         dom.dashboardContentDiv.innerHTML = '';
-        if (!dom.mainChartsArea) throw new Error("Área de gráficos não encontrada.");
-        dom.mainChartsArea.innerHTML = '';
-        dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
-        dom.mainChartsArea.classList.remove('hidden');
-        destroyAllMainCharts();
+        
+        setupChartsArea();
         const grid = getGridStack();
-        if(grid) grid.removeAll();
 
         if (!result.data || result.data.length === 0) {
             dom.mainChartsArea.innerHTML = '<p class="text-center text-gray-500 mt-4">Nenhum dado de evolução de clientes encontrado para o período.</p>';
@@ -946,14 +917,14 @@ export async function fetchAndRenderActiveClientsEvolution(startDate = '', endDa
  * Busca e renderiza a análise de "Ativação por Vendedor" com cards e tabela.
  * ATUALIZADO: Inclui colunas de porcentagem.
  */
-export async function fetchAndRenderActivationsBySeller(city = '', year = '', month = '') {
+export async function fetchAndRenderActivationsBySeller(city = '', startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentAnalysis: 'activations_by_seller', currentPage: 1 }); 
     
     const params = new URLSearchParams();
     if (city) params.append('city', city);
-    if (year) params.append('year', year);
-    if (month) params.append('month', month);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
     
     const url = `${state.API_BASE_URL}/api/custom_analysis/activations_by_seller?${params.toString()}`;
 
@@ -966,8 +937,8 @@ export async function fetchAndRenderActivationsBySeller(city = '', year = '', mo
         const result = await response.json();
 
         if(dom.activationSellerCityFilter && result.cities) utils.populateCityFilter(dom.activationSellerCityFilter, result.cities, city);
-        if(dom.activationSellerYearFilter && result.years) utils.populateYearFilter(dom.activationSellerYearFilter, result.years, year);
-        if(dom.activationSellerMonthFilter) dom.activationSellerMonthFilter.value = month || '';
+        if(dom.activationSellerStartDate) dom.activationSellerStartDate.value = startDate;
+        if(dom.activationSellerEndDate) dom.activationSellerEndDate.value = endDate;
 
         if (!dom.dashboardContentDiv) throw new Error("Área principal do dashboard não encontrada.");
         dom.dashboardContentDiv.innerHTML = '';
@@ -980,13 +951,8 @@ export async function fetchAndRenderActivationsBySeller(city = '', year = '', mo
             { title: 'Churn Total', value: result.totals?.total_churn || 0, colorClass: 'bg-gray-100' }
         ]);
 
-        if (!dom.mainChartsArea) throw new Error("Área de gráficos/tabelas não encontrada.");
-        dom.mainChartsArea.innerHTML = '';
-        dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
-        dom.mainChartsArea.classList.remove('hidden');
-        destroyAllMainCharts();
+        setupChartsArea();
         const grid = getGridStack();
-        if(grid) grid.removeAll();
 
         if (!result.data || result.data.length === 0) {
             dom.mainChartsArea.innerHTML = `<p class="text-center text-gray-500 mt-4">Nenhum vendedor com ativações encontrado para os filtros selecionados.</p>`;
@@ -1071,13 +1037,13 @@ export async function fetchAndRenderActivationsBySeller(city = '', year = '', mo
 /**
  * Busca e renderiza a análise de "Juros por Atraso".
  */
-export async function fetchAndRenderLateInterestAnalysis(year = '', month = '') {
+export async function fetchAndRenderLateInterestAnalysis(startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentAnalysis: 'analise_juros_atraso', currentPage: 1 });
 
     const params = new URLSearchParams();
-    if (year) params.append('year', year);
-    if (month) params.append('month', month);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
 
     const url = `${state.API_BASE_URL}/api/custom_analysis/late_interest_analysis?${params.toString()}`;
 
@@ -1089,11 +1055,11 @@ export async function fetchAndRenderLateInterestAnalysis(year = '', month = '') 
         }
         const result = await response.json();
 
-        if (dom.latePaymentYearFilter && result.years) {
-            utils.populateYearFilter(dom.latePaymentYearFilter, result.years, year);
+        if (dom.latePaymentStartDate) {
+            dom.latePaymentStartDate.value = startDate;
         }
-        if (dom.latePaymentMonthFilter) {
-            dom.latePaymentMonthFilter.value = month || '';
+        if (dom.latePaymentEndDate) {
+            dom.latePaymentEndDate.value = endDate;
         }
 
         if (!dom.dashboardContentDiv) throw new Error("Área principal do dashboard não encontrada.");
@@ -1104,13 +1070,8 @@ export async function fetchAndRenderLateInterestAnalysis(year = '', month = '') 
             { title: 'Total de Faturas Pagas com Atraso', value: result.totals?.total_late_payments_count || 0, colorClass: 'bg-yellow-50' }
         ]);
 
-        if (!dom.mainChartsArea) throw new Error("Área de gráficos/tabelas não encontrada.");
-        dom.mainChartsArea.innerHTML = '';
-        dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
-        dom.mainChartsArea.classList.remove('hidden');
-        destroyAllMainCharts();
+        setupChartsArea();
         const grid = getGridStack();
-        if(grid) grid.removeAll();
 
         if (!result.data || result.data.length === 0) {
             dom.mainChartsArea.innerHTML = `<p class="text-center text-gray-500 mt-4">Nenhum pagamento com atraso encontrado para os filtros selecionados.</p>`;
