@@ -116,11 +116,27 @@ export async function fetchAndRenderCancellationsByCity(startDate = '', endDate 
         if (!dom.dashboardContentDiv) throw new Error("Área principal do dashboard não encontrada.");
         dom.dashboardContentDiv.innerHTML = '';
 
-        utils.renderSummaryCards(dom.dashboardContentDiv, [
+        // --- Cards Principais ---
+        const mainCards = [
             { title: 'Total Cancelados', value: result.total_cancelados || 0, colorClass: 'bg-red-50' },
             { title: 'Total Negativados', value: result.total_negativados || 0, colorClass: 'bg-orange-50' },
             { title: 'Soma Geral', value: result.grand_total || 0, colorClass: 'bg-gray-100' }
-        ]);
+        ];
+        
+        // Adiciona os cards das cidades
+        if (result.data) {
+            const cityCards = result.data.map(item => ({
+                title: item.Cidade,
+                value: item.Total || 0,
+                colorClass: 'bg-blue-50' // You can adjust color or logic
+            }));
+            
+            // Combine all cards
+            utils.renderSummaryCards(dom.dashboardContentDiv, [...mainCards, ...cityCards]);
+        } else {
+             utils.renderSummaryCards(dom.dashboardContentDiv, mainCards);
+        }
+
 
         setupChartsArea();
         const grid = getGridStack();
@@ -164,6 +180,31 @@ export async function fetchAndRenderCancellationsByCity(startDate = '', endDate 
                 }
             }
         });
+
+        // --- NOVA TABELA DETALHADA (ABAIXO DO GRÁFICO) ---
+        // Agora mostramos a lista completa com os totais por cidade
+        const tableColumns = [
+            { header: 'Cidade', key: 'Cidade', cssClass: 'font-medium text-gray-900' },
+            { header: 'Cancelados', key: 'Cancelados', cssClass: 'text-center text-red-600 font-bold' },
+            { header: 'Negativados', key: 'Negativados', cssClass: 'text-center text-orange-600 font-bold' },
+            { header: 'Total', key: 'Total', cssClass: 'text-center font-bold bg-gray-100' }
+        ];
+
+        const tableHtml = utils.renderGenericDetailTable(null, result.data, tableColumns, true);
+
+        // Adiciona a tabela ao DOM após a área de gráficos
+        const tableContainer = document.createElement('div');
+        tableContainer.className = 'bg-white rounded-lg shadow-md overflow-hidden mt-8';
+        tableContainer.innerHTML = `
+             <div class="p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-800">Detalhamento por Cidade</h2>
+            </div>
+            <div class="overflow-x-auto">
+               ${tableHtml}
+            </div>
+        `;
+        dom.dashboardContentDiv.appendChild(tableContainer);
+
 
     } catch (error) {
         utils.showError(error.message);

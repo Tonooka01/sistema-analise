@@ -296,7 +296,6 @@ def api_cancellation_analysis():
         # --- DEFINE A CLÁUSULA ORDER BY ---
         order_by = "ORDER BY Cliente, Contrato_ID" # Padrão
         
-        # Verifica a direção da ordenação solicitada
         if sort_order == 'asc':
             order_by = "ORDER BY permanencia_meses ASC, Cliente"
         elif sort_order == 'desc':
@@ -546,7 +545,22 @@ def api_cancellations_by_city():
             # Filtra cidades sem cancelados ou negativados e ordena
             df_final = df_grouped[df_grouped['Total'] > 0].sort_values(by='Total', ascending=False)
 
-        data_list = df_final[['Cidade', 'Cancelados', 'Negativados']].to_dict('records')
+        # --- Extrai Totais para Cidades Específicas (NOVO) ---
+        total_pres_dutra = 0
+        total_dom_pedro = 0
+        
+        if not df_final.empty:
+            # Usa try/except ou verificação de empty para segurança
+            pd_data = df_final[df_final['Cidade'] == 'Presidente Dutra']
+            if not pd_data.empty:
+                total_pres_dutra = int(pd_data['Total'].values[0])
+                
+            dp_data = df_final[df_final['Cidade'] == 'Dom Pedro']
+            if not dp_data.empty:
+                total_dom_pedro = int(dp_data['Total'].values[0])
+
+        # Inclui a coluna 'Total' na lista de dados para a tabela
+        data_list = df_final[['Cidade', 'Cancelados', 'Negativados', 'Total']].to_dict('records')
 
         # Busca anos para o filtro (query original mantida, não depende da relevância)
         years_query = "SELECT DISTINCT Year FROM ( SELECT STRFTIME('%Y', \"Data_cancelamento\") AS Year FROM Contratos WHERE \"Data_cancelamento\" IS NOT NULL UNION SELECT STRFTIME('%Y', \"Data_negativa_o\") AS Year FROM Contratos_Negativacao WHERE \"Data_negativa_o\" IS NOT NULL ) WHERE Year IS NOT NULL ORDER BY Year DESC"
@@ -560,7 +574,10 @@ def api_cancellations_by_city():
             "years": [row[0] for row in years_data],
             "total_cancelados": int(total_cancelados),
             "total_negativados": int(total_negativados),
-            "grand_total": int(total_cancelados + total_negativados)
+            "grand_total": int(total_cancelados + total_negativados),
+            # --- NOVOS TOTAIS ---
+            "total_pres_dutra": total_pres_dutra,
+            "total_dom_pedro": total_dom_pedro
         })
     except sqlite3.Error as e:
         print(f"Erro na base de dados na análise por cidade: {e}")
