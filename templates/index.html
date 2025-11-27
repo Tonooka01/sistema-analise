@@ -7,11 +7,6 @@
 {% block content %}
 <h1 class="text-4xl font-bold text-center mb-6">Dashboard Financeiro SQLite</h1>
         
-<div class="absolute top-4 right-4">
-    <a href="/logout" class="text-sm bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded transition">
-        Sair
-    </a>
-</div>
 <div class="absolute top-4 right-4 flex gap-2">
     
     {% if current_user.is_authenticated and current_user.username == 'admin' %}
@@ -135,13 +130,13 @@
             </div>
         </div>
 
-        <!-- NOVO BOTÃO FILTRAR -->
+        <!-- BOTÃO FILTRAR -->
         <button id="filterActiveClientsBtn" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition h-10 font-semibold">
             Filtrar
         </button>
     </div>
     
-    <!-- FILTROS FATURAMENTO CIDADE (JÁ USAVA DATA) -->
+    <!-- FILTROS FATURAMENTO CIDADE -->
     <div id="faturamento-cidade-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="faturamentoStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
@@ -157,10 +152,11 @@
                 <option value="">Todas as Cidades</option>
             </select>
         </div>
+        <!-- BOTÃO FILTRAR -->
         <button id="btnFilterFaturamento" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold">Filtrar</button>
     </div>
 
-    <!-- FILTROS FINANCEIROS / PRINCIPAL (ALTERADO PARA DATAS) -->
+    <!-- FILTROS FINANCEIROS / PRINCIPAL -->
     <div id="financial-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="generalStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
@@ -176,10 +172,11 @@
                 <option value="">Todas as Cidades</option>
             </select>
         </div>
+        <!-- BOTÃO FILTRAR -->
         <button id="btnFilterGeneral" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold">Filtrar</button>
     </div>
 
-    <!-- FILTROS PARA ANÁLISE DE VENDEDORES (CHURN) (ALTERADO PARA DATAS) -->
+    <!-- FILTROS PARA ANÁLISE DE VENDEDORES (CHURN) -->
     <div id="seller-analysis-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="sellerStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
@@ -189,10 +186,11 @@
             <label for="sellerEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
             <input type="date" id="sellerEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
+        <!-- BOTÃO FILTRAR -->
         <button id="btnFilterSeller" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold">Filtrar</button>
     </div>
 
-    <!-- FILTROS PARA ATIVAÇÃO POR VENDEDOR (ALTERADO PARA DATAS) -->
+    <!-- FILTROS PARA ATIVAÇÃO POR VENDEDOR -->
     <div id="activation-seller-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="activationSellerCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
@@ -208,11 +206,12 @@
             <label for="activationSellerEndDate" class="text-gray-700 font-medium mb-2">Data Final (Ativação):</label>
             <input type="date" id="activationSellerEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
+        <!-- BOTÃO FILTRAR -->
         <button id="btnFilterActivationSeller" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold">Filtrar</button>
     </div>
 
     
-    <!-- FILTROS PARA GRÁFICO DE RETENÇÃO (COORTE) (ALTERADO PARA DATAS) -->
+    <!-- FILTROS PARA GRÁFICO DE RETENÇÃO (COORTE) -->
     <div id="cohort-analysis-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="cohortCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
@@ -228,10 +227,11 @@
             <label for="cohortEndDate" class="text-gray-700 font-medium mb-2">Data Final (Ativação):</label>
             <input type="date" id="cohortEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
+        <!-- BOTÃO FILTRAR -->
         <button id="btnFilterCohort" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold">Filtrar</button>
     </div>
     
-    <!-- FILTROS PARA CANCELAMENTO/NEGATIVAÇÃO POR CIDADE (ALTERADO PARA DATAS) -->
+    <!-- FILTROS PARA CANCELAMENTO/NEGATIVAÇÃO POR CIDADE -->
     <div id="city-cancellation-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="cityCancellationStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
@@ -253,10 +253,11 @@
                 <option value="37+">37+ Meses</option>
             </select>
         </div>
+        <!-- BOTÃO FILTRAR -->
         <button id="btnFilterCityCancellation" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold">Filtrar</button>
     </div>
 
-    <!-- FILTROS PARA CANCELAMENTO/NEGATIVAÇÃO POR BAIRRO (ALTERADO PARA DATAS) -->
+    <!-- FILTROS PARA CANCELAMENTO/NEGATIVAÇÃO POR BAIRRO -->
     <div id="neighborhood-analysis-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="neighborhoodAnalysisCityFilter" class="text-gray-700 font-medium mb-2">Selecione a Cidade:</label>
@@ -284,10 +285,11 @@
                 <option value="37+">37+ Meses</option>
             </select>
         </div>
+        <!-- BOTÃO FILTRAR -->
         <button id="btnFilterNeighborhood" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold">Filtrar</button>
     </div>
 
-    <!-- FILTROS PARA ANÁLISE DE EQUIPAMENTO (ALTERADO PARA DATAS) -->
+    <!-- FILTROS PARA ANÁLISE DE EQUIPAMENTO -->
     <div id="equipment-analysis-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="equipmentAnalysisCityFilter" class="text-gray-700 font-medium mb-2">Filtrar por Cidade:</label>
@@ -317,10 +319,11 @@
                 <option value="37+">37+ Meses</option>
             </select>
         </div>
+        <!-- BOTÃO FILTRAR -->
         <button id="btnFilterEquipment" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold">Filtrar</button>
     </div>
     
-    <!-- FILTROS EVOLUÇÃO DIÁRIA (JÁ USAVA DATAS) -->
+    <!-- FILTROS EVOLUÇÃO DIÁRIA -->
     <div id="daily-evolution-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="dailyEvolutionStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
@@ -330,10 +333,11 @@
             <label for="dailyEvolutionEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
             <input type="date" id="dailyEvolutionEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
+        <!-- BOTÃO FILTRAR -->
         <button id="btnFilterDailyEvolution" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold">Filtrar</button>
     </div>
 
-    <!-- FILTROS PARA ANÁLISE DE JUROS POR ATRASO (ALTERADO PARA DATAS) -->
+    <!-- FILTROS PARA ANÁLISE DE JUROS POR ATRASO -->
     <div id="late-payment-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
             <label for="latePaymentStartDate" class="text-gray-700 font-medium mb-2">Data Inicial (Pagamento):</label>
@@ -343,6 +347,7 @@
             <label for="latePaymentEndDate" class="text-gray-700 font-medium mb-2">Data Final (Pagamento):</label>
             <input type="date" id="latePaymentEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
+        <!-- BOTÃO FILTRAR -->
         <button id="btnFilterLatePayment" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold">Filtrar</button>
     </div>
 

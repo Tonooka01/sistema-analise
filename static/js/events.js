@@ -39,6 +39,13 @@ function handleCustomAnalysisChange(page = 1) {
     // Esconde todos os filtros personalizados antes de mostrar o correto
     utils.hideAllCustomFilters();
     
+    // --- RESET DE VISIBILIDADE DOS BOTÕES ---
+    // Garante que os botões reapareçam se trocarmos para uma tela onde eles são necessários
+    if (dom.filterActiveClientsBtn) dom.filterActiveClientsBtn.classList.remove('hidden');
+    if (dom.applyClientSearchBtn) dom.applyClientSearchBtn.classList.remove('hidden');
+    if (dom.btnFilterFaturamento) dom.btnFilterFaturamento.classList.remove('hidden');
+    // ----------------------------------------
+    
     // Garante que o botão "Ver Tabela" comece escondido ao trocar de análise
     if (dom.viewTableBtn) dom.viewTableBtn.classList.add('hidden');
 
@@ -79,9 +86,14 @@ function handleCustomAnalysisChange(page = 1) {
             break;
 
         case 'active_clients_evolution':
+            // Mostra os containers de filtros necessários
             if (dom.faturamentoCidadeFiltersDiv) dom.faturamentoCidadeFiltersDiv.classList.remove('hidden');
             if(dom.faturamentoCityFilter) dom.faturamentoCityFilter.closest('.flex-col')?.classList.remove('hidden');
             if (dom.financialHealthFiltersDiv) dom.financialHealthFiltersDiv.classList.remove('hidden');
+            
+            // --- AJUSTE: Oculta o botão duplicado ---
+            // Mantemos o botão de baixo (no filtro de datas/cidade) e escondemos o do meio (status)
+            if (dom.filterActiveClientsBtn) dom.filterActiveClientsBtn.classList.add('hidden');
             
             // Popula os filtros (Select de Contrato e Checkboxes de Acesso)
             customTables.populateContractStatusFilters();
@@ -108,6 +120,11 @@ function handleCustomAnalysisChange(page = 1) {
         case 'saude_financeira_contrato_bloqueio':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
             if (dom.financialHealthFiltersDiv) dom.financialHealthFiltersDiv.classList.remove('hidden');
+            
+            // --- AJUSTE: Oculta o botão duplicado ---
+            // Mantemos o botão de baixo (nos filtros de status) e escondemos o de cima (na busca)
+            if (dom.applyClientSearchBtn) dom.applyClientSearchBtn.classList.add('hidden');
+
             customTables.populateContractStatusFilters();
             
             const analysisType = selectedAnalysis.endsWith('_bloqueio') ? 'bloqueio' : 'atraso';
@@ -265,7 +282,7 @@ export function initializeEventListeners() {
          const currentState = state.getCustomAnalysisState();
          const currentAnalysis = currentState.currentAnalysis;
 
-         // 1. Evolução de Clientes Ativos
+         // 1. Evolução de Clientes Ativos (Se o botão estiver visível)
          if (currentAnalysis === 'active_clients_evolution') {
              const acStartDate = dom.faturamentoStartDate?.value || '';
              const acEndDate = dom.faturamentoEndDate?.value || '';

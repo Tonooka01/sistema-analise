@@ -126,16 +126,19 @@ function renderCustomAnalysisPagination() {
 export async function fetchAndRenderLatePaymentsAnalysis(searchTerm = '', page = 1) {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'atrasos_e_nao_pagos', currentSearchTerm: searchTerm });
+    
     const currentState = state.getCustomAnalysisState();
     const offset = (page - 1) * currentState.rowsPerPage;
     const url = `${state.API_BASE_URL}/api/custom_analysis/contas_a_receber?search_term=${encodeURIComponent(searchTerm)}&limit=${currentState.rowsPerPage}&offset=${offset}`;
+    
     try {
         const response = await fetch(url);
-        if (!response.ok) {
-            const errorMessage = await utils.handleFetchError(response, 'Não foi possível carregar a análise de atrasos.');
-            throw new Error(errorMessage);
-        }
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar atrasos.'));
         const result = await response.json();
+        
+        // --- PROTEÇÃO DE CORRIDA ---
+        if (state.getCustomAnalysisState().currentAnalysis !== 'atrasos_e_nao_pagos') return;
+
         renderCustomTable(result, 'Análise de Atrasos e Faturas Não Pagas', [
             { header: 'Cliente', render: r => `<span title="${r.Cliente}">${r.Cliente}</span>` },
             { header: 'ID Contrato', key: 'Contrato_ID' },
@@ -143,9 +146,10 @@ export async function fetchAndRenderLatePaymentsAnalysis(searchTerm = '', page =
             { header: 'Faturas Vencidas (Não Pagas)', render: r => r.Faturas_Nao_Pagas > 0 ? `<span class="invoice-detail-trigger cursor-pointer text-red-600 font-bold hover:underline" data-type="faturas_nao_pagas" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Faturas_Nao_Pagas}</span>` : r.Faturas_Nao_Pagas }
         ]);
     } catch (error) {
-        utils.showError(error.message);
+        // Só mostra erro se ainda estiver na mesma aba
+        if (state.getCustomAnalysisState().currentAnalysis === 'atrasos_e_nao_pagos') utils.showError(error.message);
     } finally {
-        utils.showLoading(false);
+        if (state.getCustomAnalysisState().currentAnalysis === 'atrasos_e_nao_pagos') utils.showLoading(false);
     }
 }
 
@@ -178,11 +182,12 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
 
     try {
         const response = await fetch(url);
-        if (!response.ok) {
-            const errorMessage = await utils.handleFetchError(response, 'Não foi possível carregar a análise de saúde financeira.');
-            throw new Error(errorMessage);
-        }
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar saúde financeira.'));
         const result = await response.json();
+
+        // --- PROTEÇÃO DE CORRIDA ---
+        if (state.getCustomAnalysisState().currentAnalysis !== 'saude_financeira') return;
+
         renderCustomTable(result, title, [
             { header: 'Cliente', render: r => `<span title="${r.Razao_Social}">${r.Razao_Social}</span>` },
             { header: 'ID Contrato', key: 'Contrato_ID' },
@@ -193,16 +198,15 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
             { header: 'Última Conexão', render: r => r.Ultima_Conexao ? `<span class="detail-trigger cursor-pointer text-blue-600 hover:underline" data-type="logins" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Razao_Social.replace(/"/g, '&quot;')}">${utils.formatDate(r.Ultima_Conexao)}</span>` : 'N/A' }
         ]);
 
-        // --- ATUALIZAÇÃO: GARANTIR VISIBILIDADE DO BOTÃO VER TABELA ---
         if (dom.viewTableBtn) {
             dom.viewTableBtn.classList.remove('hidden');
             dom.viewTableBtn.textContent = 'Ver Tabela Completa (Paginação)';
         }
 
     } catch (error) {
-        utils.showError(error.message);
+        if (state.getCustomAnalysisState().currentAnalysis === 'saude_financeira') utils.showError(error.message);
     } finally {
-        utils.showLoading(false);
+        if (state.getCustomAnalysisState().currentAnalysis === 'saude_financeira') utils.showLoading(false);
     }
 }
 
@@ -218,35 +222,25 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
         offset: offset
     });
     if (relevance) params.append('relevance', relevance);
-    
-    // --- CORREÇÃO: Enviar sort_order ('asc' ou 'desc') ao invés de sort_asc ---
     params.append('sort_order', sortAsc ? 'asc' : 'desc'); 
     
     const url = `${state.API_BASE_URL}/api/custom_analysis/cancellations?${params.toString()}`;
 
     try {
         const response = await fetch(url);
-        if (!response.ok) {
-            const errorMessage = await utils.handleFetchError(response, 'Não foi possível carregar a análise de cancelamentos.');
-            throw new Error(errorMessage);
-        }
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar cancelamentos.'));
         const result = await response.json();
         
-        // --- LÓGICA DO CABEÇALHO CLICÁVEL ---
-        // sortAsc=true (Menor->Maior) => Seta Baixo (↓) para indicar "do menor para o maior" ou o estado atual
-        // Conforme seu pedido: "seta para baixo quando estiver do menor para o maior"
+        // --- PROTEÇÃO DE CORRIDA ---
+        if (state.getCustomAnalysisState().currentAnalysis !== 'cancellations') return;
+
         const arrowIcon = sortAsc ? '↓' : '↑';
-        
-        const headerHtml = `
-            <div class="flex items-center gap-1 cursor-pointer select-none sort-permanence-header hover:text-blue-600 transition-colors" title="Clique para ordenar">
-                Permanência (Meses) <span class="text-lg font-bold leading-none">${arrowIcon}</span>
-            </div>
-        `;
+        const headerHtml = `<div class="flex items-center gap-1 cursor-pointer select-none sort-permanence-header hover:text-blue-600 transition-colors" title="Clique para ordenar">Permanência (Meses) <span class="text-lg font-bold leading-none">${arrowIcon}</span></div>`;
 
         const columns = [
             { header: 'Cliente', render: r => `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>` },
             { header: 'ID Contrato', key: 'Contrato_ID' },
-            { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' }, // Cabeçalho HTML
+            { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' },
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
         renderCustomTable(result, 'Análise de Cancelamentos por Contato Técnico', columns);
@@ -255,14 +249,13 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
             dom.viewTableBtn.classList.remove('hidden');
             dom.viewTableBtn.textContent = 'Ver Tabela Completa (Paginação)';
         }
-        
         if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
         if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
 
     } catch (error) {
-        utils.showError(error.message);
+        if (state.getCustomAnalysisState().currentAnalysis === 'cancellations') utils.showError(error.message);
     } finally {
-        utils.showLoading(false);
+        if (state.getCustomAnalysisState().currentAnalysis === 'cancellations') utils.showLoading(false);
     }
 }
 
@@ -278,33 +271,25 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
         offset: offset
     });
     if (relevance) params.append('relevance', relevance);
-    
-    // --- CORREÇÃO: Enviar sort_order ('asc' ou 'desc') ---
     params.append('sort_order', sortAsc ? 'asc' : 'desc');
     
     const url = `${state.API_BASE_URL}/api/custom_analysis/negativacao?${params.toString()}`;
 
     try {
         const response = await fetch(url);
-        if (!response.ok) {
-            const errorMessage = await utils.handleFetchError(response, 'Não foi possível carregar a análise de negativação.');
-            throw new Error(errorMessage);
-        }
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar negativações.'));
         const result = await response.json();
 
-        // --- LÓGICA DO CABEÇALHO CLICÁVEL ---
+        // --- PROTEÇÃO DE CORRIDA ---
+        if (state.getCustomAnalysisState().currentAnalysis !== 'negativacao') return;
+
         const arrowIcon = sortAsc ? '↓' : '↑';
-        
-        const headerHtml = `
-            <div class="flex items-center gap-1 cursor-pointer select-none sort-permanence-header hover:text-blue-600 transition-colors" title="Clique para ordenar">
-                Permanência (Meses) <span class="text-lg font-bold leading-none">${arrowIcon}</span>
-            </div>
-        `;
+        const headerHtml = `<div class="flex items-center gap-1 cursor-pointer select-none sort-permanence-header hover:text-blue-600 transition-colors" title="Clique para ordenar">Permanência (Meses) <span class="text-lg font-bold leading-none">${arrowIcon}</span></div>`;
 
         const columns = [
             { header: 'Cliente', render: r => `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>` },
             { header: 'ID Contrato', key: 'Contrato_ID' },
-            { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' }, // Cabeçalho HTML
+            { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' },
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
         renderCustomTable(result, 'Análise de Negativação por Contato Técnico', columns);
@@ -313,14 +298,13 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
             dom.viewTableBtn.classList.remove('hidden');
             dom.viewTableBtn.textContent = 'Ver Tabela Completa (Paginação)';
         }
-
         if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
         if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
 
     } catch (error) {
-        utils.showError(error.message);
+        if (state.getCustomAnalysisState().currentAnalysis === 'negativacao') utils.showError(error.message);
     } finally {
-        utils.showLoading(false);
+        if (state.getCustomAnalysisState().currentAnalysis === 'negativacao') utils.showLoading(false);
     }
 } 
 
@@ -338,6 +322,10 @@ export async function fetchAndRenderDailyComparison() {
         if (!response.ok) throw new Error("Falha ao buscar dados comparativos.");
         
         const result = await response.json();
+        
+        // --- PROTEÇÃO DE CORRIDA ---
+        if (state.getCustomAnalysisState().currentAnalysis !== 'comparativo_diario') return;
+
         const data = result.liquido; 
         const info = result.info;
 
@@ -425,14 +413,7 @@ export async function fetchAndRenderDailyComparison() {
         const table1 = createTableHtml("Recebimento Líquido Diário Mês", "liq");
         const table2 = createTableHtml("Recebimento Baixa Diária Mês", "bai");
 
-        dom.dashboardContentDiv.innerHTML = `
-            ${uploadHtml}
-            ${legendHtml}
-            <div class="comparison-container">
-                ${table1}
-                ${table2}
-            </div>
-        `;
+        dom.dashboardContentDiv.innerHTML = `${uploadHtml}${legendHtml}<div class="comparison-container">${table1}${table2}</div>`;
 
         const uploadInput = document.getElementById('pdfUploadInput');
         const statusSpan = document.getElementById('uploadStatus');
@@ -470,8 +451,8 @@ export async function fetchAndRenderDailyComparison() {
         }
 
     } catch (error) {
-        utils.showError(error.message);
+        if (state.getCustomAnalysisState().currentAnalysis === 'comparativo_diario') utils.showError(error.message);
     } finally {
-        utils.showLoading(false);
+        if (state.getCustomAnalysisState().currentAnalysis === 'comparativo_diario') utils.showLoading(false);
     }
 }

@@ -23,14 +23,14 @@ export let generalStartDate; // Renomeado de yearFilter
 export let generalEndDate;   // Renomeado de monthFilter
 export let cityFilterSelect;
 export let cityFilterContainer;
-export let btnFilterGeneral; // NOVO
+export let btnFilterGeneral; // NOVO: Botão Filtrar Geral
 
 // Filtros Análise Personalizada Geral (Cancelamento, Negativação)
 export let customSearchFilterDiv;
 export let clientSearchInput;
 export let applyClientSearchBtn;
 export let relevanceFilterSearch;
-export let sortPermanenceAsc; // <--- NOVO: Referência ao checkbox de ordenação
+export let sortPermanenceAsc;
 
 // Filtros Saúde Financeira / Evolução Ativos
 export let financialHealthFiltersDiv;
@@ -42,14 +42,14 @@ export let filterActiveClientsBtn;
 export let sellerAnalysisFiltersDiv;
 export let sellerStartDate;
 export let sellerEndDate;
-export let btnFilterSeller; // NOVO
+export let btnFilterSeller; // NOVO: Botão Filtrar Vendedor
 
 // Filtros Cancelamento/Negativação por Cidade - AGORA COM DATA
 export let cityCancellationFiltersDiv;
 export let cityCancellationStartDate;
 export let cityCancellationEndDate;
 export let relevanceFilterCity;
-export let btnFilterCityCancellation; // NOVO
+export let btnFilterCityCancellation; // NOVO: Botão Filtrar Cidade
 
 // Filtros Cancelamento/Negativação por Bairro - AGORA COM DATA
 export let neighborhoodAnalysisFiltersDiv;
@@ -57,7 +57,7 @@ export let neighborhoodAnalysisCityFilter;
 export let neighborhoodAnalysisStartDate;
 export let neighborhoodAnalysisEndDate;
 export let relevanceFilterNeighborhood;
-export let btnFilterNeighborhood; // NOVO
+export let btnFilterNeighborhood; // NOVO: Botão Filtrar Bairro
 
 // Filtros Análise de Equipamento - AGORA COM DATA
 export let equipmentAnalysisFiltersDiv;
@@ -66,13 +66,13 @@ export let equipmentAnalysisEndDate;
 export let equipmentAnalysisCityFilter;
 export let equipmentDateFilterContainer; // Container para datas
 export let relevanceFilterEquipment;
-export let btnFilterEquipment; // NOVO
+export let btnFilterEquipment; // NOVO: Botão Filtrar Equipamento
 
 // Filtros Evolução Diária
 export let dailyEvolutionFiltersDiv;
 export let dailyEvolutionStartDate;
 export let dailyEvolutionEndDate;
-export let btnFilterDailyEvolution; // NOVO
+export let btnFilterDailyEvolution; // NOVO: Botão Filtrar Evolução Diária
 
 // Filtros Análise de Comportamento
 export let behaviorAnalysisContainer;
@@ -84,27 +84,27 @@ export let faturamentoCidadeFiltersDiv;
 export let faturamentoStartDate;
 export let faturamentoEndDate;
 export let faturamentoCityFilter;
-export let btnFilterFaturamento; // NOVO
+export let btnFilterFaturamento; // NOVO: Botão Filtrar Faturamento
 
 // NOVOS FILTROS DE ATIVAÇÃO POR VENDEDOR - AGORA COM DATA
 export let activationSellerFiltersDiv;
 export let activationSellerCityFilter;
 export let activationSellerStartDate;
 export let activationSellerEndDate;
-export let btnFilterActivationSeller; // NOVO
+export let btnFilterActivationSeller; // NOVO: Botão Filtrar Ativação
 
 // NOVOS FILTROS DE COORTE - AGORA COM DATA
 export let cohortAnalysisFiltersDiv;
 export let cohortCityFilter;
 export let cohortStartDate;
 export let cohortEndDate;
-export let btnFilterCohort; // NOVO
+export let btnFilterCohort; // NOVO: Botão Filtrar Coorte
 
 // NOVOS FILTROS DE ANÁLISE DE JUROS - AGORA COM DATA
 export let latePaymentFiltersDiv;
 export let latePaymentStartDate;
 export let latePaymentEndDate;
-export let btnFilterLatePayment; // NOVO
+export let btnFilterLatePayment; // NOVO: Botão Filtrar Juros
 
 
 // --- Elementos dos Modais ---
@@ -247,18 +247,20 @@ export function initializeDom() {
 
     // Filtros Análise Principal
     financialFiltersDiv = document.getElementById('financial-filters');
-    generalStartDate = document.getElementById('generalStartDate'); // NOVO
-    generalEndDate = document.getElementById('generalEndDate');     // NOVO
+    generalStartDate = document.getElementById('generalStartDate');
+    generalEndDate = document.getElementById('generalEndDate');
     cityFilterSelect = document.getElementById('cityFilter');
     cityFilterContainer = document.getElementById('city-filter-container');
-    btnFilterGeneral = document.getElementById('btnFilterGeneral'); // NOVO
+    btnFilterGeneral = document.getElementById('btnFilterGeneral'); // Inicializa botão
 
+    // Filtros Busca Cliente
     customSearchFilterDiv = document.getElementById('custom-search-filter');
     clientSearchInput = document.getElementById('clientSearchInput');
     applyClientSearchBtn = document.getElementById('applyClientSearch');
     relevanceFilterSearch = document.getElementById('relevanceFilterSearch');
-    sortPermanenceAsc = document.getElementById('sortPermanenceAsc'); // <--- NOVO: Inicialização da variável
+    sortPermanenceAsc = document.getElementById('sortPermanenceAsc');
 
+    // Filtros Saúde Financeira
     financialHealthFiltersDiv = document.getElementById('financial-health-filters');
     contractStatusFilter = document.getElementById('contractStatusFilter');
     accessStatusContainer = document.getElementById('accessStatusContainer');
@@ -266,65 +268,70 @@ export function initializeDom() {
 
     // Filtros Análise Vendedores
     sellerAnalysisFiltersDiv = document.getElementById('seller-analysis-filters');
-    sellerStartDate = document.getElementById('sellerStartDate'); // NOVO
-    sellerEndDate = document.getElementById('sellerEndDate');     // NOVO
-    btnFilterSeller = document.getElementById('btnFilterSeller'); // NOVO
+    sellerStartDate = document.getElementById('sellerStartDate');
+    sellerEndDate = document.getElementById('sellerEndDate');
+    btnFilterSeller = document.getElementById('btnFilterSeller'); // Inicializa botão
 
     // Filtros Cancelamento/Negativação por Cidade
     cityCancellationFiltersDiv = document.getElementById('city-cancellation-filters');
-    cityCancellationStartDate = document.getElementById('cityCancellationStartDate'); // NOVO
-    cityCancellationEndDate = document.getElementById('cityCancellationEndDate');     // NOVO
+    cityCancellationStartDate = document.getElementById('cityCancellationStartDate');
+    cityCancellationEndDate = document.getElementById('cityCancellationEndDate');
     relevanceFilterCity = document.getElementById('relevanceFilterCity');
-    btnFilterCityCancellation = document.getElementById('btnFilterCityCancellation'); // NOVO
+    btnFilterCityCancellation = document.getElementById('btnFilterCityCancellation'); // Inicializa botão
 
     // Filtros Cancelamento/Negativação por Bairro
     neighborhoodAnalysisFiltersDiv = document.getElementById('neighborhood-analysis-filters');
     neighborhoodAnalysisCityFilter = document.getElementById('neighborhoodAnalysisCityFilter');
-    neighborhoodAnalysisStartDate = document.getElementById('neighborhoodAnalysisStartDate'); // NOVO
-    neighborhoodAnalysisEndDate = document.getElementById('neighborhoodAnalysisEndDate');     // NOVO
+    neighborhoodAnalysisStartDate = document.getElementById('neighborhoodAnalysisStartDate');
+    neighborhoodAnalysisEndDate = document.getElementById('neighborhoodAnalysisEndDate');
     relevanceFilterNeighborhood = document.getElementById('relevanceFilterNeighborhood');
-    btnFilterNeighborhood = document.getElementById('btnFilterNeighborhood'); // NOVO
+    btnFilterNeighborhood = document.getElementById('btnFilterNeighborhood'); // Inicializa botão
 
     // Filtros Análise de Equipamento
     equipmentAnalysisFiltersDiv = document.getElementById('equipment-analysis-filters');
-    equipmentAnalysisStartDate = document.getElementById('equipmentAnalysisStartDate'); // NOVO
-    equipmentAnalysisEndDate = document.getElementById('equipmentAnalysisEndDate');     // NOVO
+    equipmentAnalysisStartDate = document.getElementById('equipmentAnalysisStartDate');
+    equipmentAnalysisEndDate = document.getElementById('equipmentAnalysisEndDate');
     equipmentAnalysisCityFilter = document.getElementById('equipmentAnalysisCityFilter');
-    equipmentDateFilterContainer = document.getElementById('equipmentDateFilterContainer'); // NOVO
+    equipmentDateFilterContainer = document.getElementById('equipmentDateFilterContainer');
     relevanceFilterEquipment = document.getElementById('relevanceFilterEquipment');
-    btnFilterEquipment = document.getElementById('btnFilterEquipment'); // NOVO
+    btnFilterEquipment = document.getElementById('btnFilterEquipment'); // Inicializa botão
 
+    // Filtros Evolução Diária
     dailyEvolutionFiltersDiv = document.getElementById('daily-evolution-filters');
     dailyEvolutionStartDate = document.getElementById('dailyEvolutionStartDate');
     dailyEvolutionEndDate = document.getElementById('dailyEvolutionEndDate');
-    btnFilterDailyEvolution = document.getElementById('btnFilterDailyEvolution'); // NOVO
+    btnFilterDailyEvolution = document.getElementById('btnFilterDailyEvolution'); // Inicializa botão
 
     behaviorAnalysisContainer = document.getElementById('behavior-analysis-container');
     behaviorAnalysisTabs = document.getElementById('behavior-analysis-tabs');
     behaviorAnalysisTabContent = document.getElementById('behavior-analysis-tab-content');
 
+    // Filtros Faturamento
     faturamentoCidadeFiltersDiv = document.getElementById('faturamento-cidade-filters');
     faturamentoStartDate = document.getElementById('faturamentoStartDate');
     faturamentoEndDate = document.getElementById('faturamentoEndDate');
     faturamentoCityFilter = document.getElementById('faturamentoCityFilter');
-    btnFilterFaturamento = document.getElementById('btnFilterFaturamento'); // NOVO
+    btnFilterFaturamento = document.getElementById('btnFilterFaturamento'); // Inicializa botão
 
+    // Filtros Ativação Vendedor
     activationSellerFiltersDiv = document.getElementById('activation-seller-filters');
     activationSellerCityFilter = document.getElementById('activationSellerCityFilter');
-    activationSellerStartDate = document.getElementById('activationSellerStartDate'); // NOVO
-    activationSellerEndDate = document.getElementById('activationSellerEndDate');     // NOVO
-    btnFilterActivationSeller = document.getElementById('btnFilterActivationSeller'); // NOVO
+    activationSellerStartDate = document.getElementById('activationSellerStartDate');
+    activationSellerEndDate = document.getElementById('activationSellerEndDate');
+    btnFilterActivationSeller = document.getElementById('btnFilterActivationSeller'); // Inicializa botão
 
+    // Filtros Coorte
     cohortAnalysisFiltersDiv = document.getElementById('cohort-analysis-filters');
     cohortCityFilter = document.getElementById('cohortCityFilter');
-    cohortStartDate = document.getElementById('cohortStartDate'); // NOVO
-    cohortEndDate = document.getElementById('cohortEndDate');     // NOVO
-    btnFilterCohort = document.getElementById('btnFilterCohort'); // NOVO
+    cohortStartDate = document.getElementById('cohortStartDate');
+    cohortEndDate = document.getElementById('cohortEndDate');
+    btnFilterCohort = document.getElementById('btnFilterCohort'); // Inicializa botão
 
+    // Filtros Juros
     latePaymentFiltersDiv = document.getElementById('late-payment-filters');
-    latePaymentStartDate = document.getElementById('latePaymentStartDate'); // NOVO
-    latePaymentEndDate = document.getElementById('latePaymentEndDate');     // NOVO
-    btnFilterLatePayment = document.getElementById('btnFilterLatePayment'); // NOVO
+    latePaymentStartDate = document.getElementById('latePaymentStartDate');
+    latePaymentEndDate = document.getElementById('latePaymentEndDate');
+    btnFilterLatePayment = document.getElementById('btnFilterLatePayment'); // Inicializa botão
 
     // Modais (IDs mantidos)
     tableModal = document.getElementById('tableModal');
