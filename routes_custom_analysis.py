@@ -1,7 +1,7 @@
 import pandas as pd
 import sqlite3
 from flask import Blueprint, jsonify, request, abort, current_app
-import traceback # Importa traceback para logs de erro
+import traceback
 
 # Define o Blueprint
 custom_analysis_bp = Blueprint('custom_analysis_bp', __name__)
@@ -10,7 +10,6 @@ def get_db():
     """Função auxiliar para obter a conexão do banco de dados a partir do app_context."""
     return current_app.config['GET_DB_CONNECTION']()
 
-# --- NOVA FUNÇÃO AUXILIAR ---
 def parse_relevance_filter(relevance_str):
     """
     Converte a string de filtro de relevância (ex: "0-6", "37+")
@@ -73,14 +72,12 @@ def api_custom_analysis_contas_a_receber():
             where_search = " AND C.Raz_o_social LIKE ?"
             params.append(f'%{search_term}%')
 
-        # Contagem mais eficiente
         count_query = f"""
             SELECT COUNT(DISTINCT CON.ID)
             {base_query_from} {where_search}
         """
         total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
 
-        # Query principal
         query = f"""
             SELECT
                 C.Raz_o_social AS Cliente,
@@ -113,8 +110,6 @@ def execute_financial_health_query(delay_days):
         search_term = request.args.get('search_term', '').strip()
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
-        
-        # Captura os filtros (podem vir separados por vírgula)
         status_contrato_str = request.args.get('status_contrato', '')
         status_acesso_str = request.args.get('status_acesso', '')
         relevance = request.args.get('relevance', '')
@@ -126,7 +121,6 @@ def execute_financial_health_query(delay_days):
             where_conditions.append("C.Cliente LIKE ?")
             params.append(f'%{search_term}%')
 
-        # --- LÓGICA MULTI-SELECT PARA SAÚDE FINANCEIRA ---
         if status_contrato_str:
             status_list = status_contrato_str.split(',')
             placeholders = ','.join(['?'] * len(status_list))
@@ -138,9 +132,7 @@ def execute_financial_health_query(delay_days):
             placeholders = ','.join(['?'] * len(acesso_list))
             where_conditions.append(f"C.Status_acesso IN ({placeholders})")
             params.extend(acesso_list)
-        # -------------------------------------------------
 
-        # Lógica de relevância
         months_calc = """
             CAST(ROUND(
                 (JULIANDAY(SUBSTR(FLP.Primeira_Inadimplencia_Vencimento, 1, 10)) - JULIANDAY(SUBSTR(C.Data_ativa_o, 1, 10))) / 30.44
@@ -157,7 +149,6 @@ def execute_financial_health_query(delay_days):
         
         where_clause = " WHERE " + " AND ".join(where_conditions) if where_conditions else ""
 
-        # CTE para encontrar a primeira inadimplência
         cte_flp = f"""
             SELECT 
                 p.ID_Contrato_Recorrente, 
@@ -171,7 +162,6 @@ def execute_financial_health_query(delay_days):
             GROUP BY p.ID_Contrato_Recorrente
         """
 
-        # Query de contagem
         count_query = f"""
             SELECT COUNT(C.ID)
             FROM Contratos C
@@ -180,7 +170,6 @@ def execute_financial_health_query(delay_days):
         """
         total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
 
-        # Query Principal
         query_base = f"""
             WITH FirstLatePayment AS (
                 {cte_flp}
@@ -211,9 +200,7 @@ def execute_financial_health_query(delay_days):
             LIMIT ? OFFSET ?;
         """
         
-        # Adiciona limit/offset aos parâmetros
         params.extend([limit, offset])
-        
         data = conn.execute(query_base, tuple(params)).fetchall()
 
         return jsonify({"data": [dict(row) for row in data], "total_rows": total_rows})
@@ -244,12 +231,12 @@ def api_cancellation_analysis():
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
         relevance = request.args.get('relevance', '')
-        
-        # --- LÓGICA DE ORDENAÇÃO (ATUALIZADA PARA EXCEL STYLE) ---
-        # Aceita 'asc' ou 'desc' do frontend
         sort_order = request.args.get('sort_order', '') 
 
-        # --- Query base movida para um CTE para permitir filtro de relevância ---
+        # --- NOVA LÓGICA: UNION de Contratos (Inativos) e Contratos_Negativacao ---
+        # Verifica se as colunas Motivo_cancelamento e Obs_cancelamento existem para evitar erros
+        # Se não existirem, usamos 'Não Informado'
+        
         base_query = """
             WITH RelevantTickets AS (
                  SELECT DISTINCT Cliente FROM (
@@ -258,17 +245,42 @@ def api_cancellation_analysis():
                      SELECT Cliente FROM OS WHERE Assunto IN ('MANUTENÇÃO DE FIBRA', 'VISITA TECNICA')
                  )
             ),
+            AllCancellations AS (
+                SELECT 
+                    Cliente, 
+                    ID AS Contrato_ID, 
+                    Data_ativa_o, 
+                    Data_cancelamento, 
+                    Motivo_cancelamento, 
+                    Obs_cancelamento
+                FROM Contratos 
+                WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado'
+                
+                UNION ALL
+                
+                SELECT 
+                    Cliente, 
+                    ID AS Contrato_ID, 
+                    Data_ativa_o, 
+                    Data_negativa_o AS Data_cancelamento, 
+                    Motivo_cancelamento, 
+                    Obs_cancelamento
+                FROM Contratos_Negativacao
+            ),
             BaseData AS (
-                SELECT C.Cliente, C.ID AS Contrato_ID,
-                       CASE WHEN RT.Cliente IS NOT NULL THEN 'Sim' ELSE 'Não' END AS Teve_Contato_Relevante,
-                       CASE
-                           WHEN C.Data_ativa_o IS NOT NULL AND C.Data_cancelamento IS NOT NULL
-                           THEN CAST(ROUND((JULIANDAY(C.Data_cancelamento) - JULIANDAY(C.Data_ativa_o)) / 30.44) AS INTEGER)
-                           ELSE NULL
-                       END AS permanencia_meses
-                FROM Contratos C
-                LEFT JOIN RelevantTickets RT ON C.Cliente = RT.Cliente
-                WHERE C.Status_contrato = 'Inativo' AND C.Status_acesso = 'Desativado'
+                SELECT 
+                    AC.Cliente, 
+                    AC.Contrato_ID,
+                    COALESCE(AC.Motivo_cancelamento, 'Não Informado') AS Motivo_cancelamento,
+                    COALESCE(AC.Obs_cancelamento, 'Não Informado') AS Obs_cancelamento,
+                    CASE WHEN RT.Cliente IS NOT NULL THEN 'Sim' ELSE 'Não' END AS Teve_Contato_Relevante,
+                    CASE
+                        WHEN AC.Data_ativa_o IS NOT NULL AND AC.Data_cancelamento IS NOT NULL
+                        THEN CAST(ROUND((JULIANDAY(AC.Data_cancelamento) - JULIANDAY(AC.Data_ativa_o)) / 30.44) AS INTEGER)
+                        ELSE NULL
+                    END AS permanencia_meses
+                FROM AllCancellations AC
+                LEFT JOIN RelevantTickets RT ON AC.Cliente = RT.Cliente
             )
             SELECT * FROM BaseData
         """
@@ -279,7 +291,6 @@ def api_cancellation_analysis():
             where_clauses.append("Cliente LIKE ?")
             params.append(f'%{search_term}%')
 
-        # --- LÓGICA DO FILTRO DE RELEVÂNCIA ---
         min_months, max_months = parse_relevance_filter(relevance)
         if min_months is not None:
             where_clauses.append("permanencia_meses >= ?")
@@ -290,26 +301,63 @@ def api_cancellation_analysis():
         
         where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
-        count_query = f"SELECT COUNT(*) FROM ({base_query}) AS sub {where_sql}"
-        total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
+        # 1. Total Rows
+        try:
+            count_query = f"SELECT COUNT(*) FROM ({base_query}) AS sub {where_sql}"
+            total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
+        except sqlite3.Error as e:
+            if "no such table" in str(e).lower() and "contratos_negativacao" in str(e).lower():
+                # Fallback se a tabela de negativação não existir
+                # Remove a parte do UNION e executa apenas em Contratos
+                base_query = base_query.replace(
+                    "UNION ALL\n                \n                SELECT \n                    Cliente, \n                    ID AS Contrato_ID, \n                    Data_ativa_o, \n                    Data_negativa_o AS Data_cancelamento, \n                    Motivo_cancelamento, \n                    Obs_cancelamento\n                FROM Contratos_Negativacao", 
+                    ""
+                )
+                count_query = f"SELECT COUNT(*) FROM ({base_query}) AS sub {where_sql}"
+                total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
+            else:
+                raise e
 
-        # --- DEFINE A CLÁUSULA ORDER BY ---
-        order_by = "ORDER BY Cliente, Contrato_ID" # Padrão
-        
+        # 2. Dados Paginados para a Tabela
+        order_by = "ORDER BY Cliente, Contrato_ID"
         if sort_order == 'asc':
             order_by = "ORDER BY permanencia_meses ASC, Cliente"
         elif sort_order == 'desc':
             order_by = "ORDER BY permanencia_meses DESC, Cliente"
 
         paginated_query = f"SELECT * FROM ({base_query}) AS sub {where_sql} {order_by} LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
-        data = conn.execute(paginated_query, tuple(params)).fetchall()
+        data_params = params + [limit, offset]
+        data = conn.execute(paginated_query, tuple(data_params)).fetchall()
 
-        return jsonify({"data": [dict(row) for row in data], "total_rows": total_rows})
+        # 3. Dados Agregados para os Gráficos (Motivo e Obs) - Baseado nos filtros aplicados (sem paginação)
+        chart_motivo_query = f"""
+            SELECT Motivo_cancelamento, COUNT(*) as Count 
+            FROM ({base_query}) AS sub {where_sql} 
+            GROUP BY Motivo_cancelamento 
+            ORDER BY Count DESC LIMIT 10
+        """
+        chart_motivo_data = conn.execute(chart_motivo_query, tuple(params)).fetchall()
+
+        chart_obs_query = f"""
+            SELECT Obs_cancelamento, COUNT(*) as Count 
+            FROM ({base_query}) AS sub {where_sql} 
+            GROUP BY Obs_cancelamento 
+            ORDER BY Count DESC LIMIT 10
+        """
+        chart_obs_data = conn.execute(chart_obs_query, tuple(params)).fetchall()
+
+        return jsonify({
+            "data": [dict(row) for row in data],
+            "total_rows": total_rows,
+            "charts": {
+                "motivo": [dict(row) for row in chart_motivo_data],
+                "obs": [dict(row) for row in chart_obs_data]
+            }
+        })
 
     except sqlite3.Error as e:
         print(f"Erro na base de dados na análise de cancelamento: {e}")
-        return jsonify({"error": "Erro interno ao processar a análise de cancelamento."}), 500
+        return jsonify({"error": f"Erro interno ao processar a análise de cancelamento. Detalhe: {e}"}), 500
     finally:
         if conn: conn.close()
 
@@ -323,10 +371,8 @@ def api_negativacao_analysis():
         offset = request.args.get('offset', 0, type=int)
         relevance = request.args.get('relevance', '')
         
-        # --- LÓGICA DE ORDENAÇÃO (ATUALIZADA PARA EXCEL STYLE) ---
         sort_order = request.args.get('sort_order', '')
 
-        # --- Query base movida para um CTE ---
         base_query = """
             WITH RelevantTickets AS (
                 SELECT DISTINCT Cliente FROM (
@@ -364,7 +410,6 @@ def api_negativacao_analysis():
             where_clauses.append("Cliente LIKE ?")
             params.append(f'%{search_term}%')
 
-        # --- LÓGICA DO FILTRO DE RELEVÂNCIA ---
         min_months, max_months = parse_relevance_filter(relevance)
         if min_months is not None:
             where_clauses.append("permanencia_meses >= ?")
@@ -378,10 +423,8 @@ def api_negativacao_analysis():
         count_query = f"SELECT COUNT(*) FROM ({base_query}) AS sub {where_sql}"
         total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
 
-        # --- DEFINE A CLÁUSULA ORDER BY ---
-        order_by = "ORDER BY Cliente, Contrato_ID" # Padrão
+        order_by = "ORDER BY Cliente, Contrato_ID"
         
-        # Verifica a direção da ordenação solicitada
         if sort_order == 'asc':
             order_by = "ORDER BY permanencia_meses ASC, Cliente"
         elif sort_order == 'desc':
@@ -407,9 +450,7 @@ def api_seller_analysis():
     try:
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
-        # Este filtro não usa relevância, então permanece o mesmo
 
-        # Parâmetros e cláusulas WHERE para cada fonte de dados
         params_cancelados = []
         params_negativados_cn = []
         params_negativados_c = []
@@ -426,7 +467,6 @@ def api_seller_analysis():
         add_date_range_filter(where_negativados_c_list, params_negativados_c, "Data_cancelamento", start_date, end_date)
         where_negativados_c = " AND ".join(where_negativados_c_list)
 
-        # Executa as queries separadamente
         df_cancelados = pd.read_sql_query(f"SELECT Vendedor AS Vendedor_ID, 'Cancelado' AS Status FROM Contratos WHERE {where_cancelados}", conn, params=tuple(params_cancelados))
         df_negativados_c = pd.read_sql_query(f"SELECT Vendedor AS Vendedor_ID, 'Negativado' AS Status FROM Contratos WHERE {where_negativados_c}", conn, params=tuple(params_negativados_c))
         df_negativados_cn = pd.DataFrame()
@@ -438,11 +478,9 @@ def api_seller_analysis():
 
         df_all = pd.concat([df_cancelados, df_negativados_c, df_negativados_cn], ignore_index=True)
 
-        # Junta com Vendedores
         df_vendedores = pd.read_sql_query("SELECT ID, Vendedor FROM Vendedores", conn)
         df_merged = pd.merge(df_all, df_vendedores, left_on='Vendedor_ID', right_on='ID', how='left')
 
-        # Agrega os resultados
         df_grouped = df_merged.groupby(['Vendedor_ID', 'Vendedor']).agg(
             Cancelados_Count=('Status', lambda x: (x == 'Cancelado').sum()),
             Negativados_Count=('Status', lambda x: (x == 'Negativado').sum())
@@ -450,11 +488,10 @@ def api_seller_analysis():
 
         df_grouped['Total'] = df_grouped['Cancelados_Count'] + df_grouped['Negativados_Count']
         df_grouped = df_grouped.sort_values(by='Total', ascending=False)
-        df_grouped.rename(columns={'Vendedor': 'Vendedor_Nome'}, inplace=True) # Renomeia para consistência
+        df_grouped.rename(columns={'Vendedor': 'Vendedor_Nome'}, inplace=True) 
 
         data_list = df_grouped.to_dict('records')
 
-        # Busca anos para o filtro
         years_query = "SELECT DISTINCT Year FROM ( SELECT STRFTIME('%Y', \"Data_cancelamento\") AS Year FROM Contratos WHERE \"Data_cancelamento\" IS NOT NULL UNION SELECT STRFTIME('%Y', \"Data_negativa_o\") AS Year FROM Contratos_Negativacao WHERE \"Data_negativa_o\" IS NOT NULL ) WHERE Year IS NOT NULL ORDER BY Year DESC"
         years_data = conn.execute(years_query).fetchall()
 
@@ -465,7 +502,7 @@ def api_seller_analysis():
             "data": data_list,
             "total_rows": len(data_list),
             "years": [row[0] for row in years_data],
-            "total_cancelados": int(total_cancelados), # Converte para int nativo
+            "total_cancelados": int(total_cancelados), 
             "total_negativados": int(total_negativados),
             "grand_total": int(total_cancelados + total_negativados)
         })
@@ -485,27 +522,23 @@ def api_cancellations_by_city():
     try:
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
-        relevance = request.args.get('relevance', '') # <-- NOVO FILTRO
+        relevance = request.args.get('relevance', '')
 
-        # Filtros para Cancelados
         params_cancelados = []
         where_cancelados_list = ["Status_contrato = 'Inativo'", "Status_acesso = 'Desativado'", "Cidade IS NOT NULL", "TRIM(Cidade) != ''"]
         add_date_range_filter(where_cancelados_list, params_cancelados, "Data_cancelamento", start_date, end_date)
         where_cancelados = " AND ".join(where_cancelados_list)
 
-        # Filtros para Negativados de Contratos_Negativacao
         params_negativados_cn = []
         where_negativados_cn_list = ["Cidade IS NOT NULL", "TRIM(Cidade) != ''", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
         add_date_range_filter(where_negativados_cn_list, params_negativados_cn, "Data_negativa_o", start_date, end_date)
         where_negativados_cn = " AND ".join(where_negativados_cn_list)
 
-        # Filtros para Negativados de Contratos
         params_negativados_c = []
         where_negativados_c_list = ["Status_contrato = 'Negativado'", "Cidade IS NOT NULL", "TRIM(Cidade) != ''", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
         add_date_range_filter(where_negativados_c_list, params_negativados_c, "Data_cancelamento", start_date, end_date)
         where_negativados_c = " AND ".join(where_negativados_c_list)
 
-        # --- MODIFICADO: Adiciona Data_ativa_o e end_date ---
         df_cancelados = pd.read_sql_query(f"SELECT Cidade, 'Cancelado' AS Status, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos WHERE {where_cancelados}", conn, params=tuple(params_cancelados))
         df_negativados_c = pd.read_sql_query(f"SELECT Cidade, 'Negativado' AS Status, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos WHERE {where_negativados_c}", conn, params=tuple(params_negativados_c))
         df_negativados_cn = pd.DataFrame()
@@ -513,12 +546,9 @@ def api_cancellations_by_city():
             df_negativados_cn = pd.read_sql_query(f"SELECT Cidade, 'Negativado' AS Status, Data_ativa_o, Data_negativa_o AS end_date FROM Contratos_Negativacao WHERE {where_negativados_cn}", conn, params=tuple(params_negativados_cn))
         except pd.io.sql.DatabaseError as e:
             if "no such table" not in str(e): raise e
-            print("Aviso: Tabela Contratos_Negativacao não encontrada.")
 
         df_all = pd.concat([df_cancelados, df_negativados_c, df_negativados_cn], ignore_index=True)
-        # --- FIM DA MODIFICAÇÃO ---
         
-        # --- LÓGICA DE FILTRO DE RELEVÂNCIA ---
         if not df_all.empty:
             df_all['Data_ativa_o'] = pd.to_datetime(df_all['Data_ativa_o'], errors='coerce')
             df_all['end_date'] = pd.to_datetime(df_all['end_date'], errors='coerce')
@@ -530,9 +560,7 @@ def api_cancellations_by_city():
                 df_all = df_all[df_all['permanencia_meses'] >= min_months]
             if max_months is not None:
                 df_all = df_all[df_all['permanencia_meses'] <= max_months]
-        # --- FIM DA LÓGICA ---
 
-        # Agrega os resultados (APÓS FILTRAR)
         if df_all.empty:
             df_final = pd.DataFrame(columns=['Cidade', 'Cancelados', 'Negativados', 'Total'])
         else:
@@ -542,27 +570,18 @@ def api_cancellations_by_city():
             ).reset_index()
 
             df_grouped['Total'] = df_grouped['Cancelados'] + df_grouped['Negativados']
-            # Filtra cidades sem cancelados ou negativados e ordena
             df_final = df_grouped[df_grouped['Total'] > 0].sort_values(by='Total', ascending=False)
 
-        # --- Extrai Totais para Cidades Específicas (NOVO) ---
         total_pres_dutra = 0
         total_dom_pedro = 0
-        
         if not df_final.empty:
-            # Usa try/except ou verificação de empty para segurança
             pd_data = df_final[df_final['Cidade'] == 'Presidente Dutra']
-            if not pd_data.empty:
-                total_pres_dutra = int(pd_data['Total'].values[0])
-                
+            if not pd_data.empty: total_pres_dutra = int(pd_data['Total'].values[0])
             dp_data = df_final[df_final['Cidade'] == 'Dom Pedro']
-            if not dp_data.empty:
-                total_dom_pedro = int(dp_data['Total'].values[0])
+            if not dp_data.empty: total_dom_pedro = int(dp_data['Total'].values[0])
 
-        # Inclui a coluna 'Total' na lista de dados para a tabela
         data_list = df_final[['Cidade', 'Cancelados', 'Negativados', 'Total']].to_dict('records')
 
-        # Busca anos para o filtro (query original mantida, não depende da relevância)
         years_query = "SELECT DISTINCT Year FROM ( SELECT STRFTIME('%Y', \"Data_cancelamento\") AS Year FROM Contratos WHERE \"Data_cancelamento\" IS NOT NULL UNION SELECT STRFTIME('%Y', \"Data_negativa_o\") AS Year FROM Contratos_Negativacao WHERE \"Data_negativa_o\" IS NOT NULL ) WHERE Year IS NOT NULL ORDER BY Year DESC"
         years_data = conn.execute(years_query).fetchall()
 
@@ -575,19 +594,15 @@ def api_cancellations_by_city():
             "total_cancelados": int(total_cancelados),
             "total_negativados": int(total_negativados),
             "grand_total": int(total_cancelados + total_negativados),
-            # --- NOVOS TOTAIS ---
             "total_pres_dutra": total_pres_dutra,
             "total_dom_pedro": total_dom_pedro
         })
     except sqlite3.Error as e:
-        print(f"Erro na base de dados na análise por cidade: {e}")
-        return jsonify({"error": f"Erro interno ao processar a análise por cidade. Detalhe: {e}"}), 500
+        return jsonify({"error": f"Erro interno ao processar a análise por cidade: {e}"}), 500
     except Exception as e:
-        print(f"Erro inesperado na análise por cidade: {e}")
-        return jsonify({"error": f"Erro interno inesperado ao processar a análise por cidade. Detalhe: {e}"}), 500
+        return jsonify({"error": f"Erro interno inesperado: {e}"}), 500
     finally:
         if conn: conn.close()
-
 
 @custom_analysis_bp.route('/cancellations_by_neighborhood')
 def api_cancellations_by_neighborhood():
@@ -596,15 +611,12 @@ def api_cancellations_by_neighborhood():
         selected_city = request.args.get('city', '')
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
-        relevance = request.args.get('relevance', '') # <-- NOVO FILTRO
+        relevance = request.args.get('relevance', '')
 
-        # Queries para filtros (não dependem da relevância)
-        # Busca TODAS as cidades disponíveis (usadas para popular o dropdown no frontend)
         cities_query = "SELECT DISTINCT Cidade FROM ( SELECT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' UNION SELECT Cidade FROM Contratos_Negativacao WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' ) ORDER BY Cidade;"
         try:
              cities_data = conn.execute(cities_query).fetchall()
         except sqlite3.Error:
-             # Fallback se Contratos_Negativacao não existir
              cities_data = conn.execute("SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' ORDER BY Cidade").fetchall()
 
         years_query = "SELECT DISTINCT Year FROM ( SELECT STRFTIME('%Y', \"Data_cancelamento\") AS Year FROM Contratos WHERE \"Data_cancelamento\" IS NOT NULL UNION SELECT STRFTIME('%Y', \"Data_negativa_o\") AS Year FROM Contratos_Negativacao WHERE \"Data_negativa_o\" IS NOT NULL ) WHERE Year IS NOT NULL ORDER BY Year DESC"
@@ -617,7 +629,6 @@ def api_cancellations_by_neighborhood():
         total_cancelados = 0
         total_negativados = 0
 
-        # Se nenhuma cidade foi selecionada, retorna apenas as listas de filtros para popular a UI
         if not selected_city:
              return jsonify({
                 "data": [],
@@ -629,26 +640,21 @@ def api_cancellations_by_neighborhood():
             })
 
         if selected_city:
-            # Filtros para Cancelados
             params_cancelados = [selected_city]
             where_cancelados_list = ["TRIM(Cidade) = ?", "Status_contrato = 'Inativo'", "Status_acesso = 'Desativado'", "Bairro IS NOT NULL", "TRIM(Bairro) != ''"]
             add_date_range_filter(where_cancelados_list, params_cancelados, "Data_cancelamento", start_date, end_date)
             where_cancelados = " AND ".join(where_cancelados_list)
 
-            # Filtros para Negativados de Contratos_Negativacao
             params_negativados_cn = [selected_city]
             where_negativados_cn_list = ["TRIM(Cidade) = ?", "Bairro IS NOT NULL", "TRIM(Bairro) != ''", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
             add_date_range_filter(where_negativados_cn_list, params_negativados_cn, "Data_negativa_o", start_date, end_date)
             where_negativados_cn = " AND ".join(where_negativados_cn_list)
 
-            # Filtros para Negativados de Contratos
             params_negativados_c = [selected_city]
             where_negativados_c_list = ["TRIM(Cidade) = ?", "Status_contrato = 'Negativado'", "Bairro IS NOT NULL", "TRIM(Bairro) != ''", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
             add_date_range_filter(where_negativados_c_list, params_negativados_c, "Data_cancelamento", start_date, end_date)
             where_negativados_c = " AND ".join(where_negativados_c_list)
 
-            # --- MODIFICADO: Adiciona Data_ativa_o e end_date ---
-            # AS Bairro garante que o nome da coluna seja consistente
             df_cancelados = pd.read_sql_query(f"SELECT Bairro AS Bairro, 'Cancelado' AS Status, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos WHERE {where_cancelados}", conn, params=tuple(params_cancelados))
             df_negativados_c = pd.read_sql_query(f"SELECT Bairro AS Bairro, 'Negativado' AS Status, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos WHERE {where_negativados_c}", conn, params=tuple(params_negativados_c))
             df_negativados_cn = pd.DataFrame()
@@ -656,12 +662,9 @@ def api_cancellations_by_neighborhood():
                 df_negativados_cn = pd.read_sql_query(f"SELECT Bairro AS Bairro, 'Negativado' AS Status, Data_ativa_o, Data_negativa_o AS end_date FROM Contratos_Negativacao WHERE {where_negativados_cn}", conn, params=tuple(params_negativados_cn))
             except pd.io.sql.DatabaseError as e:
                 if "no such table" not in str(e): raise e
-                print("Aviso: Tabela Contratos_Negativacao não encontrada.")
 
             df_all = pd.concat([df_cancelados, df_negativados_c, df_negativados_cn], ignore_index=True)
-            # --- FIM DA MODIFICAÇÃO ---
             
-            # --- LÓGICA DE FILTRO DE RELEVÂNCIA ---
             if not df_all.empty:
                 df_all['Data_ativa_o'] = pd.to_datetime(df_all['Data_ativa_o'], errors='coerce')
                 df_all['end_date'] = pd.to_datetime(df_all['end_date'], errors='coerce')
@@ -673,10 +676,8 @@ def api_cancellations_by_neighborhood():
                     df_all = df_all[df_all['permanencia_meses'] >= min_months]
                 if max_months is not None:
                     df_all = df_all[df_all['permanencia_meses'] <= max_months]
-            # --- FIM DA LÓGICA ---
 
             if not df_all.empty:
-                # Garante que 'Bairro' é a coluna usada para agrupar (case sensitive no pandas)
                 df_grouped = df_all.groupby('Bairro').agg(
                     Cancelados=('Status', lambda x: (x == 'Cancelado').sum()),
                     Negativados=('Status', lambda x: (x == 'Negativado').sum())
@@ -705,7 +706,6 @@ def api_cancellations_by_neighborhood():
     finally:
         if conn: conn.close()
 
-
 @custom_analysis_bp.route('/cancellations_by_equipment')
 def api_cancellations_by_equipment():
     conn = get_db()
@@ -713,9 +713,8 @@ def api_cancellations_by_equipment():
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
         city = request.args.get('city', '')
-        relevance = request.args.get('relevance', '') # <-- NOVO FILTRO
+        relevance = request.args.get('relevance', '')
 
-        # --- CONSTRUÇÃO DOS FILTROS DINÂMICOS ---
         params_cancelados = []
         where_cancelados_list = ["C.Status_contrato = 'Inativo'", "C.Status_acesso = 'Desativado'"]
         add_date_range_filter(where_cancelados_list, params_cancelados, "C.Data_cancelamento", start_date, end_date)
@@ -740,7 +739,6 @@ def api_cancellations_by_equipment():
             params_negativados_c.append(city)
         where_negativados_c_sql = " AND ".join(where_negativados_c_list)
 
-        # --- MODIFICADO: Adiciona Data_ativa_o e end_date ---
         df_cancelados = pd.read_sql_query(f"SELECT ID, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos C WHERE {where_cancelados_sql}", conn, params=tuple(params_cancelados))
         df_negativados_c = pd.read_sql_query(f"SELECT ID, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos C WHERE {where_negativados_c_sql}", conn, params=tuple(params_negativados_c))
         df_negativados_cn = pd.DataFrame()
@@ -748,13 +746,10 @@ def api_cancellations_by_equipment():
              df_negativados_cn = pd.read_sql_query(f"SELECT ID, Data_ativa_o, Data_negativa_o AS end_date FROM Contratos_Negativacao CN WHERE {where_negativados_cn_sql}", conn, params=tuple(params_negativados_cn))
         except pd.io.sql.DatabaseError as e:
             if "no such table" not in str(e): raise e
-            print("Aviso: Tabela Contratos_Negativacao não encontrada.")
 
         df_contracts = pd.concat([df_cancelados, df_negativados_c, df_negativados_cn], ignore_index=True).drop_duplicates(subset=['ID'])
         df_contracts['ID'] = df_contracts['ID'].astype(str).str.strip()
-        # --- FIM DA MODIFICAÇÃO ---
 
-        # --- LÓGICA DE FILTRO DE RELEVÂNCIA ---
         if not df_contracts.empty:
             df_contracts['Data_ativa_o'] = pd.to_datetime(df_contracts['Data_ativa_o'], errors='coerce')
             df_contracts['end_date'] = pd.to_datetime(df_contracts['end_date'], errors='coerce')
@@ -766,14 +761,11 @@ def api_cancellations_by_equipment():
                 df_contracts = df_contracts[df_contracts['permanencia_meses'] >= min_months]
             if max_months is not None:
                 df_contracts = df_contracts[df_contracts['permanencia_meses'] <= max_months]
-        # --- FIM DA LÓGICA ---
 
         if df_contracts.empty:
              data_list = []
              total_equipments = 0
         else:
-            # Busca equipamentos devolvidos para os contratos relevantes
-            # Garante que Descricao_produto não seja nulo ou vazio
             query_equipment = """
                 SELECT TRIM(ID_contrato) AS ID_contrato, Descricao_produto
                 FROM Equipamento
@@ -784,10 +776,8 @@ def api_cancellations_by_equipment():
             df_equipment = pd.read_sql_query(query_equipment, conn)
             df_equipment['ID_contrato'] = df_equipment['ID_contrato'].astype(str).str.strip()
 
-            # Junta e processa
             df_merged = pd.merge(df_contracts, df_equipment, left_on='ID', right_on='ID_contrato', how='inner')
 
-            # Expande para incluir Roteador Associado
             onu_masks = df_merged['Descricao_produto'].str.contains('ONU AN5506-01|ONU AN5506-02', na=False)
             df_routers = df_merged[onu_masks].copy()
             if not df_routers.empty:
@@ -796,25 +786,20 @@ def api_cancellations_by_equipment():
             else:
                 df_expanded = df_merged
 
-            # Agrupa e conta
             df_grouped = df_expanded.groupby('Descricao_produto').size().reset_index(name='Count')
 
-            # Agrupa nomes similares
             df_grouped['Descricao_produto'] = df_grouped['Descricao_produto'].replace({
                 r'^ONU AN5506-01.*': 'ONU AN5506-01 (Agrupado)',
                 r'^ONU AN5506-02.*': 'ONU AN5506-02 (Agrupado)',
                 r'^ONU HG6143D.*': 'ONU HG6143D (Agrupado)'
             }, regex=True)
 
-            # Re-agrega após agrupar nomes
             df_final = df_grouped.groupby('Descricao_produto')['Count'].sum().reset_index()
             df_final = df_final.sort_values(by='Count', ascending=False).head(20)
 
             data_list = df_final.to_dict('records')
-            total_equipments = df_expanded.shape[0] # Conta total antes de agrupar nomes
+            total_equipments = df_expanded.shape[0]
 
-
-        # Busca anos e cidades para filtros (queries originais mantidas)
         years_query = "SELECT DISTINCT Year FROM ( SELECT STRFTIME('%Y', Data_cancelamento) AS Year FROM Contratos WHERE Data_cancelamento IS NOT NULL UNION SELECT STRFTIME('%Y', Data_negativa_o) AS Year FROM Contratos_Negativacao WHERE Data_negativa_o IS NOT NULL ) WHERE Year IS NOT NULL ORDER BY Year DESC"
         years_data = conn.execute(years_query).fetchall()
 
@@ -839,18 +824,12 @@ def api_cancellations_by_equipment():
     finally:
         if conn: conn.close()
 
-
 @custom_analysis_bp.route('/equipment_by_olt')
 def api_equipment_by_olt():
-    """
-    Busca equipamentos em comodato, agrupados por descrição,
-    com filtro opcional por cidade.
-    """
     conn = get_db()
     try:
         city = request.args.get('city', '')
 
-        # --- Lógica de Filtro ---
         where_clauses = [
             "E.Status_comodato = 'Emprestado'",
             "L.Transmissor IS NOT NULL",
@@ -864,7 +843,6 @@ def api_equipment_by_olt():
 
         where_sql = " AND ".join(where_clauses)
 
-        # --- Query Principal (Modificada) ---
         query = f"""
             SELECT
                 E.Descricao_produto,
@@ -879,7 +857,6 @@ def api_equipment_by_olt():
         """
         data = conn.execute(query, tuple(params)).fetchall()
 
-        # --- Query para Filtro de Cidades ---
         cities_query = """
             SELECT DISTINCT C.Cidade
             FROM Contratos C
@@ -902,27 +879,16 @@ def api_equipment_by_olt():
     finally:
         if conn: conn.close()
 
-
-# --- INÍCIO DA ROTA DE ANÁLISE DE COORTE DE RETENÇÃO (VERSÃO SUPER ROBUSTA) ---
 @custom_analysis_bp.route('/cohort')
 def api_cohort_analysis():
-    """
-    Endpoint para gerar dados para uma análise de coorte de retenção cumulativa.
-    USA UMA ÚNICA QUERY SQL OTIMIZADA PARA EVITAR ERROS DE TIPO NO PANDAS.
-    FORÇA A CONVERSÃO DE IDs PARA REAL PARA CORRESPONDER '12345' E '12345.0'.
-    """
     conn = get_db()
-    
-    # Dicionário para guardar dados de fallback (listas de filtros)
     fallback_filters = {"cities": [], "years": []}
     
     try:
-        # --- 1. Obter Filtros ---
         city = request.args.get('city', '')
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
 
-        # --- 2. Buscar Cidades e Anos para os Filtros (sempre fazer isso) ---
         try:
             cities_query = """
                 SELECT DISTINCT Cidade FROM (
@@ -933,14 +899,13 @@ def api_cohort_analysis():
             """
             cities_data = conn.execute(cities_query).fetchall()
             fallback_filters["cities"] = [row[0] for row in cities_data if row[0]]
-        except sqlite3.Error as e:
-            print(f"Aviso (Coorte - Cidades): Query UNION falhou ({e}). Usando fallback para Contratos.")
+        except sqlite3.Error:
             try:
                 cities_query_fallback = "SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' ORDER BY Cidade"
                 cities_data = conn.execute(cities_query_fallback).fetchall()
                 fallback_filters["cities"] = [row[0] for row in cities_data if row[0]]
-            except sqlite3.Error as e_fallback:
-                print(f"Erro (Coorte - Cidades): Fallback também falhou: {e_fallback}")
+            except sqlite3.Error:
+                pass
                 
         try:
             years_query = """
@@ -951,16 +916,14 @@ def api_cohort_analysis():
             """
             years_data = conn.execute(years_query).fetchall()
             fallback_filters["years"] = [row[0] for row in years_data if row[0]]
-        except sqlite3.Error as e:
-            print(f"Aviso (Coorte - Anos): Query UNION falhou ({e}). Usando fallback para Contratos.")
+        except sqlite3.Error:
             try:
                 years_query_fallback = "SELECT DISTINCT STRFTIME('%Y', Data_ativa_o) AS Year FROM Contratos WHERE Data_ativa_o IS NOT NULL ORDER BY Year DESC"
                 years_data = conn.execute(years_query_fallback).fetchall()
                 fallback_filters["years"] = [row[0] for row in years_data if row[0]]
-            except sqlite3.Error as e_fallback:
-                 print(f"Erro (Coorte - Anos): Fallback também falhou: {e_fallback}")
+            except sqlite3.Error:
+                 pass
 
-        # --- 3. Construir Cláusula WHERE e Parâmetros para Contratos ---
         where_clauses = ["C.Data_ativa_o IS NOT NULL"]
         params = []
         if city:
@@ -970,26 +933,16 @@ def api_cohort_analysis():
         
         where_sql = " AND ".join(where_clauses)
 
-        # --- 4. Determinar se a tabela Contratos_Negativacao existe ---
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Contratos_Negativacao';")
         negativacao_table_exists = cursor.fetchone() is not None
 
-        # --- 5. Construir a Query SQL Unificada dinamicamente ---
-        
-        # Partes da Query
-        all_contracts_cte = ""
-        all_churn_cte = ""
-
-        # ***** CORREÇÃO DEFINITIVA: USAR CAST(TRIM(ID) AS INTEGER) *****
-        # Isto força '12345' e '12345.0' a serem tratados como o mesmo número
         cast_as_int_c = "CAST(TRIM(ID) AS INTEGER)"
         cast_as_int_cn = "CAST(TRIM(ID) AS INTEGER)"
         cast_as_int_car = "CAST(TRIM(ID_Contrato_Recorrente) AS INTEGER)"
 
         
         if negativacao_table_exists:
-            print("Info (Coorte): Tabela 'Contratos_Negativacao' encontrada. Usando query completa com CAST AS INTEGER.")
             all_contracts_cte = f"""
                 WITH AllContracts AS (
                     SELECT {cast_as_int_c} AS ID_Int, DATE(Data_ativa_o) AS Data_ativa_o, Cidade
@@ -1015,7 +968,6 @@ def api_cohort_analysis():
                 )
             """
         else:
-            print("Aviso (Coorte): Tabela 'Contratos_Negativacao' NÃO encontrada. Usando query de fallback (apenas Contratos) com CAST AS INTEGER.")
             all_contracts_cte = f"""
                 WITH AllContracts AS (
                     SELECT {cast_as_int_c} AS ID_Int, DATE(Data_ativa_o) AS Data_ativa_o, Cidade
@@ -1032,7 +984,6 @@ def api_cohort_analysis():
                 )
             """
 
-        # Query SQL Final (Otimizada para usar JOINs robustos)
         query = f"""
             {all_contracts_cte}
             , AllInvoices AS (
@@ -1061,11 +1012,9 @@ def api_cohort_analysis():
             ORDER BY CohortMonth, InvoiceMonth
         """
         
-        # --- 6. Executar a Query e Processar os dados ---
         cohort_data = pd.read_sql_query(query, conn, params=tuple(params))
 
         if cohort_data.empty:
-             print("Aviso (Coorte): A query SQL (versão INTEGER) não retornou dados. Verifique a lógica de datas e IDs.")
              return jsonify({
                 "datasets": [], 
                 "labels": [],
@@ -1073,7 +1022,6 @@ def api_cohort_analysis():
                 "years": fallback_filters["years"]
             })
 
-        # --- 7. Processamento com Pandas (para formatar para o gráfico) ---
         cohort_data['CohortMonth'] = pd.to_datetime(cohort_data['CohortMonth']).dt.to_period('M')
         cohort_data['InvoiceMonth'] = pd.to_datetime(cohort_data['InvoiceMonth']).dt.to_period('M')
         
@@ -1084,16 +1032,13 @@ def api_cohort_analysis():
         for cohort in cohorts:
             cohort_df = cohort_data[cohort_data['CohortMonth'] == cohort]
             
-            # Mapeia os meses faturados para os seus valores
             month_map = pd.Series(cohort_df['ActiveClients'].values, index=cohort_df['InvoiceMonth'])
-            # Reindexa para o range completo de meses (preenche com 0 se faltar)
             month_map = month_map.reindex(all_months, fill_value=0)
             
-            # Filtra apenas os meses a partir do início do coorte
             month_map_filtered = month_map[month_map.index >= cohort]
             
             client_counts = [int(count) for count in month_map_filtered.values]
-            padding = [0] * (len(all_months) - len(month_map_filtered)) # Padding para meses ANTES do coorte
+            padding = [0] * (len(all_months) - len(month_map_filtered))
             
             datasets.append({
                 'label': str(cohort),
@@ -1111,7 +1056,6 @@ def api_cohort_analysis():
     except Exception as e:
         print(f"Erro inesperado na análise de coorte: {e}")
         traceback.print_exc()
-        # Mesmo em erro, tenta retornar os filtros
         return jsonify({
             "error": f"Ocorreu um erro inesperado: {e}",
             "datasets": [],
@@ -1121,8 +1065,6 @@ def api_cohort_analysis():
         }), 500
     finally:
         if conn: conn.close()
-# --- FIM DA ROTA DE ANÁLISE DE COORTE ---
-
 
 @custom_analysis_bp.route('/daily_evolution_by_city')
 def api_daily_evolution_by_city():
@@ -1147,9 +1089,7 @@ def api_daily_evolution_by_city():
             WITH all_events AS (
                 SELECT Cidade, DATE(Data_ativa_o) as event_date, 'ativacao' as event_type FROM Contratos WHERE Data_ativa_o IS NOT NULL AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
                 UNION ALL
-                -- <<< INÍCIO DA CORREÇÃO (O ERRO ESTAVA AQUI) >>>
                 SELECT Cidade, DATE(Data_ativa_o) as event_date, 'ativacao' as event_type FROM Contratos_Negativacao WHERE Data_ativa_o IS NOT NULL AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
-                -- <<< FIM DA CORREÇÃO (Era 'Data_iva_o') >>>
                 UNION ALL
                 SELECT Cidade, DATE(Data_cancelamento) as event_date, 'churn' as event_type FROM Contratos WHERE Data_cancelamento IS NOT NULL AND Status_contrato = 'Inativo' AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
                 UNION ALL
@@ -1209,8 +1149,6 @@ def api_daily_evolution_by_city():
 
     except sqlite3.Error as e:
         if "no such table" in str(e).lower() and "contratos_negativacao" in str(e).lower():
-             print("Aviso: Tabela 'Contratos_Negativacao' não encontrada. Executando query de fallback.")
-
              params = []
              where_clauses = []
              if start_date_str: where_clauses.append("event_date >= ?"); params.append(start_date_str)
@@ -1256,14 +1194,12 @@ def api_active_clients_evolution():
         end_date_str = request.args.get('end_date')
         city = request.args.get('city', '')
         
-        # Pega as strings separadas por vírgula
         status_contrato_str = request.args.get('status_contrato', '')
         status_acesso_str = request.args.get('status_acesso', '')
 
         if not start_date_str or not end_date_str:
             return jsonify({"error": "Data inicial e final são obrigatórias."}), 400
 
-        # --- Query Base ---
         all_contracts_cte = """
             WITH AllContracts AS (
                 SELECT ID, Data_ativa_o, Data_cancelamento AS End_Date, Status_contrato, Status_acesso, Cidade
@@ -1285,9 +1221,7 @@ def api_active_clients_evolution():
             all_contracts_cte += " AND Cidade = ?"
             params.append(city)
         
-        # --- LÓGICA MULTI-SELECT (SQL IN) ---
         if status_contrato_str:
-            # Se vier separado por vírgula (embora seja select, pode ser útil se mudar para checkbox)
             status_list = status_contrato_str.split(',')
             if len(status_list) == 1:
                 all_contracts_cte += " AND Status_contrato = ?"
@@ -1302,13 +1236,11 @@ def api_active_clients_evolution():
             placeholders = ','.join(['?'] * len(acesso_list))
             all_contracts_cte += f" AND Status_acesso IN ({placeholders})"
             params.extend(acesso_list)
-        # ------------------------------------
             
         all_contracts_cte += ")" 
 
         params.extend([start_date_str, end_date_str])
 
-        # Query Principal (Mantida igual)
         query = f"""
             {all_contracts_cte},
             month_series(month_start) AS (
@@ -1334,14 +1266,11 @@ def api_active_clients_evolution():
             data = conn.execute(query, tuple(params)).fetchall()
         except sqlite3.Error as e:
             if "no such table" in str(e).lower() and "contratos_negativacao" in str(e).lower():
-                print("Aviso: Tabela Contratos_Negativacao não encontrada (Evolução Ativos). Usando fallback.")
-                # Versão simplificada sem UNION se a tabela não existir
                 fallback_query = query.replace("UNION\n                SELECT ID, Data_ativa_o, Data_negativa_o AS End_Date, 'Negativado' AS Status_contrato, 'Desativado' AS Status_acesso, Cidade\n                FROM Contratos_Negativacao\n                WHERE Data_ativa_o IS NOT NULL", "")
                 data = conn.execute(fallback_query, tuple(params)).fetchall()
             else:
                 raise e
 
-        # Query de Cidades (para o filtro) - Excluindo as 3 proibidas
         cities_query = """
             SELECT DISTINCT Cidade FROM Contratos 
             WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' 
@@ -1363,9 +1292,6 @@ def api_active_clients_evolution():
 
 @custom_analysis_bp.route('/faturamento_por_cidade')
 def api_faturamento_por_cidade():
-    """
-    Busca dados de faturamento para três gráficos específicos, com filtros de período e cidade.
-    """
     conn = get_db()
     try:
         start_date = request.args.get('start_date')
@@ -1377,41 +1303,21 @@ def api_faturamento_por_cidade():
 
         params = {'start_date': start_date, 'end_date': end_date}
         
-        # --- INÍCIO DA CORREÇÃO ---
-        
-        # CORREÇÃO 1: 'from_join_clause_ativos' (para query2) e 'from_join_clause_grafico3' (para query3)
-        # SÃO DEFINIDAS AQUI FORA, incondicionalmente, pois essas queries SEMPRE precisam do JOIN com Contratos.
         from_join_clause_ativos = 'FROM "Contas_a_Receber" CR JOIN "Contratos" AS C ON CR.ID_Contrato_Recorrente = C.ID'
         from_join_clause_grafico3 = 'FROM "Contas_a_Receber" as CR JOIN "Contratos" as C ON CR.ID_Contrato_Recorrente = C.ID'
 
-        # CORREÇÃO 2: Lógica do filtro de cidade para Query 1 (Faturamento Total) vs Queries 2 e 3.
         if city:
             params['city'] = city
-            
-            # Query 1 usa CR.Cidade e NÃO faz JOIN com Contratos
             city_clause_query1 = " AND CR.Cidade = :city "
-            
-            # Queries 2 e 3 usam C.Cidade e FAZEM JOIN com Contratos
             city_clause_query2_3 = " AND C.Cidade = :city "
         else:
             city_clause_query1 = ""
             city_clause_query2_3 = ""
         
-        # Query 1 sempre sem JOIN para respeitar o filtro de cidade da tabela Contas_a_Receber
         from_join_clause_query1 = 'FROM "Contas_a_Receber" CR'
         
-        # --- FIM DA CORREÇÃO ---
-
-
-        # --- INÍCIO DA CONSTRUÇÃO DAS QUERIES ---
-        
-        # --- Query 1: Faturamento Total (Usa CR.Cidade) ---
-        
-        # 1. Recebido (usa Data_pagamento)
         where_recebido_q1 = f"WHERE CR.Data_pagamento BETWEEN :start_date AND :end_date {city_clause_query1}"
-        # 2. A receber (usa Vencimento)
         where_areceber_q1 = f"WHERE CR.Status = 'A receber' AND CR.Vencimento BETWEEN :start_date AND :end_date {city_clause_query1}"
-        # 3. Cancelado (usa Vencimento e Status = 'Cancelado')
         where_cancelado_q1 = f"WHERE CR.Status = 'Cancelado' AND CR.Vencimento BETWEEN :start_date AND :end_date {city_clause_query1}"
 
         query1 = f"""
@@ -1447,9 +1353,6 @@ def api_faturamento_por_cidade():
             GROUP BY Month
         """
 
-        # --- Query 2: Contas a Receber (Ativos) (Usa JOIN e C.Cidade) ---
-        
-        # Cláusulas WHERE específicas para query 2 (usando C.Cidade)
         where_recebido_q2 = f"WHERE CR.Data_pagamento BETWEEN :start_date AND :end_date {city_clause_query2_3}"
         where_areceber_q2 = f"WHERE CR.Status = 'A receber' AND CR.Vencimento BETWEEN :start_date AND :end_date {city_clause_query2_3}"
         where_cancelado_q2 = f"WHERE CR.Status = 'Cancelado' AND CR.Vencimento BETWEEN :start_date AND :end_date {city_clause_query2_3}"
@@ -1495,7 +1398,6 @@ def api_faturamento_por_cidade():
             GROUP BY Month
         """
 
-        # --- Query 3: Comparativo por Dia de Vencimento (Usa JOIN e C.Cidade) ---
         query3 = f"""
             SELECT C.Dia_fixo_do_vencimento AS Due_Day, STRFTIME('%Y-%m', CR.Vencimento) AS Month, SUM(CR.Valor) AS Total_Value
             {from_join_clause_grafico3}
@@ -1504,22 +1406,19 @@ def api_faturamento_por_cidade():
             GROUP BY Due_Day, Month
         """
 
-        # Obter Cidades para o Filtro (mantém consulta em Contratos pois é a lista mestre)
         cities_query = "SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' ORDER BY Cidade"
 
         data1 = conn.execute(query1, params).fetchall()
         
-        # O query2 precisa da tabela Contratos_Negativacao, então fazemos um try/except
         data2 = []
         try:
             data2 = conn.execute(query2, params).fetchall()
         except sqlite3.Error as e:
             if "no such table" in str(e).lower() and "contratos_negativacao" in str(e).lower():
-                print("Aviso (Faturamento): Tabela Contratos_Negativacao não encontrada. Gráfico de Ativos (query2) será executado sem este filtro.")
                 query2_fallback = query2.replace("AND C.Cliente NOT IN (SELECT DISTINCT CN.Cliente FROM Contratos_Negativacao CN)", "")
                 data2 = conn.execute(query2_fallback, params).fetchall()
             else:
-                raise e # Lança outros erros
+                raise e 
 
         data3 = conn.execute(query3, params).fetchall()
         cities_data = conn.execute(cities_query).fetchall()
@@ -1542,20 +1441,14 @@ def api_faturamento_por_cidade():
     finally:
         if conn: conn.close()
 
-# --- ROTA ATUALIZADA PARA ATIVAÇÃO POR VENDEDOR ---
 @custom_analysis_bp.route('/activations_by_seller')
 def api_activations_by_seller():
-    """
-    Busca e renderiza a análise de "Ativação por Vendedor" com cards e tabela.
-    Filtra por Cidade, Ano (Data_ativa_o) e Mês (Data_ativa_o).
-    """
     conn = get_db()
     try:
         city = request.args.get('city', '')
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
 
-        # --- 1. Constrói filtros para a query de Contratos ---
         params_contracts = []
         where_contracts_list = ["Data_ativa_o IS NOT NULL", "Vendedor IS NOT NULL"]
         
@@ -1565,11 +1458,8 @@ def api_activations_by_seller():
         
         add_date_range_filter(where_contracts_list, params_contracts, "Data_ativa_o", start_date, end_date)
         
-        # Substitui C. por "" nos nomes de colunas para funcionar no Contratos_Negativacao
         where_contracts_sql_union = " AND ".join(where_contracts_list).replace("C.", "")
 
-        # --- 2. Busca todos os contratos que correspondem aos filtros de ativação ---
-        # --- ALTERAÇÃO: Adiciona a coluna 'Cidade' ao SELECT ---
         query_all_activations = f"""
             SELECT ID, Vendedor AS Vendedor_ID, Status_contrato, Data_cancelamento, 0 AS is_negativado_table, Cidade
             FROM Contratos C
@@ -1583,16 +1473,13 @@ def api_activations_by_seller():
         """
 
         try:
-            # Passa os parâmetros duas vezes, um para cada lado do UNION
             df_contracts_all = pd.read_sql_query(query_all_activations, conn, params=tuple(params_contracts * 2))
 
-            # Deduplica os IDs, priorizando a informação da tabela Contratos (is_negativado_table = 0)
             df_contracts_all.sort_values(by='is_negativado_table', ascending=True, inplace=True)
             df_contracts = df_contracts_all.drop_duplicates(subset=['ID'], keep='first')
         
         except pd.io.sql.DatabaseError as e:
-            if "no such table" in str(e).lower(): # Fallback se Contratos_Negativacao não existir
-                print("Aviso: Tabela Contratos_Negativacao não encontrada. Usando apenas Contratos para ativações.")
+            if "no such table" in str(e).lower(): 
                 query_fallback = f"""
                     SELECT ID, Vendedor AS Vendedor_ID, Status_contrato, Data_cancelamento, Cidade
                     FROM Contratos C
@@ -1600,11 +1487,8 @@ def api_activations_by_seller():
                 """
                 df_contracts = pd.read_sql_query(query_fallback, conn, params=tuple(params_contracts))
             else:
-                raise e # Lança outros erros de DB
+                raise e 
 
-        # --- 3. Busca Cidades e Anos para os filtros (FAZENDO ISSO ANTES DE RETORNAR) ---
-        
-        # --- CORREÇÃO ROBUSTA PARA CIDADES ---
         cities = []
         try:
             cities_query = """
@@ -1616,16 +1500,14 @@ def api_activations_by_seller():
             """
             cities_data = conn.execute(cities_query).fetchall()
             cities = [row[0] for row in cities_data if row[0]]
-        except sqlite3.Error as e:
-            print(f"Aviso (Ativação Vendedor - Cidades): Query UNION falhou ({e}). Usando fallback para Contratos.")
+        except sqlite3.Error:
             try:
                 cities_query_fallback = "SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' ORDER BY Cidade"
                 cities_data = conn.execute(cities_query_fallback).fetchall()
                 cities = [row[0] for row in cities_data if row[0]]
-            except sqlite3.Error as e_fallback:
-                print(f"Erro (Ativação Vendedor - Cidades): Fallback também falhou: {e_fallback}")
+            except sqlite3.Error:
+                pass
                 
-        # --- CORREÇÃO ROBUSTA PARA ANOS ---
         years = []
         try:
             years_query = """
@@ -1636,45 +1518,33 @@ def api_activations_by_seller():
             """
             years_data = conn.execute(years_query).fetchall()
             years = [row[0] for row in years_data if row[0]]
-        except sqlite3.Error as e:
-            print(f"Aviso (Ativação Vendedor - Anos): Query UNION falhou ({e}). Usando fallback para Contratos.")
+        except sqlite3.Error:
             try:
                 years_query_fallback = "SELECT DISTINCT STRFTIME('%Y', Data_ativa_o) AS Year FROM Contratos WHERE Data_ativa_o IS NOT NULL ORDER BY Year DESC"
                 years_data = conn.execute(years_query_fallback).fetchall()
                 years = [row[0] for row in years_data if row[0]]
-            except sqlite3.Error as e_fallback:
-                 print(f"Erro (Ativação Vendedor - Anos): Fallback também falhou: {e_fallback}")
-        # --- FIM DAS CORREÇÕES ROBUSTAS ---
-        
+            except sqlite3.Error:
+                 pass
 
-        # Se não houver contratos, retorna cedo (mas com as listas de filtros)
         if df_contracts.empty:
             return jsonify({"data": [], "totals": {}, "cities": cities, "years": years})
 
-        # Garante que os IDs sejam strings para o merge
         df_contracts['ID'] = df_contracts['ID'].astype(str).str.strip()
         df_contracts['Vendedor_ID'] = df_contracts['Vendedor_ID'].astype(str)
         
-        # --- 4. Busca Nomes dos Vendedores ---
         df_vendedores = pd.read_sql_query("SELECT ID, Vendedor FROM Vendedores", conn)
         df_vendedores['ID'] = df_vendedores['ID'].astype(str)
 
-        # --- 5. Processamento e Lógica ---
-        
-        # Define colunas separadas para Cancelado e Negativado
         df_contracts['is_active'] = (df_contracts['Status_contrato'] == 'Ativo')
         df_contracts['is_cancelado'] = (df_contracts['Status_contrato'] == 'Inativo')
         
-        # --- ALTERAÇÃO: Adiciona o filtro de cidade para 'is_negativado' ---
         df_contracts['is_negativado'] = (
             (df_contracts['Status_contrato'] == 'Negativado') &
             (~df_contracts['Cidade'].isin(['Caçapava', 'Jacareí', 'São José dos Campos']))
         )
 
-        # Renomeia para df_merged para manter o resto do código
         df_merged = df_contracts
 
-        # Agrupa por Vendedor para contar
         df_grouped = df_merged.groupby('Vendedor_ID').agg(
             Total_Ativacoes=('ID', 'count'),
             Permanecem_Ativos=('is_active', 'sum'),
@@ -1682,18 +1552,15 @@ def api_activations_by_seller():
             Negativados=('is_negativado', 'sum')
         ).reset_index()
 
-        # Junta com os nomes dos vendedores
         df_final = pd.merge(df_grouped, df_vendedores, left_on='Vendedor_ID', right_on='ID', how='left')
         df_final.rename(columns={'Vendedor': 'Vendedor_Nome'}, inplace=True)
         df_final['Vendedor_Nome'] = df_final['Vendedor_Nome'].fillna('Não Identificado')
         
-        # Calcula Churn Total
         df_final['Total_Churn'] = df_final['Cancelados'] + df_final['Negativados']
 
         df_final = df_final.sort_values(by='Total_Ativacoes', ascending=False)
         data_list = df_final.to_dict('records')
 
-        # --- 6. Calcula Totais para os Cards ---
         totals = {
             'total_ativacoes': int(df_final['Total_Ativacoes'].sum()),
             'total_permanecem_ativos': int(df_final['Permanecem_Ativos'].sum()),
@@ -1701,8 +1568,6 @@ def api_activations_by_seller():
             'total_negativados': int(df_final['Negativados'].sum()),
             'total_churn': int(df_final['Total_Churn'].sum())
         }
-
-        # --- 7. Busca Cidades e Anos (JÁ FEITO NO PASSO 3) ---
 
         return jsonify({
             "data": data_list,
@@ -1722,14 +1587,8 @@ def api_activations_by_seller():
     finally:
         if conn: conn.close()
 
-# --- INÍCIO DA NOVA ROTA: ANÁLISE DE JUROS POR ATRASO ---
 @custom_analysis_bp.route('/late_interest_analysis')
 def api_late_interest_analysis():
-    """
-    Analisa o valor de juros/multas recebidos de faturas pagas com atraso,
-    agrupados por faixas de dias de atraso.
-    Filtra por ano e mês de PAGAMENTO.
-    """
     conn = get_db()
     try:
         start_date = request.args.get('start_date', '')
@@ -1739,15 +1598,14 @@ def api_late_interest_analysis():
         where_clauses = [
             "CR.Data_pagamento IS NOT NULL",
             "CR.Vencimento IS NOT NULL",
-            "CR.Data_pagamento > CR.Vencimento", # Garante que foi paga com atraso
-            "(CR.Valor_recebido - CR.Valor) > 0.01" # Garante que houve juros/multa (evita erros de float)
+            "CR.Data_pagamento > CR.Vencimento", 
+            "(CR.Valor_recebido - CR.Valor) > 0.01" 
         ]
 
         add_date_range_filter(where_clauses, params, "CR.Data_pagamento", start_date, end_date)
         
         where_sql = " AND ".join(where_clauses)
 
-        # Query base com os cálculos
         base_query = f"""
             WITH LatePayments AS (
                 SELECT
@@ -1758,7 +1616,6 @@ def api_late_interest_analysis():
             )
         """
 
-        # Query para os totais (Cards)
         totals_query = f"""
             {base_query}
             SELECT
@@ -1772,12 +1629,10 @@ def api_late_interest_analysis():
             'total_interest_amount': 0,
             'total_late_payments_count': 0
         }
-        # Garante que os valores não sejam None, mas 0
         totals['total_interest_amount'] = totals['total_interest_amount'] or 0
         totals['total_late_payments_count'] = totals['total_late_payments_count'] or 0
 
 
-        # Query para a tabela (Agrupada por faixas)
         buckets_query = f"""
             {base_query}
             SELECT
@@ -1807,7 +1662,6 @@ def api_late_interest_analysis():
         data = conn.execute(buckets_query, tuple(params)).fetchall()
         data_list = [dict(row) for row in data]
 
-        # Query para os anos (Filtro) - baseada na Data_pagamento
         years_query = """
             SELECT DISTINCT STRFTIME('%Y', Data_pagamento) AS Year
             FROM Contas_a_Receber
@@ -1833,6 +1687,3 @@ def api_late_interest_analysis():
         return jsonify({"error": f"Erro interno inesperado. Detalhe: {e}"}), 500
     finally:
         if conn: conn.close()
-
-        
-# --- FIM DA NOVA ROTA ---

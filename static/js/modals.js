@@ -67,7 +67,7 @@ export async function fetchAndDisplayTableInModal(collectionName, page = 1) {
         const contractStatus = dom.contractStatusFilter?.value || '';
         const accessStatus = dom.accessStatusFilter?.value || '';
         
-        // --- CORREÇÃO IMPORTANTE: Captura o filtro de relevância ---
+        // Captura o filtro de relevância
         const relevance = dom.relevanceFilterSearch?.value || '';
 
         const params = new URLSearchParams({
@@ -78,7 +78,7 @@ export async function fetchAndDisplayTableInModal(collectionName, page = 1) {
         if (contractStatus) params.append('status_contrato', contractStatus);
         if (accessStatus) params.append('status_acesso', accessStatus);
         
-        // --- CORREÇÃO IMPORTANTE: Adiciona relevância à URL ---
+        // Adiciona relevância à URL
         if (relevance) params.append('relevance', relevance);
 
         url = `${state.API_BASE_URL}/api/custom_analysis/${endpoint}?${params.toString()}`;
@@ -175,12 +175,6 @@ function renderModalPaginationControls() {
             <span id="modalPageInfo" class="text-gray-700 font-medium"></span>
             <button id="modalNextPageBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed">Próxima Página</button>
         `;
-        // Precisamos reatribuir as referências do DOM pois recriamos o HTML
-        // Nota: O listener no events.js usa delegação ou IDs, então deve continuar funcionando se os IDs forem os mesmos.
-        // Mas para garantir, é melhor não destruir se não precisar.
-        // Como events.js usa as variáveis exportadas de dom.js, e elas apontam para elementos que podem ter sido removidos,
-        // o ideal é recarregar as referências ou usar delegação de eventos no pai. 
-        // O events.js atual usa delegação 'e.target.id', então recriar o HTML com os mesmos IDs funciona.
     }
 
     const totalRows = state.getModalTotalRows();
@@ -204,8 +198,7 @@ function renderModalPaginationControls() {
     dom.modalPaginationControls.classList.remove('hidden');
 }
 
-// --- Outros modais (Mantidos inalterados) ---
-// As funções abaixo são exportadas para uso em events.js
+// --- Outros modais ---
 
 export function openInvoiceDetailModal(contractId, clientName, type) {
     state.setCurrentInvoiceDetailContractId(contractId);
@@ -570,10 +563,21 @@ export async function fetchAndDisplaySellerDetails(page) {
 
 // --- Modal de Detalhes da Cidade (Cancel./Negat. por Cidade) ---
 
-export function openCityDetailModal(city, type, year, month, relevance) {
-    state.setCityDetailState({ currentPage: 1, currentCity: city, currentType: type, currentYear: year, currentMonth: month, totalRows: 0, currentRelevance: relevance });
+export function openCityDetailModal(city, type, startDate, endDate, relevance) {
+    // --- CORREÇÃO: Usa 'currentStartDate' e 'currentEndDate' ---
+    state.setCityDetailState({ 
+        currentPage: 1, 
+        currentCity: city, 
+        currentType: type, 
+        currentStartDate: startDate, // Antes: currentYear
+        currentEndDate: endDate,     // Antes: currentMonth
+        totalRows: 0, 
+        currentRelevance: relevance 
+    });
+    
     const typeText = type === 'cancelado' ? 'Cancelados' : 'Negativados';
-    const title = `Clientes ${typeText} de ${city} (${year || 'Todos Anos'}${month ? '/' + month : ''})`;
+    const title = `Clientes ${typeText} de ${city}`; // Simplificado o título
+    
     if (dom.cityDetailModalTitle) dom.cityDetailModalTitle.textContent = title;
     if (dom.cityDetailModal) dom.cityDetailModal.classList.add('show');
     fetchAndDisplayCityDetails(1);
@@ -593,11 +597,12 @@ export async function fetchAndDisplayCityDetails(page) {
     if (dom.cityDetailContent) dom.cityDetailContent.innerHTML = '';
     if (dom.cityDetailPaginationControls) dom.cityDetailPaginationControls.classList.add('hidden');
 
+    // --- CORREÇÃO: Envia start_date e end_date ---
     const params = new URLSearchParams({
         city: currentState.currentCity,
         type: currentState.currentType,
-        year: currentState.currentYear,
-        month: currentState.currentMonth,
+        start_date: currentState.currentStartDate || '', 
+        end_date: currentState.currentEndDate || '',
         limit: currentState.rowsPerPage,
         offset: offset
     });

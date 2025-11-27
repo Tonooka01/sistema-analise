@@ -76,9 +76,9 @@ let cityDetailState = {
     rowsPerPage: 25,
     totalRows: 0,
     currentCity: null,
-    currentType: null, // 'cancelado' or 'negativado'
-    currentYear: '',
-    currentMonth: '',
+    currentType: null,
+    currentStartDate: '', // Era currentYear
+    currentEndDate: '',   // Era currentMonth
     currentRelevance: '' 
 };
 
@@ -249,7 +249,8 @@ export function resetCityDetailState() {
      cityDetailState = {
         currentPage: 1, rowsPerPage: 25, totalRows: 0,
         currentCity: null, currentType: null,
-        currentYear: '', currentMonth: '',
+        currentStartDate: '', // Reset atualizado
+        currentEndDate: '',   // Reset atualizado
         currentRelevance: ''
     };
     console.log("Estado cityDetailState resetado.");

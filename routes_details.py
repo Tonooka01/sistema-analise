@@ -327,9 +327,10 @@ def api_city_clients():
         client_type = request.args.get('type')
         limit = request.args.get('limit', 25, type=int)
         offset = request.args.get('offset', 0, type=int)
-        year = request.args.get('year', '')
-        month = request.args.get('month', '')
-        relevance = request.args.get('relevance', '') # <-- NOVO
+        # Novos parâmetros de data
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
+        relevance = request.args.get('relevance', '')
 
         if not city or not client_type:
             abort(400, "Cidade e tipo de cliente são obrigatórios.")
@@ -337,26 +338,38 @@ def api_city_clients():
         params = []
         base_query = ""
 
+        # Função auxiliar interna para filtros de data
+        def add_date_filter(where_clause, params_list, date_col):
+            if start_date:
+                where_clause.append(f"DATE({date_col}) >= ?")
+                params_list.append(start_date)
+            if end_date:
+                where_clause.append(f"DATE({date_col}) <= ?")
+                params_list.append(end_date)
+
         if client_type == 'cancelado':
-            where_sql = "WHERE Cidade = ? AND Status_contrato = 'Inativo' AND Status_acesso = 'Desativado'"
+            where_clauses = ["Cidade = ?", "Status_contrato = 'Inativo'", "Status_acesso = 'Desativado'"]
             params.append(city)
-            if year: where_sql += " AND STRFTIME('%Y', Data_cancelamento) = ?"; params.append(year)
-            if month: where_sql += " AND STRFTIME('%m', Data_cancelamento) = ?"; params.append(f'{int(month):02d}')
+            add_date_filter(where_clauses, params, "Data_cancelamento")
+            
+            where_sql = "WHERE " + " AND ".join(where_clauses)
 
             base_query = f"""
                 SELECT Cliente, ID AS Contrato_ID, "Data_ativa_o", Data_cancelamento AS end_date
                 FROM Contratos {where_sql}
             """
         elif client_type == 'negativado':
-            where_cn = "WHERE Cidade = ? AND Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"
+            # Filtros para Contratos_Negativacao
+            where_cn_clauses = ["Cidade = ?", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
             params_cn = [city]
-            if year: where_cn += " AND STRFTIME('%Y', Data_negativa_o) = ?"; params_cn.append(year)
-            if month: where_cn += " AND STRFTIME('%m', Data_negativa_o) = ?"; params_cn.append(f'{int(month):02d}')
+            add_date_filter(where_cn_clauses, params_cn, "Data_negativa_o")
+            where_cn = "WHERE " + " AND ".join(where_cn_clauses)
 
-            where_c = "WHERE Cidade = ? AND Status_contrato = 'Negativado' AND Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"
+            # Filtros para Contratos (Status Negativado)
+            where_c_clauses = ["Cidade = ?", "Status_contrato = 'Negativado'", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
             params_c = [city]
-            if year: where_c += " AND STRFTIME('%Y', Data_cancelamento) = ?"; params_c.append(year)
-            if month: where_c += " AND STRFTIME('%m', Data_cancelamento) = ?"; params_c.append(f'{int(month):02d}')
+            add_date_filter(where_c_clauses, params_c, "Data_cancelamento")
+            where_c = "WHERE " + " AND ".join(where_c_clauses)
 
             base_query = f"""
                 SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_negativa_o as end_date FROM Contratos_Negativacao {where_cn}
@@ -367,7 +380,7 @@ def api_city_clients():
         else:
             abort(400, "Tipo de cliente inválido.")
 
-        # --- MODIFICADO: Query de subseleção para filtrar por relevância ---
+        # --- LÓGICA DE RELEVÂNCIA ---
         sub_query_with_relevance = f"""
             SELECT
                 sub.Cliente,
@@ -389,7 +402,6 @@ def api_city_clients():
             params.append(max_months)
         
         relevance_where_sql = " WHERE " + " AND ".join(relevance_where_clauses) if relevance_where_clauses else ""
-        # --- FIM DA MODIFICAÇÃO ---
         
         count_query = f"SELECT COUNT(*) FROM ({sub_query_with_relevance}) AS sub_rel {relevance_where_sql}"
         total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
