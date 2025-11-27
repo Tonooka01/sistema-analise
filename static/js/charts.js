@@ -1,11 +1,8 @@
 import * as state from './state.js';
-import * as utils from './utils.js'; // Importa utils para usar getSelectedChartType
+import * as utils from './utils.js';
 
 // Registra o plugin de datalabels para exibir valores nos gráficos.
 // Assume que 'Chart' e 'ChartDataLabels' estão globais (via CDN)
-// Se você estiver importando Chart.js via npm, descomente as linhas abaixo:
-// import Chart from 'chart.js/auto';
-// import ChartDataLabels from 'chartjs-plugin-datalabels';
 Chart.register(ChartDataLabels);
 
 /**
@@ -42,28 +39,25 @@ export function destroySpecificChart(chartId) {
     }
 }
 
-
 /**
  * Renderiza um gráfico Chart.js em um canvas especificado.
  * @param {string} canvasId - O ID do elemento <canvas>.
- * @param {string} selectedType - O tipo de gráfico (ex: 'bar_vertical', 'doughnut').
+ * @param {string} selectedType - O tipo de gráfico (ex: 'bar_vertical', 'doughnut', 'pie').
  * @param {string[]} labels - Os rótulos do eixo X ou das fatias.
  * @param {object[]} datasets - Os dados do gráfico.
  * @param {string} titleText - O título do gráfico.
  * @param {object} additionalOptions - Opções adicionais para o Chart.js.
  */
 export function renderChart(canvasId, selectedType, labels, datasets, titleText, additionalOptions = {}) {
-    // ---- ADICIONADO: Verificação da existência do Canvas ----
     const canvasElement = document.getElementById(canvasId);
     if (!canvasElement) {
         console.error(`Widget (canvas) para ${canvasId} não encontrado.`);
-        return; // Sai da função se o canvas não existe
+        return;
     }
-    // ---- FIM DA ADIÇÃO ----
 
     destroySpecificChart(canvasId); // Destrói gráfico anterior com mesmo ID
 
-    // Encontra o elemento de título associado (se existir)
+    // Encontra o elemento de título associado (se existir) e define o texto
     const titleElement = canvasElement.closest('.grid-stack-item-content')?.querySelector(`#${canvasId}Title`);
     if (titleElement) {
         titleElement.textContent = titleText;
@@ -72,14 +66,43 @@ export function renderChart(canvasId, selectedType, labels, datasets, titleText,
     const ctx = canvasElement.getContext('2d');
     let chartJsType;
 
-    // Cores padrão para os datasets
-    const defaultColors = ['#4299e1', '#667eea', '#805ad5', '#d53f8c', '#dd6b20', '#ed8936', '#ecc94b', '#48bb78', '#38b2ac', '#4fd1c5', '#a0aec0', '#4a5568'];
-    const processedDatasets = datasets.map((ds, index) => ({
-        ...ds,
-        backgroundColor: ds.backgroundColor || defaultColors[index % defaultColors.length] + 'B3', // Adiciona alpha para área
-        borderColor: ds.borderColor || defaultColors[index % defaultColors.length],
-        borderWidth: ds.type === 'line' || selectedType === 'line' ? 2 : 1 // Borda mais grossa para linhas
-    }));
+    // --- PALETA DE CORES EXPANDIDA (50 cores para evitar repetição) ---
+    const defaultColors = [
+        '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6', '#f97316', '#06b6d4',
+        '#84cc16', '#a855f7', '#fbbf24', '#f43f5e', '#22c55e', '#0ea5e9', '#d946ef', '#eab308', '#64748b', '#78716c',
+        '#1d4ed8', '#b91c1c', '#047857', '#b45309', '#6d28d9', '#be185d', '#4338ca', '#0f766e', '#c2410c', '#0e7490',
+        '#4d7c0f', '#7e22ce', '#a16207', '#9f1239', '#15803d', '#0369a1', '#1e40af', '#991b1b', '#065f46', '#92400e',
+        '#334155', '#94a3b8', '#f87171', '#fb923c', '#facc15', '#a3e635', '#4ade80', '#2dd4bf', '#38bdf8', '#818cf8'
+    ];
+
+    const processedDatasets = datasets.map((ds, index) => {
+        let bgColors;
+        
+        // CORREÇÃO: Se for Pizza ou Rosca, usamos o array de cores para colorir CADA FATIA DIFERENTE
+        if (selectedType === 'pie' || selectedType === 'doughnut') {
+            // Se tivermos mais dados que cores, repetimos a paleta para não faltar cor
+            if (labels.length > defaultColors.length) {
+                 const extendedColors = [];
+                 while (extendedColors.length < labels.length) {
+                     extendedColors.push(...defaultColors);
+                 }
+                 bgColors = extendedColors.map(c => c + 'E6');
+            } else {
+                 // Pega as cores necessárias
+                 bgColors = defaultColors.slice(0, labels.length).map(c => c + 'E6');
+            }
+        } else {
+            // Se for Barra ou Linha, usamos UMA cor única para a série inteira
+            bgColors = defaultColors[index % defaultColors.length] + 'B3';
+        }
+
+        return {
+            ...ds,
+            backgroundColor: ds.backgroundColor || bgColors,
+            borderColor: ds.borderColor || '#ffffff',
+            borderWidth: ds.type === 'line' || selectedType === 'line' ? 2 : 1
+        };
+    });
 
     // Opções padrão do Chart.js
     const options = {
@@ -89,23 +112,41 @@ export function renderChart(canvasId, selectedType, labels, datasets, titleText,
             title: { display: false }, // Título já está no widget
             legend: {
                 display: true,
-                position: 'top',
-                labels: { boxWidth: 12, padding: 15, font: { size: 11 } }
+                position: 'right', // Legenda à direita
+                labels: { 
+                    boxWidth: 12, 
+                    padding: 10, 
+                    font: { size: 11 }
+                    // REMOVIDO generateLabels customizado para que o Chart.js
+                    // use o padrão correto para PIE (listar fatias) e BAR (listar datasets)
+                }
             },
-            datalabels: { // Configuração padrão (geralmente para rosca/pizza)
-                display: (context) => context.dataset.data[context.dataIndex] > 0,
+            datalabels: {
+                display: (context) => {
+                    // Oculta label se valor for 0
+                    const value = context.dataset.data[context.dataIndex];
+                    return value > 0;
+                },
                 color: '#fff',
                 font: { weight: 'bold', size: 11 },
                 formatter: (value, context) => {
-                    // Formatação condicional baseada em 'formatterType'
+                    // Formatador 'percent_only': Mostra apenas a porcentagem (ex: "40%")
+                    if (additionalOptions.formatterType === 'percent_only') {
+                        let sum = context.chart.data.datasets[0].data.reduce((a, b) => a + (b || 0), 0);
+                        // Calcula porcentagem e formata sem casas decimais
+                        let percentage = sum > 0 ? ((value / sum) * 100).toFixed(0) + "%" : "0%";
+                        return percentage;
+                    }
+                    
+                    // Formatação padrão numérica com porcentagem
                     if (additionalOptions.formatterType === 'number') {
-                         // Calcula percentagem para rosca/pizza
                          let sum = context.chart.data.datasets[0].data.reduce((a, b) => a + (b || 0), 0);
                          let percentage = sum > 0 ? ((value / sum) * 100).toFixed(1) + "%" : "0%";
-                         return `${new Intl.NumberFormat('pt-BR').format(value)}\n(${percentage})`; // Mostra número e percentagem
+                         return `${new Intl.NumberFormat('pt-BR').format(value)}\n(${percentage})`;
                     }
+                    // Formatação para dias
                     if (additionalOptions.formatterType === 'days') {
-                        return `${value.toFixed(1)} dias`; // Formata como dias
+                        return `${value.toFixed(1)} dias`;
                     }
                     // Formatação padrão: Moeda (BRL) sem centavos
                     return new Intl.NumberFormat('pt-BR', {
@@ -119,7 +160,7 @@ export function renderChart(canvasId, selectedType, labels, datasets, titleText,
         ...additionalOptions
     };
 
-    // Remove a propriedade 'formatterType' se existir, pois não é uma opção nativa do Chart.js
+    // Remove a propriedade 'formatterType' se existir nas opções finais
     if (options.formatterType) {
         delete options.formatterType;
     }
@@ -127,21 +168,21 @@ export function renderChart(canvasId, selectedType, labels, datasets, titleText,
     // Adapta o tipo de gráfico e opções específicas
     if (selectedType === 'doughnut' || selectedType === 'pie') {
         chartJsType = selectedType;
-        options.indexAxis = undefined; // Rosca/Pizza não tem eixo
+        options.indexAxis = undefined;
     } else if (selectedType.startsWith('bar')) {
         chartJsType = 'bar';
         options.indexAxis = (selectedType === 'bar_horizontal') ? 'y' : 'x';
-        // Sobrescreve datalabels para barras (fora da barra)
+        
         options.plugins.datalabels = {
-            display: (context) => context.dataset.data[context.dataIndex] !== 0, // Mostra se não for zero
+            display: (context) => context.dataset.data[context.dataIndex] !== 0,
             anchor: 'end',
             align: selectedType === 'bar_horizontal' ? 'right' : 'end',
-            offset: selectedType === 'bar_horizontal' ? 5 : -5,
-            color: '#4a5568', // Cor escura para boa leitura
+            offset: 4,
+            color: '#4a5568',
             font: { weight: 'bold', size: 10 },
-            formatter: (value) => new Intl.NumberFormat('pt-BR').format(value) // Formato numérico simples
+            formatter: (value) => new Intl.NumberFormat('pt-BR').format(value)
         };
-        // Garante que escalas comecem em zero para barras
+        
         if (!options.scales) options.scales = {};
         if (options.indexAxis === 'x' && !options.scales.y) options.scales.y = { beginAtZero: true };
         if (options.indexAxis === 'y' && !options.scales.x) options.scales.x = { beginAtZero: true };
@@ -149,45 +190,33 @@ export function renderChart(canvasId, selectedType, labels, datasets, titleText,
     } else if (selectedType === 'line') {
         chartJsType = 'line';
         options.indexAxis = undefined;
-        // Opcional: desabilitar datalabels para linhas por padrão, a menos que especificado
         if (!additionalOptions.plugins?.datalabels?.display) {
              options.plugins.datalabels.display = false;
         }
     } else {
-        console.warn(`Tipo de gráfico desconhecido: ${selectedType}. Usando 'bar'.`);
-        chartJsType = 'bar'; // Fallback para barra vertical
+        chartJsType = 'bar';
         options.indexAxis = 'x';
     }
 
-    // Cria a instância do gráfico
     try {
         const chartInstance = new Chart(ctx, {
             type: chartJsType,
             data: { labels, datasets: processedDatasets },
             options
         });
-        // Armazena a instância no estado global
         state.addChart(canvasId, chartInstance);
     } catch (error) {
         console.error(`Erro ao criar gráfico ${canvasId}:`, error);
-        // Opcional: Mostrar mensagem de erro no lugar do gráfico
         if (titleElement) titleElement.textContent = `Erro ao renderizar ${titleText}`;
     }
 }
 
-
 /**
  * Cria e insere botões de rádio para seleção de tipo de gráfico em um contêiner.
- * @param {string} selectorId - O ID do contêiner onde os botões serão inseridos.
- * @param {object[]} options - Array de objetos com as opções {value, label, checked}.
  */
 export function populateChartTypeSelector(selectorId, options) {
     const container = document.getElementById(selectorId);
-    if (!container) {
-        console.warn(`Container para seletor de tipo de gráfico não encontrado: ${selectorId}`);
-        return;
-    }
-    // Gera o HTML para os botões de rádio
+    if (!container) return;
     container.innerHTML = options.map(opt => `
         <label class="inline-flex items-center ml-2">
             <input type="radio" class="form-radio text-blue-600 h-3 w-3" name="${selectorId.replace('TypeSelector', 'Type')}" value="${opt.value}" ${opt.checked ? 'checked' : ''}>
@@ -196,79 +225,46 @@ export function populateChartTypeSelector(selectorId, options) {
     `).join('');
 }
 
-
 /**
  * Adiciona um novo widget de gráfico à grade do GridStack e o renderiza.
- * Usado pela função renderChartsForCurrentCollection.
- * @param {string} id - O ID base para o widget e canvas (ex: 'mainChart1').
- * @param {string} defaultType - O tipo de gráfico padrão ('doughnut', 'bar_vertical', etc.).
- * @param {string[]} labels - Rótulos para o gráfico.
- * @param {object[]} datasets - Dados para o gráfico.
- * @param {string} title - O título do widget.
- * @param {object} renderOptions - Opções de renderização adicionais para o Chart.js.
- * @param {object[]} typeOptions - Opções para o seletor de tipo de gráfico [{value, label, checked}].
  */
 export function addAndRenderChartWidget(id, defaultType, labels, datasets, title, renderOptions = {}, typeOptions) {
      const grid = state.getGridStack();
-     if (!grid) {
-         console.error("addAndRenderChartWidget: Instância do GridStack não encontrada no estado.");
-         return;
-     }
+     if (!grid) return;
 
-     // Configurações padrão de layout dos widgets (podem ser sobrescritas pelo localStorage)
      const chartConfigs = {
-        mainChart1: { w: 6, h: 5, x: 0, y: 0, id: 'mainChart1' }, // Adiciona ID aqui
+        mainChart1: { w: 6, h: 5, x: 0, y: 0, id: 'mainChart1' },
         mainChart2: { w: 6, h: 5, x: 6, y: 0, id: 'mainChart2' },
         mainChart3: { w: 6, h: 5, x: 0, y: 5, id: 'mainChart3' },
         mainChart4: { w: 6, h: 5, x: 6, y: 5, id: 'mainChart4' },
         mainChart5: { w: 4, h: 6, x: 0, y: 10, id: 'mainChart5' },
         mainChart6: { w: 4, h: 6, x: 4, y: 10, id: 'mainChart6' },
         mainChart7: { w: 4, h: 6, x: 8, y: 10, id: 'mainChart7' },
-        // Adicione mais IDs se precisar de mais gráficos padrão
     };
 
-    // Tenta carregar o layout salvo do localStorage
     let savedLayout = [];
     try {
         const savedLayoutJson = localStorage.getItem(`layout_${state.getModalCurrentCollection()}`);
-        if (savedLayoutJson) {
-            savedLayout = JSON.parse(savedLayoutJson);
-        }
-    } catch (e) {
-        console.error("Erro ao carregar layout do localStorage:", e);
-    }
+        if (savedLayoutJson) savedLayout = JSON.parse(savedLayoutJson);
+    } catch (e) { }
 
-    // Encontra a configuração salva para este widget específico pelo ID
     const savedWidgetConfig = savedLayout.find(w => w.id === id);
-    // Usa a configuração salva OU a configuração padrão do chartConfigs OU um fallback genérico
-    const config = savedWidgetConfig || chartConfigs[id] || { w: 6, h: 5, x: 0, y: 0, id: id }; // Fallback com ID
+    const config = savedWidgetConfig || chartConfigs[id] || { w: 6, h: 5, x: 0, y: 0, id: id };
 
-    // Gera o HTML interno do widget
     const content = `
         <div class="grid-stack-item-content">
             <div class="chart-container-header">
                  <h3 id="${id}Title" class="chart-title"></h3>
-                 <!-- Container para os botões de tipo de gráfico -->
                  <div class="chart-type-options" id="${id.replace('mainChart', 'chart')}TypeSelector"></div>
             </div>
-            <!-- Container que mantém a proporção e permite overflow -->
             <div class="chart-canvas-container"><canvas id="${id}"></canvas></div>
         </div>`;
 
-    // Adiciona o widget ao GridStack
-    grid.addWidget({ ...config, content: content }); // Passa a configuração completa
+    grid.addWidget({ ...config, content: content });
 
-    // Popula o seletor de tipo de gráfico (se houver opções)
     if (typeOptions && typeOptions.length > 0) {
         populateChartTypeSelector(`${id.replace('mainChart', 'chart')}TypeSelector`, typeOptions);
-    } else {
-        // Opcional: Oculta ou remove o container do seletor se não houver opções
-        const selectorContainer = document.getElementById(`${id.replace('mainChart', 'chart')}TypeSelector`);
-        if (selectorContainer) selectorContainer.innerHTML = ''; // Limpa se não houver opções
     }
 
-    // Renderiza o gráfico dentro do widget recém-adicionado
-    // Usa utils.getSelectedChartType para obter o tipo selecionado
     renderChart(id, utils.getSelectedChartType(`${id.replace('mainChart', 'chart')}Type`, defaultType), labels, datasets, title, renderOptions);
 }
-

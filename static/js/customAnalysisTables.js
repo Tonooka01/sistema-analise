@@ -1,6 +1,7 @@
 import * as state from './state.js';
 import * as dom from './dom.js';
 import * as utils from './utils.js';
+import { renderChart } from './charts.js';
 
 // --- Lógica para Análises Personalizadas (Tabelas) ---
 
@@ -57,17 +58,18 @@ export async function populateContractStatusFilters() {
 
 /**
  * Renderiza uma tabela de dados personalizada no painel principal, incluindo paginação.
+ * @param {object} result - Objeto de resposta da API (data, total_rows).
+ * @param {string} title - Título da tabela.
+ * @param {array} columns - Definição das colunas.
+ * @param {string} extraContentHtml - (Opcional) HTML extra para inserir ACIMA da tabela (ex: gráficos).
  */
-function renderCustomTable(result, title, columns) {
+function renderCustomTable(result, title, columns, extraContentHtml = '') {
     const { data, total_rows } = result;
     state.setCustomAnalysisState({ totalRows: total_rows });
 
     const currentState = state.getCustomAnalysisState();
 
-    if (!dom.dashboardContentDiv) {
-        console.error("renderCustomTable: dashboardContentDiv não encontrado.");
-        return;
-    }
+    if (!dom.dashboardContentDiv) return;
 
     const titleHtml = `<h2 class="text-2xl font-semibold mb-4 text-gray-800">${title}</h2>`;
 
@@ -89,7 +91,8 @@ function renderCustomTable(result, title, columns) {
         `;
     }
 
-    dom.dashboardContentDiv.innerHTML = titleHtml + tableHtml + paginationHtml;
+    // Renderiza: Conteúdo Extra (Gráficos) + Título + Tabela + Paginação
+    dom.dashboardContentDiv.innerHTML = extraContentHtml + titleHtml + tableHtml + paginationHtml;
 
     if (totalPages > 1) {
         renderCustomAnalysisPagination();
@@ -136,7 +139,6 @@ export async function fetchAndRenderLatePaymentsAnalysis(searchTerm = '', page =
         if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar atrasos.'));
         const result = await response.json();
         
-        // --- PROTEÇÃO DE CORRIDA ---
         if (state.getCustomAnalysisState().currentAnalysis !== 'atrasos_e_nao_pagos') return;
 
         renderCustomTable(result, 'Análise de Atrasos e Faturas Não Pagas', [
@@ -146,7 +148,6 @@ export async function fetchAndRenderLatePaymentsAnalysis(searchTerm = '', page =
             { header: 'Faturas Vencidas (Não Pagas)', render: r => r.Faturas_Nao_Pagas > 0 ? `<span class="invoice-detail-trigger cursor-pointer text-red-600 font-bold hover:underline" data-type="faturas_nao_pagas" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Faturas_Nao_Pagas}</span>` : r.Faturas_Nao_Pagas }
         ]);
     } catch (error) {
-        // Só mostra erro se ainda estiver na mesma aba
         if (state.getCustomAnalysisState().currentAnalysis === 'atrasos_e_nao_pagos') utils.showError(error.message);
     } finally {
         if (state.getCustomAnalysisState().currentAnalysis === 'atrasos_e_nao_pagos') utils.showLoading(false);
@@ -185,7 +186,6 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
         if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar saúde financeira.'));
         const result = await response.json();
 
-        // --- PROTEÇÃO DE CORRIDA ---
         if (state.getCustomAnalysisState().currentAnalysis !== 'saude_financeira') return;
 
         renderCustomTable(result, title, [
@@ -210,6 +210,7 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     }
 }
 
+// *** FUNÇÃO ATUALIZADA: QUANTIDADE NO TÍTULO E LEGENDA ***
 export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false) {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'cancellations', currentSearchTerm: searchTerm });
@@ -231,8 +232,36 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
         if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar cancelamentos.'));
         const result = await response.json();
         
-        // --- PROTEÇÃO DE CORRIDA ---
         if (state.getCustomAnalysisState().currentAnalysis !== 'cancellations') return;
+
+        // Limpa o conteúdo principal antes de renderizar
+        if (dom.dashboardContentDiv) dom.dashboardContentDiv.innerHTML = '';
+
+        // --- RENDERIZAÇÃO DOS GRÁFICOS (MOTIVO E OBS) ---
+        let chartsHtml = '';
+        if (result.charts) {
+            // Calcula os totais para exibir no título do card
+            const totalMotivos = result.charts.motivo ? result.charts.motivo.reduce((acc, curr) => acc + (curr.Count || 0), 0) : 0;
+            const totalObs = result.charts.obs ? result.charts.obs.reduce((acc, curr) => acc + (curr.Count || 0), 0) : 0;
+
+            // Altura ajustada para 500px para acomodar a lista completa de legendas
+            chartsHtml = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Motivos de Cancelamento: ${totalMotivos}</h3>
+                        <div class="chart-canvas-container" style="height: 500px;">
+                            <canvas id="motivoCancelamentoChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Observações de Cancelamento: ${totalObs}</h3>
+                        <div class="chart-canvas-container" style="height: 500px;">
+                            <canvas id="obsCancelamentoChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
 
         const arrowIcon = sortAsc ? '↓' : '↑';
         const headerHtml = `<div class="flex items-center gap-1 cursor-pointer select-none sort-permanence-header hover:text-blue-600 transition-colors" title="Clique para ordenar">Permanência (Meses) <span class="text-lg font-bold leading-none">${arrowIcon}</span></div>`;
@@ -243,7 +272,36 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
             { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' },
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
-        renderCustomTable(result, 'Análise de Cancelamentos por Contato Técnico', columns);
+        
+        // Passa o HTML dos gráficos como conteúdo extra
+        renderCustomTable(result, 'Análise de Cancelamentos por Contato Técnico', columns, chartsHtml);
+
+        // --- INICIALIZAÇÃO DOS GRÁFICOS ---
+        if (result.charts) {
+            setTimeout(() => {
+                if (result.charts.motivo && result.charts.motivo.length > 0) {
+                    renderChart('motivoCancelamentoChart', 'pie', 
+                        // LEGENDAS COM CONTAGEM: Ex: "Financeiro (15)"
+                        result.charts.motivo.map(d => `${d.Motivo_cancelamento} (${d.Count})`), 
+                        [{ data: result.charts.motivo.map(d => d.Count) }], 
+                        '', { formatterType: 'percent_only' }
+                    );
+                } else if (document.getElementById('motivoCancelamentoChart')) {
+                    document.getElementById('motivoCancelamentoChart').parentNode.innerHTML = '<p class="text-center text-gray-500 mt-10">Sem dados de motivo.</p>';
+                }
+
+                if (result.charts.obs && result.charts.obs.length > 0) {
+                    renderChart('obsCancelamentoChart', 'pie', 
+                        // LEGENDAS COM CONTAGEM: Ex: "Mudança (5)"
+                        result.charts.obs.map(d => `${d.Obs_cancelamento} (${d.Count})`), 
+                        [{ data: result.charts.obs.map(d => d.Count) }], 
+                        '', { formatterType: 'percent_only' }
+                    );
+                } else if (document.getElementById('obsCancelamentoChart')) {
+                    document.getElementById('obsCancelamentoChart').parentNode.innerHTML = '<p class="text-center text-gray-500 mt-10">Sem dados de observação.</p>';
+                }
+            }, 50);
+        }
 
         if (dom.viewTableBtn) {
             dom.viewTableBtn.classList.remove('hidden');
@@ -280,7 +338,6 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
         if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar negativações.'));
         const result = await response.json();
 
-        // --- PROTEÇÃO DE CORRIDA ---
         if (state.getCustomAnalysisState().currentAnalysis !== 'negativacao') return;
 
         const arrowIcon = sortAsc ? '↓' : '↑';
@@ -308,9 +365,6 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
     }
 } 
 
-/**
- * Busca e renderiza o Comparativo Diário.
- */
 export async function fetchAndRenderDailyComparison() {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentAnalysis: 'comparativo_diario', currentPage: 1 });
@@ -323,7 +377,6 @@ export async function fetchAndRenderDailyComparison() {
         
         const result = await response.json();
         
-        // --- PROTEÇÃO DE CORRIDA ---
         if (state.getCustomAnalysisState().currentAnalysis !== 'comparativo_diario') return;
 
         const data = result.liquido; 
