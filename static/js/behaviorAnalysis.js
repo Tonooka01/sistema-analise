@@ -72,28 +72,28 @@ async function renderComplaintPatternTab() {
     const tabContent = document.getElementById('tab-content-reclamacoes');
     if (!tabContent) return;
 
-    // Estrutura HTML da aba
-    // Importante: Definimos IDs únicos para esta aba
+    // Estrutura HTML da aba com botão de filtro
     tabContent.innerHTML = `
-        <div class="flex flex-wrap justify-center gap-4 mb-6">
+        <div class="flex flex-wrap justify-center gap-4 mb-6 items-end">
             <div class="flex flex-col items-center">
                 <label for="complaintCityFilter" class="text-gray-700 font-medium mb-1 text-sm">Filtrar por Cidade:</label>
                 <select id="complaintCityFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-w-[200px]">
                     <option value="">Todas as Cidades</option>
                 </select>
             </div>
+            <button id="btnFilterComplaint" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
         </div>
         <div id="complaint-summary-cards" class="summary-cards-container mb-4" style="border-bottom: none; padding-bottom: 0;"></div>
         <!-- Área específica para o GridStack desta aba -->
         <div id="complaint-charts-area" class="grid-stack"></div> 
     `;
 
-    // Adiciona o listener ao filtro DEPOIS de criar o elemento
+    // Adiciona o listener ao botão DEPOIS de criar o elemento
+    const btnFilter = tabContent.querySelector('#btnFilterComplaint');
     const cityFilter = tabContent.querySelector('#complaintCityFilter');
-    if (cityFilter) {
-        cityFilter.addEventListener('change', () => fetchBehaviorData_Complaints(cityFilter.value));
-    } else {
-         console.error("Filtro de cidade para reclamações não encontrado após renderização.");
+    
+    if (btnFilter) {
+        btnFilter.addEventListener('click', () => fetchBehaviorData_Complaints(cityFilter ? cityFilter.value : ''));
     }
 
     // Carrega os dados iniciais (todas as cidades)
@@ -130,7 +130,7 @@ async function fetchBehaviorData_Complaints(city = '') {
         }
         const data = await response.json();
 
-        // Popula o filtro de cidade (apenas se estiver vazio ou precisando de atualização, mas aqui repopulamos para garantir)
+        // Popula o filtro de cidade
         const cityFilter = document.getElementById('complaintCityFilter');
         if (cityFilter && data.cities && cityFilter.options.length <= 1) {
              utils.populateCityFilter(cityFilter, data.cities, city);
@@ -210,9 +210,9 @@ function renderPredictiveChurnTab() {
     const tabContent = document.getElementById('tab-content-preditiva');
     if (!tabContent) return;
 
-    // Estrutura HTML da aba com filtros
+    // Estrutura HTML da aba com filtros e botão
     tabContent.innerHTML = `
-        <div id="predictive-churn-filters" class="flex flex-wrap justify-center items-center gap-4 my-4">
+        <div id="predictive-churn-filters" class="flex flex-wrap justify-center items-end gap-4 my-4">
             <div>
                 <label for="predictiveContractStatusFilter" class="text-gray-700 font-medium mr-2 text-sm">Status Contrato:</label>
                 <select id="predictiveContractStatusFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
@@ -226,44 +226,37 @@ function renderPredictiveChurnTab() {
                     <option value="">Todos</option>
                 </select>
             </div>
+            <button id="btnFilterPredictive" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
         </div>
         <div id="predictive-churn-table-container"></div> <!-- Container para a tabela e paginação -->
     `;
 
-    // Popula o filtro de Status de Acesso (reutiliza a função principal se já populou)
+    // Popula o filtro de Status de Acesso
     const mainAccessFilter = dom.accessStatusFilter; // Pega do DOM principal
     const predictiveAccessFilter = tabContent.querySelector('#predictiveAccessStatusFilter');
 
     const populatePredictiveFilter = () => {
          if (mainAccessFilter && predictiveAccessFilter) {
-             // Copia as opções do filtro principal
              predictiveAccessFilter.innerHTML = mainAccessFilter.innerHTML;
-             // Garante que "Todos" seja a primeira opção e selecionada
              if (predictiveAccessFilter.options[0]?.value !== '') {
                   const todosOption = document.createElement('option');
                   todosOption.value = '';
                   todosOption.textContent = 'Todos';
                   predictiveAccessFilter.insertBefore(todosOption, predictiveAccessFilter.firstChild);
              }
-             predictiveAccessFilter.value = ''; // Seleciona "Todos" por padrão
-         } else {
-              // Se não conseguir copiar, tenta popular via função importada se necessário ou deixa quieto
+             predictiveAccessFilter.value = '';
          }
     };
 
-    // Tenta popular imediatamente. Se falhar (porque o filtro principal ainda não foi populado),
-    // chama populateContractStatusFilters e tenta novamente.
     if (mainAccessFilter && mainAccessFilter.options.length > 1) {
         populatePredictiveFilter();
     } else {
         populateContractStatusFilters().then(populatePredictiveFilter);
     }
 
-
-    // Adiciona listeners aos filtros desta aba
-    const predictiveContractFilter = tabContent.querySelector('#predictiveContractStatusFilter');
-    if (predictiveContractFilter) predictiveContractFilter.addEventListener('change', () => fetchAndRenderPredictiveChurnTable(1));
-    if (predictiveAccessFilter) predictiveAccessFilter.addEventListener('change', () => fetchAndRenderPredictiveChurnTable(1));
+    // Adiciona listener ao botão
+    const btnFilter = tabContent.querySelector('#btnFilterPredictive');
+    if (btnFilter) btnFilter.addEventListener('click', () => fetchAndRenderPredictiveChurnTable(1));
 
     // Carrega a tabela inicial
     fetchAndRenderPredictiveChurnTable(1);

@@ -283,57 +283,38 @@ export function initializeEventListeners() {
          }
     });
 
-    // --- Listeners para Filtros Específicos das Análises Personalizadas ---
+    // --- LISTENER DO BOTÃO FILTRAR GERAL (Coleções Principais) ---
+    dom.btnFilterGeneral?.addEventListener('click', () => {
+        const collection = state.getModalCurrentCollection();
+        if (collection) {
+            const start = dom.generalStartDate?.value || '';
+            const end = dom.generalEndDate?.value || '';
+            const city = dom.cityFilterSelect?.value || '';
+            analysis.fetchAndRenderMainAnalysis(collection, start, end, city);
+        }
+    });
+
+    // --- LISTENERS DOS BOTÕES DE FILTRO PERSONALIZADOS (Novos) ---
+    // Todos chamam handleCustomAnalysisChange(1), que relê os inputs e dispara a busca
+    const customFilterButtons = [
+        dom.btnFilterFaturamento, 
+        dom.btnFilterSeller, 
+        dom.btnFilterActivationSeller,
+        dom.btnFilterCohort, 
+        dom.btnFilterCityCancellation, 
+        dom.btnFilterNeighborhood,
+        dom.btnFilterEquipment, 
+        dom.btnFilterDailyEvolution, 
+        dom.btnFilterLatePayment
+    ];
+
+    customFilterButtons.forEach(btn => {
+        btn?.addEventListener('click', () => handleCustomAnalysisChange(1));
+    });
 
     dom.applyClientSearchBtn?.addEventListener('click', () => handleCustomAnalysisChange(1));
     dom.clientSearchInput?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleCustomAnalysisChange(1);
-    });
-
-    const filterElementsToWatch = [
-        dom.generalStartDate, dom.generalEndDate, dom.cityFilterSelect,
-        dom.contractStatusFilter, 
-        dom.accessStatusContainer, // Vigia o container de checkboxes (bubbling)
-        dom.sellerStartDate, dom.sellerEndDate,
-        dom.cityCancellationStartDate, dom.cityCancellationEndDate,
-        dom.neighborhoodAnalysisCityFilter, dom.neighborhoodAnalysisStartDate, dom.neighborhoodAnalysisEndDate,
-        dom.equipmentAnalysisStartDate, dom.equipmentAnalysisEndDate, dom.equipmentAnalysisCityFilter,
-        dom.dailyEvolutionStartDate, dom.dailyEvolutionEndDate,
-        
-        dom.relevanceFilterSearch,
-        // dom.sortPermanenceAsc, // REMOVIDO - Não existe mais como checkbox
-        dom.relevanceFilterCity,
-        dom.relevanceFilterNeighborhood,
-        dom.relevanceFilterEquipment,
-
-        dom.activationSellerCityFilter, dom.activationSellerStartDate, dom.activationSellerEndDate,
-        dom.cohortCityFilter, dom.cohortStartDate, dom.cohortEndDate,
-        dom.faturamentoStartDate, dom.faturamentoEndDate, dom.faturamentoCityFilter,
-
-        dom.latePaymentStartDate, dom.latePaymentEndDate
-    ];
-
-    filterElementsToWatch.forEach(el => {
-        if (el) {
-            el.addEventListener('change', () => {
-                const currentAnalysisState = state.getCustomAnalysisState();
-                const currentAnalysis = currentAnalysisState ? currentAnalysisState.currentAnalysis : null;
-                const mainCollection = state.getModalCurrentCollection();
-                const customSelectorValue = dom.customAnalysisSelector ? dom.customAnalysisSelector.value : null;
-
-                // --- BLOQUEIO ATUALIZADO: Se for Evolução OU Saúde Financeira, NÃO recarrega ao mudar status ---
-                if ((currentAnalysis === 'active_clients_evolution' || currentAnalysis === 'saude_financeira') && 
-                    (el.id === 'contractStatusFilter' || el.id === 'accessStatusContainer')) {
-                    return; 
-                }
-
-                if (customSelectorValue && currentAnalysis) {
-                    handleCustomAnalysisChange(1);
-                } else if (mainCollection && ['generalStartDate', 'generalEndDate', 'cityFilter'].includes(el.id)) {
-                    analysis.fetchAndRenderMainAnalysis(mainCollection, dom.generalStartDate?.value || '', dom.generalEndDate?.value || '', dom.cityFilterSelect?.value || '');
-                }
-            });
-        }
     });
 
 
