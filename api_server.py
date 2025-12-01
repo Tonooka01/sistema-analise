@@ -1,7 +1,6 @@
 import sqlite3
 import os
 from datetime import datetime
-# Importação completa com jsonify incluído
 from flask import Flask, render_template, redirect, url_for, request, flash, abort, jsonify
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -9,37 +8,37 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-# --- Importação dos Blueprints (Módulos de Rotas) ---
+# --- Importação dos Blueprints Originais (Não Refatorados) ---
 from routes_summary import summary_bp
-from routes_details import details_bp
 from routes_filters import filters_bp
 from routes_behavior import behavior_bp
 from routes_comparison import comparison_bp
 
-# Novos Blueprints Refatorados (Substituindo routes_custom_analysis)
+# --- Importação dos Novos Blueprints de ANÁLISE (Substituem routes_custom_analysis) ---
 from routes_analysis_finance import finance_bp
 from routes_analysis_churn import churn_bp
 from routes_analysis_sales import sales_bp
 from routes_analysis_tech import tech_bp
 
+# --- Importação dos Novos Blueprints de DETALHES (Substituem routes_details) ---
+from routes_details_finance import details_finance_bp
+from routes_details_tech import details_tech_bp
+from routes_details_sales import details_sales_bp
+from routes_details_churn import details_churn_bp
+
 app = Flask(__name__)
 
 # --- Configurações de Segurança ---
-# Chave secreta para sessões (em produção, use variável de ambiente ou mantenha esta protegida)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'sua_chave_secreta_super_segura_troque_isso_em_producao')
-
-# Configuração de Cookies (Essencial para HTTPS/Tailscale)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SECURE'] = True  # True para HTTPS (Tailscale/Cloudflare)
+app.config['SESSION_COOKIE_SECURE'] = True 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 CORS(app)
 
-# Caminho do Banco de Dados
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'analise_dados.db')
 
 # --- Configuração do Limitador (Rate Limiting) ---
-# Protege contra ataques de força bruta no login
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -70,12 +69,10 @@ class User(UserMixin):
 def load_user(user_id):
     conn = get_db_connection()
     curr = conn.cursor()
-    # Busca dados do usuário, incluindo status de bloqueio
     curr.execute("SELECT * FROM Users WHERE id = ?", (user_id,))
     user_data = curr.fetchone()
     conn.close()
     if user_data:
-        # Garante compatibilidade se a coluna não existir (migração)
         keys = user_data.keys()
         is_active = bool(user_data['is_active']) if 'is_active' in keys else True
         return User(id=user_data['id'], username=user_data['username'], 
@@ -83,7 +80,6 @@ def load_user(user_id):
     return None
 
 # --- Funções de Banco de Dados ---
-
 def get_db_connection():
     """Conecta ao banco SQLite e retorna linhas como dicionários"""
     conn = sqlite3.connect(DATABASE)
@@ -97,7 +93,7 @@ def init_db_users():
     """Inicializa as tabelas de sistema (Users, AccessLogs, Settings) e faz migrações"""
     conn = get_db_connection()
     try:
-        # 1. Tabelas Básicas
+        # Tabelas Básicas
         conn.execute('''
             CREATE TABLE IF NOT EXISTS Users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,7 +118,7 @@ def init_db_users():
             )
         ''')
 
-        # 2. Migrations (Adicionar colunas novas se faltarem na tabela Users)
+        # Migrations
         cursor = conn.cursor()
         cursor.execute("PRAGMA table_info(Users)")
         columns = [info[1] for info in cursor.fetchall()]
@@ -135,17 +131,14 @@ def init_db_users():
             print("Atualizando tabela Users: Adicionando 'last_seen'...")
             conn.execute("ALTER TABLE Users ADD COLUMN last_seen DATETIME")
 
-        # 3. Dados Padrão
-        # Configuração de inatividade padrão (30 min)
+        # Dados Padrão
         default_timeout = conn.execute("SELECT value FROM Settings WHERE key = 'inactivity_timeout_minutes'").fetchone()
         if not default_timeout:
             conn.execute("INSERT INTO Settings (key, value) VALUES (?, ?)", ('inactivity_timeout_minutes', '30'))
 
-        # Usuário Admin padrão
         admin = conn.execute("SELECT * FROM Users WHERE username = 'admin'").fetchone()
         if not admin:
             hashed_pw = generate_password_hash('netvale01', method='scrypt')
-            # Verifica se a coluna is_active já existe para o insert correto
             if 'is_active' in columns:
                  conn.execute("INSERT INTO Users (username, password_hash, is_active) VALUES (?, ?, 1)", ('admin', hashed_pw))
             else:
@@ -159,10 +152,8 @@ def init_db_users():
         conn.close()
 
 # --- Middleware (Logs e Monitoramento) ---
-
 @app.after_request
 def log_request(response):
-    """Intercepta requisições para logar acesso e atualizar 'visto por último'"""
     if request.path.startswith('/static') or request.path.startswith('/favicon.ico'):
         return response
 
@@ -171,19 +162,17 @@ def log_request(response):
 
     if current_user.is_authenticated:
         username = current_user.username
-        # Atualiza last_seen do usuário
         try:
             conn = get_db_connection()
             conn.execute("UPDATE Users SET last_seen = ? WHERE id = ?", (timestamp, current_user.id))
             conn.commit()
             conn.close()
         except:
-            pass # Falha silenciosa para não impactar performance
+            pass
 
     path = request.path
     method = request.method
     
-    # Tenta pegar o IP real (atrás do Cloudflare ou Proxy)
     if request.headers.get('CF-Connecting-IP'):
         ip = request.headers.get('CF-Connecting-IP')
     elif request.headers.getlist("X-Forwarded-For"):
@@ -207,7 +196,7 @@ def log_request(response):
 # --- Rotas de Autenticação ---
 
 @app.route('/login', methods=['GET', 'POST'])
-@limiter.limit("5 per minute") # Proteção contra força bruta
+@limiter.limit("5 per minute")
 def login():
     if request.method == 'POST':
         username = request.form['username']
@@ -245,7 +234,6 @@ def logout():
 @app.route('/new-user', methods=['POST'])
 @login_required
 def create_user():
-    """Cria novo usuário (Apenas Admin) - Chamado pelo Modal"""
     if current_user.username != 'admin':
          abort(403)
 
@@ -255,7 +243,6 @@ def create_user():
     conn = get_db_connection()
     try:
         hashed_pw = generate_password_hash(password, method='scrypt')
-        # Cria usuário ativo por padrão
         conn.execute("INSERT INTO Users (username, password_hash, is_active) VALUES (?, ?, 1)", (username, hashed_pw))
         conn.commit()
         flash('Usuário criado com sucesso!')
@@ -268,12 +255,11 @@ def create_user():
             
     return redirect(url_for('index'))
 
-# --- Rotas da API Administrativa (Configurações e Usuários) ---
+# --- Rotas da API Administrativa ---
 
 @app.route('/api/admin/settings', methods=['GET', 'POST'])
 @login_required
 def admin_settings():
-    """Gerencia configurações globais (ex: tempo de inatividade)"""
     if current_user.username != 'admin': return jsonify({"error": "Acesso negado"}), 403
 
     conn = get_db_connection()
@@ -289,7 +275,6 @@ def admin_settings():
         conn.close()
         return jsonify({"error": "Valor inválido"}), 400
     
-    # GET
     timeout = conn.execute("SELECT value FROM Settings WHERE key = 'inactivity_timeout_minutes'").fetchone()
     conn.close()
     return jsonify({"timeout_minutes": timeout['value'] if timeout else '30'})
@@ -297,7 +282,6 @@ def admin_settings():
 @app.route('/api/admin/users', methods=['GET'])
 @login_required
 def get_users():
-    """Lista todos os usuários e seus status para o painel"""
     if current_user.username != 'admin': return jsonify({"error": "Acesso negado"}), 403
     
     conn = get_db_connection()
@@ -312,7 +296,6 @@ def get_users():
         if u['last_seen']:
             try:
                 last_seen_dt = datetime.strptime(u['last_seen'], '%Y-%m-%d %H:%M:%S')
-                # Considera online se visto nos últimos 5 minutos
                 if (now - last_seen_dt).total_seconds() < 300:
                     is_online = True
             except:
@@ -331,7 +314,6 @@ def get_users():
 @app.route('/api/admin/users/toggle', methods=['POST'])
 @login_required
 def toggle_user():
-    """Ativa ou Desativa um usuário"""
     if current_user.username != 'admin': return jsonify({"error": "Acesso negado"}), 403
     
     user_id = request.json.get('user_id')
@@ -340,7 +322,6 @@ def toggle_user():
         return jsonify({"error": "Você não pode desativar a si mesmo!"}), 400
         
     conn = get_db_connection()
-    # Inverte o status atual (True -> False ou False -> True)
     conn.execute("UPDATE Users SET is_active = NOT is_active WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
@@ -350,7 +331,6 @@ def toggle_user():
 @app.route('/admin/logs')
 @login_required
 def view_logs():
-    """Página de visualização de Logs"""
     if current_user.username != 'admin': abort(403)
 
     date_filter = request.args.get('date')
@@ -372,38 +352,41 @@ def view_logs():
 def index():
     return render_template('index.html')
 
-# Proteção Global para as APIs de dados
 @app.before_request
 def require_login_for_api():
     if request.path.startswith('/api') and not current_user.is_authenticated:
         return jsonify({"error": "Acesso não autorizado"}), 401
 
 # --- Registro dos Blueprints (Módulos) ---
+
 app.register_blueprint(summary_bp, url_prefix='/api')
 
-# --- SUBSTIUIÇÃO DO ANTIGO routes_custom_analysis ---
-# Registramos os 4 novos módulos com o MESMO prefixo para manter compatibilidade com o frontend
+# Análises Customizadas (Financeiro, Churn, Vendas, Técnico)
+# Mantém o prefixo antigo '/api/custom_analysis' para compatibilidade total com o frontend
 app.register_blueprint(finance_bp, url_prefix='/api/custom_analysis')
 app.register_blueprint(churn_bp, url_prefix='/api/custom_analysis')
 app.register_blueprint(sales_bp, url_prefix='/api/custom_analysis')
 app.register_blueprint(tech_bp, url_prefix='/api/custom_analysis')
-# ----------------------------------------------------
 
-app.register_blueprint(details_bp, url_prefix='/api/details')
+# Detalhes (Financeiro, Técnico, Vendas, Churn)
+# Mantém o prefixo antigo '/api/details' para compatibilidade total com o frontend
+app.register_blueprint(details_finance_bp, url_prefix='/api/details')
+app.register_blueprint(details_tech_bp, url_prefix='/api/details')
+app.register_blueprint(details_sales_bp, url_prefix='/api/details')
+app.register_blueprint(details_churn_bp, url_prefix='/api/details')
+
 app.register_blueprint(filters_bp, url_prefix='/api/filters')
 app.register_blueprint(behavior_bp, url_prefix='/api/behavior')
 app.register_blueprint(comparison_bp, url_prefix='/api/comparison')
 
 # --- Inicialização ---
 if __name__ == '__main__':
-    # Garante a estrutura de pastas
     if not os.path.exists('templates'): os.makedirs('templates')
     static_js = os.path.join('static', 'js')
     static_css = os.path.join('static', 'css')
     if not os.path.exists(static_js): os.makedirs(static_js)
     if not os.path.exists(static_css): os.makedirs(static_css)
 
-    # Inicializa/Atualiza o banco de dados de sistema
     init_db_users()
 
     print("Servidor Seguro iniciado na porta 5000...")
