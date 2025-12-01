@@ -9,13 +9,19 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-# Importa os blueprints (suas rotas de análise)
+# --- Importação dos Blueprints (Módulos de Rotas) ---
 from routes_summary import summary_bp
-from routes_custom_analysis import custom_analysis_bp
 from routes_details import details_bp
 from routes_filters import filters_bp
 from routes_behavior import behavior_bp
 from routes_comparison import comparison_bp
+
+# Novos Blueprints Refatorados (Substituindo routes_custom_analysis)
+from routes_analysis_finance import finance_bp
+from routes_analysis_churn import churn_bp
+from routes_analysis_sales import sales_bp
+from routes_analysis_tech import tech_bp
+
 app = Flask(__name__)
 
 # --- Configurações de Segurança ---
@@ -374,7 +380,15 @@ def require_login_for_api():
 
 # --- Registro dos Blueprints (Módulos) ---
 app.register_blueprint(summary_bp, url_prefix='/api')
-app.register_blueprint(custom_analysis_bp, url_prefix='/api/custom_analysis')
+
+# --- SUBSTIUIÇÃO DO ANTIGO routes_custom_analysis ---
+# Registramos os 4 novos módulos com o MESMO prefixo para manter compatibilidade com o frontend
+app.register_blueprint(finance_bp, url_prefix='/api/custom_analysis')
+app.register_blueprint(churn_bp, url_prefix='/api/custom_analysis')
+app.register_blueprint(sales_bp, url_prefix='/api/custom_analysis')
+app.register_blueprint(tech_bp, url_prefix='/api/custom_analysis')
+# ----------------------------------------------------
+
 app.register_blueprint(details_bp, url_prefix='/api/details')
 app.register_blueprint(filters_bp, url_prefix='/api/filters')
 app.register_blueprint(behavior_bp, url_prefix='/api/behavior')
