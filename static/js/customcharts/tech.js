@@ -3,7 +3,7 @@ import * as dom from '../dom.js';
 import * as utils from '../utils.js';
 import { renderChart, destroyAllMainCharts } from '../charts.js';
 import { getGridStack } from '../state.js';
-import * as modals from '../modals.js'; // Importante para os cliques nos gráficos e links
+import * as modals from '../modals.js'; 
 
 // --- Helper local para configurar a área de gráficos ---
 function setupChartsArea() {
@@ -33,7 +33,6 @@ export async function fetchAndRenderEquipmentByOlt(city = '') {
         if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar equipamentos.'));
         const result = await response.json();
 
-        // --- PROTEÇÃO DE CORRIDA ---
         if (state.getCustomAnalysisState().currentAnalysis !== 'equipment_by_olt') return;
 
         if (dom.equipmentAnalysisCityFilter && result.cities) utils.populateCityFilter(dom.equipmentAnalysisCityFilter, result.cities, city);
@@ -77,7 +76,7 @@ export async function fetchAndRenderEquipmentByOlt(city = '') {
 
 /**
  * Busca e renderiza a análise de "Evolução Diária por Cidade".
- * ATUALIZADO: Agora inclui tabela detalhada abaixo dos gráficos.
+ * ATUALIZADO: Interação melhorada no clique do gráfico.
  */
 export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '') {
     utils.showLoading(true);
@@ -85,9 +84,6 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
 
     if (!startDate || !endDate) {
         utils.showLoading(false);
-        // --- PROTEÇÃO DE CORRIDA ---
-        if (state.getCustomAnalysisState().currentAnalysis !== 'daily_evolution_by_city') return;
-
         if (dom.dashboardContentDiv) dom.dashboardContentDiv.innerHTML = '';
         if (dom.dailyEvolutionFiltersDiv && !dom.dashboardContentDiv.contains(dom.dailyEvolutionFiltersDiv)) {
              dom.dashboardContentDiv.appendChild(dom.dailyEvolutionFiltersDiv);
@@ -110,7 +106,6 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
         if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar evolução diária.'));
         const result = await response.json();
 
-        // --- PROTEÇÃO DE CORRIDA ---
         if (state.getCustomAnalysisState().currentAnalysis !== 'daily_evolution_by_city') return;
 
         if (!dom.dashboardContentDiv) return;
@@ -119,11 +114,9 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
              dom.dashboardContentDiv.appendChild(dom.dailyEvolutionFiltersDiv);
         }
         
-        // 1. Configura Área de Gráficos (GridStack)
         setupChartsArea();
         const grid = getGridStack();
 
-        // 2. Renderiza os Gráficos
         if (result.data && Object.keys(result.data).length > 0) {
             let x = 0, y = 0, col = 0;
             const colsPerRow = 2;
@@ -136,8 +129,8 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
                 dailyData.sort((a, b) => new Date(a.date) - new Date(b.date));
                 const labels = dailyData.map(d => new Date(d.date + 'T00:00:00-03:00').toLocaleDateString('pt-BR'));
                 const datasets = [
-                    { label: 'Ativações', data: dailyData.map(d => d.ativacoes || 0), backgroundColor: 'rgba(34, 197, 94, 0.2)', borderColor: '#22c55e', pointRadius: 3, pointHoverRadius: 5, tension: 0.1, fill: true },
-                    { label: 'Churn', data: dailyData.map(d => d.churn || 0), backgroundColor: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444', pointRadius: 3, pointHoverRadius: 5, tension: 0.1, fill: true }
+                    { label: 'Ativações', data: dailyData.map(d => d.ativacoes || 0), backgroundColor: 'rgba(34, 197, 94, 0.2)', borderColor: '#22c55e', pointRadius: 4, pointHoverRadius: 6, tension: 0.1, fill: true },
+                    { label: 'Churn', data: dailyData.map(d => d.churn || 0), backgroundColor: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444', pointRadius: 4, pointHoverRadius: 6, tension: 0.1, fill: true }
                 ];
 
                 const chartId = `daily-chart-${cityName.replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -147,8 +140,49 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
                 if(grid) grid.addWidget({ x: x, y: y, w: 6, h: 7, content: content, id: `${chartId}Widget` });
 
                 renderChart(chartId, 'line', labels, datasets, `Evolução Diária - ${cityName}`, {
-                    plugins: { legend: { display: true, position: 'bottom' }, datalabels: { display: false } },
-                    scales: { x: { ticks: { autoSkip: true, maxTicksLimit: 10 } }, y: { beginAtZero: true } }
+                    plugins: { 
+                        legend: { display: true, position: 'bottom' }, 
+                        datalabels: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false, // Tooltip aparece ao passar mouse na linha vertical (eixo X)
+                        }
+                    },
+                    // CONFIGURAÇÃO CRÍTICA PARA O CLIQUE FUNCIONAR FACILMENTE
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false // Permite clicar na "linha vertical" do dia, não só no ponto
+                    },
+                    scales: { x: { ticks: { autoSkip: true, maxTicksLimit: 10 } }, y: { beginAtZero: true } },
+                    
+                    // Lógica de Clique Corrigida e Robusta
+                    onClick: (event, elements, chartInstance) => {
+                        // Tenta usar a instância passada pelo Chart.js (v3+), senão busca no estado global
+                        const chart = chartInstance || state.getMainCharts()[chartId];
+                        
+                        if (chart && elements && elements.length > 0) {
+                            const index = elements[0].index;
+                            const dateLabel = chart.data.labels[index];
+                            
+                            console.log("Data clicada:", dateLabel); // Debug no console
+
+                            if (dateLabel) {
+                                const parts = dateLabel.split('/');
+                                if (parts.length === 3) {
+                                    // Converte DD/MM/YYYY para YYYY-MM-DD
+                                    const dbDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                                    const tableContainer = document.getElementById('daily-evolution-table-container');
+                                    
+                                    if (tableContainer) {
+                                        tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                        // Atualiza a tabela com a data específica
+                                        fetchAndRenderDailyEvolutionTable(dbDate, dbDate, 1);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 });
 
                 x += 6; col++;
@@ -158,13 +192,13 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
              dom.mainChartsArea.innerHTML = `<p class="text-center text-gray-500 mt-4">Nenhum dado encontrado.</p>`;
         }
 
-        // 3. Renderiza a Nova Tabela Detalhada
+        // 3. Renderiza o Container da Tabela
         const tableContainer = document.createElement('div');
         tableContainer.id = 'daily-evolution-table-container';
-        tableContainer.className = 'mt-8 bg-white rounded-lg shadow p-4';
+        tableContainer.className = 'mt-8 bg-white rounded-lg shadow p-6';
         dom.dashboardContentDiv.appendChild(tableContainer);
 
-        // Chama a função para buscar e preencher a tabela
+        // Carrega a tabela inicialmente com o período completo
         await fetchAndRenderDailyEvolutionTable(startDate, endDate, 1);
 
     } catch (error) {
@@ -176,15 +210,13 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
 
 /**
  * Função Auxiliar para buscar e renderizar a tabela de detalhes da evolução diária.
- * Não exportada pois é de uso interno deste módulo.
  */
 async function fetchAndRenderDailyEvolutionTable(startDate, endDate, page = 1) {
     const container = document.getElementById('daily-evolution-table-container');
     if (!container) return;
 
-    // Se for a primeira carga ou mudança de página, mostra loading
     if(page === 1 || container.querySelector('.loading-spinner')) {
-        container.innerHTML = '<div class="loading-spinner"></div><p class="text-center text-gray-500">Carregando lista de clientes...</p>';
+        container.innerHTML = '<div class="loading-spinner"></div><p class="text-center text-gray-500">Carregando lista detalhada de clientes...</p>';
     }
 
     const rowsPerPage = 20;
@@ -193,16 +225,16 @@ async function fetchAndRenderDailyEvolutionTable(startDate, endDate, page = 1) {
 
     try {
         const response = await fetch(url);
+        if(!response.ok) throw new Error("Erro ao buscar detalhes.");
         const result = await response.json();
 
-        // Configuração das Colunas da Tabela
         const columns = [
             { 
                 header: 'Cliente', 
-                // Renderiza link clicável para o Modal de Histórico
                 render: r => `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline font-semibold" 
                                 data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" 
-                                data-contract-id="${r.Contrato_ID}">
+                                data-contract-id="${r.Contrato_ID}"
+                                title="Ver Histórico">
                                 ${r.Cliente}
                               </span>` 
             },
@@ -213,7 +245,7 @@ async function fetchAndRenderDailyEvolutionTable(startDate, endDate, page = 1) {
                 header: 'Equipamento (Emprestado)', 
                 key: 'Equipamento_Atual',
                 render: r => r.Equipamento_Atual 
-                    ? `<span class="text-xs bg-blue-100 text-blue-800 py-1 px-2 rounded-full border border-blue-200 font-medium">${r.Equipamento_Atual}</span>` 
+                    ? `<span class="inline-block px-2 py-1 text-xs font-semibold leading-none text-blue-800 bg-blue-100 rounded-full">${r.Equipamento_Atual}</span>` 
                     : '<span class="text-gray-400 text-xs">-</span>'
             },
             { 
@@ -232,10 +264,20 @@ async function fetchAndRenderDailyEvolutionTable(startDate, endDate, page = 1) {
             { header: 'Permanência (Meses)', key: 'permanencia_meses', cssClass: 'text-center' }
         ];
 
-        const titleHtml = `<h3 class="text-lg font-bold text-gray-700 mb-4 border-b pb-2">Detalhes de Instalações e Churn do Período</h3>`;
+        // Título dinâmico
+        const formatDate = (d) => {
+            const p = d.split('-');
+            return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
+        };
+        const dateRangeStr = startDate === endDate ? `do Dia ${formatDate(startDate)}` : `de ${formatDate(startDate)} até ${formatDate(endDate)}`;
+        
+        const titleHtml = `<div class="flex justify-between items-center mb-4 border-b pb-2">
+            <h3 class="text-lg font-bold text-gray-700">Detalhes de Instalações e Churn ${dateRangeStr}</h3>
+            <span class="text-sm bg-gray-100 text-gray-600 px-3 py-1 rounded-full">${result.total_rows} registros</span>
+        </div>`;
+        
         const tableHtml = utils.renderGenericDetailTable(null, result.data, columns, true);
         
-        // Paginação Manual Simples
         const totalPages = Math.ceil(result.total_rows / rowsPerPage);
         let paginationHtml = '';
         
@@ -255,7 +297,6 @@ async function fetchAndRenderDailyEvolutionTable(startDate, endDate, page = 1) {
 
         container.innerHTML = titleHtml + `<div class="overflow-x-auto border rounded-lg">${tableHtml}</div>` + paginationHtml;
 
-        // Adiciona eventos aos botões de paginação recém-criados
         container.querySelectorAll('.daily-evo-page-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const targetPage = parseInt(e.target.dataset.page);
@@ -265,6 +306,6 @@ async function fetchAndRenderDailyEvolutionTable(startDate, endDate, page = 1) {
 
     } catch (e) {
         console.error(e);
-        container.innerHTML = `<p class="text-red-500 p-4 border border-red-200 rounded bg-red-50">Erro ao carregar tabela: ${e.message}</p>`;
+        container.innerHTML = `<div class="bg-red-50 p-4 rounded border border-red-200 text-red-600">Erro ao carregar tabela: ${e.message}</div>`;
     }
 }

@@ -4,7 +4,7 @@ import traceback
 from flask import Blueprint, jsonify, request
 from utils_api import get_db, parse_relevance_filter, add_date_range_filter
 
-# Define o Blueprint para rotas de análise técnica
+# Define o Blueprint para rotas de análise técnica (GRÁFICOS)
 tech_bp = Blueprint('tech_bp', __name__)
 
 @tech_bp.route('/cancellations_by_equipment')
