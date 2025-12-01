@@ -76,7 +76,7 @@ export async function fetchAndRenderEquipmentByOlt(city = '') {
 
 /**
  * Busca e renderiza a análise de "Evolução Diária por Cidade".
- * ATUALIZADO: Interação melhorada no clique do gráfico.
+ * ATUALIZADO: Clique abre o MODAL DE TABELA (Pop Up) com filtro correto por cidade e data.
  */
 export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '') {
     utils.showLoading(true);
@@ -126,8 +126,13 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
                 const dailyData = cityData.daily_data || [];
                 const totals = cityData.totals || {};
 
+                // Ordena datas
                 dailyData.sort((a, b) => new Date(a.date) - new Date(b.date));
-                const labels = dailyData.map(d => new Date(d.date + 'T00:00:00-03:00').toLocaleDateString('pt-BR'));
+                const labels = dailyData.map(d => {
+                    const parts = d.date.split('-');
+                    return `${parts[2]}/${parts[1]}/${parts[0]}`; // DD/MM/YYYY
+                });
+                
                 const datasets = [
                     { label: 'Ativações', data: dailyData.map(d => d.ativacoes || 0), backgroundColor: 'rgba(34, 197, 94, 0.2)', borderColor: '#22c55e', pointRadius: 4, pointHoverRadius: 6, tension: 0.1, fill: true },
                     { label: 'Churn', data: dailyData.map(d => d.churn || 0), backgroundColor: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444', pointRadius: 4, pointHoverRadius: 6, tension: 0.1, fill: true }
@@ -135,52 +140,27 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
 
                 const chartId = `daily-chart-${cityName.replace(/[^a-zA-Z0-9]/g, '')}`;
                 const summaryHtml = `<div class="summary-card-container flex justify-center gap-4 mb-2"><div class="summary-card-item bg-green-100 p-2 rounded-lg text-center shadow-sm"><p class="text-xs font-bold text-green-800 uppercase">Ativações</p><p class="text-xl font-bold text-green-600">${totals.total_ativacoes || 0}</p></div><div class="summary-card-item bg-red-100 p-2 rounded-lg text-center shadow-sm"><p class="text-xs font-bold text-red-800 uppercase">Churn</p><p class="text-xl font-bold text-red-600">${totals.total_churn || 0}</p></div></div>`;
-                const content = `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 id="${chartId}Title" class="chart-title"></h3></div>${summaryHtml}<div class="chart-canvas-container"><canvas id="${chartId}"></canvas></div></div>`;
+                const content = `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 id="${chartId}Title" class="chart-title">${cityName}</h3></div>${summaryHtml}<div class="chart-canvas-container"><canvas id="${chartId}"></canvas></div></div>`;
 
                 if(grid) grid.addWidget({ x: x, y: y, w: 6, h: 7, content: content, id: `${chartId}Widget` });
 
-                renderChart(chartId, 'line', labels, datasets, `Evolução Diária - ${cityName}`, {
+                renderChart(chartId, 'line', labels, datasets, `Evolução - ${cityName}`, {
                     plugins: { 
                         legend: { display: true, position: 'bottom' }, 
                         datalabels: { display: false },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false, // Tooltip aparece ao passar mouse na linha vertical (eixo X)
-                        }
+                        tooltip: { mode: 'index', intersect: false }
                     },
-                    // CONFIGURAÇÃO CRÍTICA PARA O CLIQUE FUNCIONAR FACILMENTE
-                    interaction: {
-                        mode: 'nearest',
-                        axis: 'x',
-                        intersect: false // Permite clicar na "linha vertical" do dia, não só no ponto
-                    },
+                    interaction: { mode: 'nearest', axis: 'x', intersect: false },
                     scales: { x: { ticks: { autoSkip: true, maxTicksLimit: 10 } }, y: { beginAtZero: true } },
                     
-                    // Lógica de Clique Corrigida e Robusta
-                    onClick: (event, elements, chartInstance) => {
-                        // Tenta usar a instância passada pelo Chart.js (v3+), senão busca no estado global
-                        const chart = chartInstance || state.getMainCharts()[chartId];
-                        
-                        if (chart && elements && elements.length > 0) {
+                    // --- CLIQUE NO GRÁFICO (ABRE MODAL) ---
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
                             const index = elements[0].index;
-                            const dateLabel = chart.data.labels[index];
-                            
-                            console.log("Data clicada:", dateLabel); // Debug no console
-
-                            if (dateLabel) {
-                                const parts = dateLabel.split('/');
-                                if (parts.length === 3) {
-                                    // Converte DD/MM/YYYY para YYYY-MM-DD
-                                    const dbDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                                    const tableContainer = document.getElementById('daily-evolution-table-container');
-                                    
-                                    if (tableContainer) {
-                                        tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                        // Atualiza a tabela com a data específica
-                                        fetchAndRenderDailyEvolutionTable(dbDate, dbDate, 1);
-                                    }
-                                }
-                            }
+                            // Usa a data real do objeto de dados (YYYY-MM-DD), não a label formatada
+                            // AQUI ESTÁ O TRUQUE: Usamos o array original 'dailyData' que está no escopo do loop
+                            const rawDate = dailyData[index].date; 
+                            openDailyEvolutionModal(cityName, rawDate);
                         }
                     }
                 });
@@ -192,15 +172,6 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
              dom.mainChartsArea.innerHTML = `<p class="text-center text-gray-500 mt-4">Nenhum dado encontrado.</p>`;
         }
 
-        // 3. Renderiza o Container da Tabela
-        const tableContainer = document.createElement('div');
-        tableContainer.id = 'daily-evolution-table-container';
-        tableContainer.className = 'mt-8 bg-white rounded-lg shadow p-6';
-        dom.dashboardContentDiv.appendChild(tableContainer);
-
-        // Carrega a tabela inicialmente com o período completo
-        await fetchAndRenderDailyEvolutionTable(startDate, endDate, 1);
-
     } catch (error) {
         if (state.getCustomAnalysisState().currentAnalysis === 'daily_evolution_by_city') utils.showError(error.message);
     } finally {
@@ -209,103 +180,112 @@ export async function fetchAndRenderDailyEvolution(startDate = '', endDate = '')
 }
 
 /**
- * Função Auxiliar para buscar e renderizar a tabela de detalhes da evolução diária.
+ * Abre o Modal (Pop-up) com a tabela de detalhes do dia.
  */
-async function fetchAndRenderDailyEvolutionTable(startDate, endDate, page = 1) {
-    const container = document.getElementById('daily-evolution-table-container');
-    if (!container) return;
+function openDailyEvolutionModal(city, date) {
+    if (!dom.tableModal) return;
+    
+    // Configura e abre o modal genérico
+    dom.tableModal.classList.add('show');
+    if (dom.modalTitle) dom.modalTitle.textContent = `Detalhes: ${city} - ${utils.formatDate(date)}`;
+    if (dom.modalTableHead) dom.modalTableHead.innerHTML = '';
+    if (dom.modalTableBody) dom.modalTableBody.innerHTML = '';
+    if (dom.modalLoadingDiv) dom.modalLoadingDiv.classList.remove('hidden');
+    
+    // Esconde a paginação padrão do modal (para usar a nossa personalizada e evitar conflitos)
+    if (dom.modalPaginationControls) dom.modalPaginationControls.classList.add('hidden');
 
-    if(page === 1 || container.querySelector('.loading-spinner')) {
-        container.innerHTML = '<div class="loading-spinner"></div><p class="text-center text-gray-500">Carregando lista detalhada de clientes...</p>';
-    }
+    // Inicia a busca
+    fetchAndDisplayDailyEvolutionModalTable(city, date, 1);
+}
 
+/**
+ * Busca e preenche a tabela DENTRO do modal.
+ */
+async function fetchAndDisplayDailyEvolutionModalTable(city, date, page = 1) {
     const rowsPerPage = 20;
     const offset = (page - 1) * rowsPerPage;
-    const url = `${state.API_BASE_URL}/api/details/daily_evolution_details?start_date=${startDate}&end_date=${endDate}&limit=${rowsPerPage}&offset=${offset}`;
+    // IMPORTANTE: Passa 'city' para a API para filtrar os dados corretamente
+    const url = `${state.API_BASE_URL}/api/details/daily_evolution_details?start_date=${date}&end_date=${date}&city=${encodeURIComponent(city)}&limit=${rowsPerPage}&offset=${offset}`;
 
     try {
         const response = await fetch(url);
         if(!response.ok) throw new Error("Erro ao buscar detalhes.");
         const result = await response.json();
 
-        const columns = [
-            { 
-                header: 'Cliente', 
-                render: r => `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline font-semibold" 
-                                data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" 
-                                data-contract-id="${r.Contrato_ID}"
-                                title="Ver Histórico">
-                                ${r.Cliente}
-                              </span>` 
-            },
-            { header: 'Contrato ID', key: 'Contrato_ID' },
-            { header: 'Data Ativação', key: 'Data_ativa_o', isDate: true },
-            { header: 'Cidade', key: 'Cidade' },
-            { 
-                header: 'Equipamento (Emprestado)', 
-                key: 'Equipamento_Atual',
-                render: r => r.Equipamento_Atual 
-                    ? `<span class="inline-block px-2 py-1 text-xs font-semibold leading-none text-blue-800 bg-blue-100 rounded-full">${r.Equipamento_Atual}</span>` 
-                    : '<span class="text-gray-400 text-xs">-</span>'
-            },
-            { 
-                header: 'Status', 
-                key: 'Status_contrato',
-                render: r => {
-                    let cls = 'bg-gray-100 text-gray-800';
-                    if (r.Status_contrato === 'Ativo') cls = 'text-green-700 bg-green-100';
-                    else if (r.Status_contrato === 'Inativo' || r.Status_contrato === 'Cancelado') cls = 'text-red-700 bg-red-100';
-                    else if (r.Status_contrato === 'Negativado') cls = 'text-orange-700 bg-orange-100';
-                    
-                    return `<span class="${cls} px-2 py-1 rounded font-bold text-xs uppercase">${r.Status_contrato}</span>`;
-                }
-            },
-            { header: 'Data Final (Churn)', key: 'Data_Final', isDate: true },
-            { header: 'Permanência (Meses)', key: 'permanencia_meses', cssClass: 'text-center' }
-        ];
+        if (dom.modalLoadingDiv) dom.modalLoadingDiv.classList.add('hidden');
 
-        // Título dinâmico
-        const formatDate = (d) => {
-            const p = d.split('-');
-            return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
-        };
-        const dateRangeStr = startDate === endDate ? `do Dia ${formatDate(startDate)}` : `de ${formatDate(startDate)} até ${formatDate(endDate)}`;
-        
-        const titleHtml = `<div class="flex justify-between items-center mb-4 border-b pb-2">
-            <h3 class="text-lg font-bold text-gray-700">Detalhes de Instalações e Churn ${dateRangeStr}</h3>
-            <span class="text-sm bg-gray-100 text-gray-600 px-3 py-1 rounded-full">${result.total_rows} registros</span>
-        </div>`;
-        
-        const tableHtml = utils.renderGenericDetailTable(null, result.data, columns, true);
-        
-        const totalPages = Math.ceil(result.total_rows / rowsPerPage);
-        let paginationHtml = '';
-        
-        if (totalPages > 1) {
-            paginationHtml = `
-                <div class="flex justify-center items-center gap-4 mt-6">
-                    <button class="daily-evo-page-btn bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg shadow-sm disabled:opacity-50 transition" 
-                        ${page <= 1 ? 'disabled' : ''} data-page="${page - 1}">Anterior</button>
-                    <span class="text-sm font-medium text-gray-600">Página ${page} de ${totalPages}</span>
-                    <button class="daily-evo-page-btn bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-sm disabled:opacity-50 transition" 
-                        ${page >= totalPages ? 'disabled' : ''} data-page="${page + 1}">Próxima</button>
-                </div>
+        // Renderiza Cabeçalho da Tabela
+        if (dom.modalTableHead) {
+            dom.modalTableHead.innerHTML = `
+                <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase bg-gray-100">Cliente</th>
+                <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase bg-gray-100">Contrato ID</th>
+                <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase bg-gray-100">Status</th>
+                <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase bg-gray-100">Data Ativação</th>
+                <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase bg-gray-100">Data Churn</th>
+                <th class="py-3 px-4 text-left text-xs font-semibold text-gray-600 uppercase bg-gray-100">Equipamento</th>
             `;
-        } else if (result.total_rows === 0) {
-             paginationHtml = '<p class="text-center text-gray-500 mt-2 text-sm">Nenhum registro encontrado para este período.</p>';
         }
 
-        container.innerHTML = titleHtml + `<div class="overflow-x-auto border rounded-lg">${tableHtml}</div>` + paginationHtml;
+        // Renderiza Corpo da Tabela
+        if (dom.modalTableBody) {
+            if (result.data.length === 0) {
+                dom.modalTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">Nenhum registro encontrado.</td></tr>';
+            } else {
+                dom.modalTableBody.innerHTML = result.data.map(r => {
+                    let statusClass = 'bg-gray-100 text-gray-800';
+                    if (r.Status_contrato === 'Ativo') statusClass = 'text-green-700 bg-green-100';
+                    else if (['Inativo', 'Cancelado'].includes(r.Status_contrato)) statusClass = 'text-red-700 bg-red-100';
+                    else if (r.Status_contrato === 'Negativado') statusClass = 'text-orange-700 bg-orange-100';
 
-        container.querySelectorAll('.daily-evo-page-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const targetPage = parseInt(e.target.dataset.page);
-                fetchAndRenderDailyEvolutionTable(startDate, endDate, targetPage);
-            });
-        });
+                    const equipHtml = r.Equipamento_Atual 
+                        ? `<span class="inline-block px-2 py-1 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">${r.Equipamento_Atual}</span>` 
+                        : '<span class="text-gray-400 text-xs">-</span>';
+
+                    return `
+                        <tr class="border-b border-gray-200 hover:bg-gray-50 transition">
+                            <td class="py-3 px-4 text-sm font-medium">
+                                <span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline" 
+                                      data-client-name="${(r.Cliente || '').replace(/"/g, '&quot;')}" 
+                                      data-contract-id="${r.Contrato_ID}"
+                                      title="Ver Histórico">
+                                    ${r.Cliente}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4 text-sm text-gray-600">${r.Contrato_ID}</td>
+                            <td class="py-3 px-4 text-sm"><span class="${statusClass} px-2 py-1 rounded font-bold text-xs uppercase">${r.Status_contrato}</span></td>
+                            <td class="py-3 px-4 text-sm text-gray-600">${utils.formatDate(r.Data_ativa_o)}</td>
+                            <td class="py-3 px-4 text-sm text-gray-600">${utils.formatDate(r.Data_Final)}</td>
+                            <td class="py-3 px-4 text-sm">${equipHtml}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        // Renderiza Paginação Customizada (substitui conteúdo do container padrão)
+        // Usamos IDs únicos para não conflitar com o listener global do modal padrão
+        const totalPages = Math.ceil(result.total_rows / rowsPerPage);
+        if (dom.modalPaginationControls) {
+            if (totalPages > 1) {
+                dom.modalPaginationControls.classList.remove('hidden');
+                dom.modalPaginationControls.innerHTML = `
+                    <button id="dailyEvoPrevBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg shadow-sm disabled:opacity-50 transition" ${page <= 1 ? 'disabled' : ''}>Anterior</button>
+                    <span class="mx-4 text-gray-700 font-medium">Página ${page} de ${totalPages}</span>
+                    <button id="dailyEvoNextBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-sm disabled:opacity-50 transition" ${page >= totalPages ? 'disabled' : ''}>Próxima</button>
+                `;
+                
+                // Adiciona listeners diretos aos novos botões
+                document.getElementById('dailyEvoPrevBtn').onclick = (e) => { e.stopPropagation(); fetchAndDisplayDailyEvolutionModalTable(city, date, page - 1); };
+                document.getElementById('dailyEvoNextBtn').onclick = (e) => { e.stopPropagation(); fetchAndDisplayDailyEvolutionModalTable(city, date, page + 1); };
+            } else {
+                dom.modalPaginationControls.classList.add('hidden');
+            }
+        }
 
     } catch (e) {
         console.error(e);
-        container.innerHTML = `<div class="bg-red-50 p-4 rounded border border-red-200 text-red-600">Erro ao carregar tabela: ${e.message}</div>`;
+        if (dom.modalTableBody) dom.modalTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-red-500 py-4">Erro ao carregar dados: ${e.message}</td></tr>`;
+        if (dom.modalLoadingDiv) dom.modalLoadingDiv.classList.add('hidden');
     }
 }

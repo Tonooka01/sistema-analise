@@ -6,9 +6,6 @@ details_tech_bp = Blueprint('details_tech_bp', __name__)
 
 @details_tech_bp.route('/complaints/<client_name>')
 def api_complaints_details(client_name):
-    """
-    Busca os detalhes de OS ou Atendimentos para um cliente específico.
-    """
     conn = get_db()
     try:
         complaint_type = request.args.get('type')
@@ -150,14 +147,17 @@ def api_active_equipment_clients():
     finally:
         if conn: conn.close()
 
-# Adicione isso ao final de routes_details_tech.py
-
+# Rota Corrigida para Evolução Diária (Tabela Detalhada)
 @details_tech_bp.route('/daily_evolution_details')
 def api_daily_evolution_details():
+    """
+    Rota para buscar detalhes da evolução diária (ativações e churn) com info de equipamento.
+    """
     conn = get_db()
     try:
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
+        city = request.args.get('city', '') # Filtro opcional de cidade
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
 
@@ -165,20 +165,24 @@ def api_daily_evolution_details():
             return jsonify({"error": "Datas são obrigatórias."}), 400
 
         # Subquery para pegar o último equipamento 'Emprestado'
-        # Ordenamos por ID DESC ou Data DESC para pegar o mais recente
+        # Usamos CAST(Main.Contrato_ID AS TEXT) para garantir compatibilidade
+        # E ordenamos por Data para pegar o mais recente.
         equipamento_subquery = """
             (SELECT Descricao_produto 
              FROM Equipamento E 
-             WHERE TRIM(E.ID_contrato) = TRIM(CAST(Main.ID AS TEXT)) 
+             WHERE TRIM(E.ID_contrato) = TRIM(CAST(Main.Contrato_ID AS TEXT)) 
                AND Status_comodato = 'Emprestado'
-             ORDER BY Data DESC, ID DESC LIMIT 1)
+             ORDER BY Data DESC LIMIT 1)
         """
 
-        # Query Base: Busca Contratos onde a Data de Ativação (Instalação) ou Cancelamento cai no período
+        # Filtro de cidade na query externa
+        city_clause = " AND Main.Cidade = ? " if city else ""
+
+        # Query Base - Usa Alias 'Contrato_ID' para evitar ambiguidade com 'ID'
         query = f"""
             SELECT 
                 Main.Cliente,
-                Main.ID AS Contrato_ID,
+                Main.Contrato_ID,
                 Main.Data_ativa_o,
                 Main.Status_contrato,
                 Main.Cidade,
@@ -190,54 +194,116 @@ def api_daily_evolution_details():
                 {equipamento_subquery} as Equipamento_Atual
             FROM (
                 -- Contratos Normais
-                SELECT ID, Cliente, Data_ativa_o, Status_contrato, Data_cancelamento, NULL as Data_negativa_o, Cidade
+                SELECT 
+                    ID AS Contrato_ID, 
+                    Cliente, 
+                    Data_ativa_o, 
+                    Status_contrato, 
+                    Data_cancelamento, 
+                    NULL as Data_negativa_o, 
+                    Cidade
                 FROM Contratos
                 WHERE (DATE(Data_ativa_o) BETWEEN ? AND ?) 
                    OR (Data_cancelamento IS NOT NULL AND DATE(Data_cancelamento) BETWEEN ? AND ?)
 
                 UNION
                 
-                -- Negativados
-                SELECT ID, Cliente, Data_ativa_o, 'Negativado' as Status_contrato, NULL as Data_cancelamento, Data_negativa_o, Cidade
+                -- Negativados (fallback se a tabela existir, senão o try/except captura)
+                SELECT 
+                    ID AS Contrato_ID, 
+                    Cliente, 
+                    Data_ativa_o, 
+                    'Negativado' as Status_contrato, 
+                    NULL as Data_cancelamento, 
+                    Data_negativa_o, 
+                    Cidade
                 FROM Contratos_Negativacao
                 WHERE (DATE(Data_ativa_o) BETWEEN ? AND ?)
                    OR (Data_negativa_o IS NOT NULL AND DATE(Data_negativa_o) BETWEEN ? AND ?)
             ) AS Main
+            WHERE 1=1 {city_clause}
             ORDER BY Main.Data_ativa_o DESC
             LIMIT ? OFFSET ?
         """
 
-        # Parâmetros duplicados devido aos WHEREs e UNION
-        params = [start_date, end_date, start_date, end_date, start_date, end_date, start_date, end_date, limit, offset]
+        # Parâmetros: 4 datas (Contratos) + 4 datas (Negativacao) + cidade (opcional) + limit + offset
+        params = [start_date, end_date, start_date, end_date, start_date, end_date, start_date, end_date]
+        if city: params.append(city)
+        params.extend([limit, offset])
         
-        # Query de Contagem para paginação
-        count_query = """
+        # Query de Contagem (simplificada)
+        count_query_base = """
             SELECT COUNT(*) FROM (
-                SELECT ID FROM Contratos WHERE (DATE(Data_ativa_o) BETWEEN ? AND ?) OR (DATE(Data_cancelamento) BETWEEN ? AND ?)
+                SELECT ID, Cidade FROM Contratos WHERE (DATE(Data_ativa_o) BETWEEN ? AND ?) OR (DATE(Data_cancelamento) BETWEEN ? AND ?)
                 UNION
-                SELECT ID FROM Contratos_Negativacao WHERE (DATE(Data_ativa_o) BETWEEN ? AND ?) OR (DATE(Data_negativa_o) BETWEEN ? AND ?)
-            )
+                SELECT ID, Cidade FROM Contratos_Negativacao WHERE (DATE(Data_ativa_o) BETWEEN ? AND ?) OR (DATE(Data_negativa_o) BETWEEN ? AND ?)
+            ) AS Main WHERE 1=1
         """
+        if city: count_query_base += " AND Main.Cidade = ?"
+        
         count_params = [start_date, end_date, start_date, end_date, start_date, end_date, start_date, end_date]
+        if city: count_params.append(city)
 
-        data = conn.execute(query, tuple(params)).fetchall()
-        total_rows = conn.execute(count_query, tuple(count_params)).fetchone()[0]
+        try:
+            data = conn.execute(query, tuple(params)).fetchall()
+            total_rows = conn.execute(count_query_base, tuple(count_params)).fetchone()[0]
+        except sqlite3.Error as e:
+            # Fallback se Contratos_Negativacao não existir
+            if "no such table" in str(e).lower() and "contratos_negativacao" in str(e).lower():
+                print("Aviso: Tabela Contratos_Negativacao não encontrada. Usando fallback.")
+                
+                query_fallback = f"""
+                    SELECT 
+                        Main.Cliente,
+                        Main.Contrato_ID,
+                        Main.Data_ativa_o,
+                        Main.Status_contrato,
+                        Main.Cidade,
+                        CASE 
+                            WHEN Main.Status_contrato = 'Inativo' THEN Main.Data_cancelamento
+                            WHEN Main.Status_contrato = 'Negativado' THEN Main.Data_cancelamento
+                            ELSE 'N/A'
+                        END AS Data_Final,
+                        {equipamento_subquery} as Equipamento_Atual
+                    FROM (
+                        SELECT ID AS Contrato_ID, Cliente, Data_ativa_o, Status_contrato, Data_cancelamento, Cidade
+                        FROM Contratos
+                        WHERE (DATE(Data_ativa_o) BETWEEN ? AND ?) 
+                           OR (Data_cancelamento IS NOT NULL AND DATE(Data_cancelamento) BETWEEN ? AND ?)
+                    ) AS Main
+                    WHERE 1=1 {city_clause}
+                    ORDER BY Main.Data_ativa_o DESC
+                    LIMIT ? OFFSET ?
+                """
+                params_fallback = [start_date, end_date, start_date, end_date]
+                if city: params_fallback.append(city)
+                params_fallback.extend([limit, offset])
+                
+                count_query_fb = "SELECT COUNT(*) FROM Contratos WHERE ((DATE(Data_ativa_o) BETWEEN ? AND ?) OR (Data_cancelamento IS NOT NULL AND DATE(Data_cancelamento) BETWEEN ? AND ?))"
+                if city: count_query_fb += " AND Cidade = ?"
+                count_params_fb = [start_date, end_date, start_date, end_date]
+                if city: count_params_fb.append(city)
+                
+                data = conn.execute(query_fallback, tuple(params_fallback)).fetchall()
+                total_rows = conn.execute(count_query_fb, tuple(count_params_fb)).fetchone()[0]
+            else:
+                raise e
 
-        # Processamento final para calcular permanência
+        # Processamento final
         result_list = []
         for row in data:
             row_dict = dict(row)
             
-            # Cálculo de Permanência
             permanencia = "N/A"
-            if row_dict['Data_Final'] != 'N/A' and row_dict['Data_ativa_o']:
+            if row_dict.get('Data_Final') != 'N/A' and row_dict.get('Data_ativa_o'):
                 try:
                     from datetime import datetime
-                    # Ajuste o formato da data conforme seu banco (ex: YYYY-MM-DD)
-                    fmt = '%Y-%m-%d'
-                    # Tenta pegar apenas a parte da data (primeiros 10 chars)
-                    dt_start = datetime.strptime(str(row_dict['Data_ativa_o'])[:10], fmt)
-                    dt_end = datetime.strptime(str(row_dict['Data_Final'])[:10], fmt)
+                    fmt = '%Y-%m-%d' # Padrão
+                    dt_str = str(row_dict['Data_ativa_o'])[:10] # Pega YYYY-MM-DD
+                    end_str = str(row_dict['Data_Final'])[:10]
+                    
+                    dt_start = datetime.strptime(dt_str, fmt)
+                    dt_end = datetime.strptime(end_str, fmt)
                     months = round((dt_end - dt_start).days / 30.44)
                     permanencia = int(months)
                 except:
@@ -253,6 +319,6 @@ def api_daily_evolution_details():
 
     except Exception as e:
         print(f"Erro em detalhes de evolução diária: {e}")
-        return jsonify({"error": "Erro interno ao buscar detalhes."}), 500
+        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
     finally:
         if conn: conn.close()
