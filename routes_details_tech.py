@@ -149,3 +149,110 @@ def api_active_equipment_clients():
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()
+
+# Adicione isso ao final de routes_details_tech.py
+
+@details_tech_bp.route('/daily_evolution_details')
+def api_daily_evolution_details():
+    conn = get_db()
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+
+        if not start_date or not end_date:
+            return jsonify({"error": "Datas são obrigatórias."}), 400
+
+        # Subquery para pegar o último equipamento 'Emprestado'
+        # Ordenamos por ID DESC ou Data DESC para pegar o mais recente
+        equipamento_subquery = """
+            (SELECT Descricao_produto 
+             FROM Equipamento E 
+             WHERE TRIM(E.ID_contrato) = TRIM(CAST(Main.ID AS TEXT)) 
+               AND Status_comodato = 'Emprestado'
+             ORDER BY Data DESC, ID DESC LIMIT 1)
+        """
+
+        # Query Base: Busca Contratos onde a Data de Ativação (Instalação) ou Cancelamento cai no período
+        query = f"""
+            SELECT 
+                Main.Cliente,
+                Main.ID AS Contrato_ID,
+                Main.Data_ativa_o,
+                Main.Status_contrato,
+                Main.Cidade,
+                CASE 
+                    WHEN Main.Status_contrato = 'Inativo' THEN Main.Data_cancelamento
+                    WHEN Main.Status_contrato = 'Negativado' THEN Main.Data_negativa_o
+                    ELSE 'N/A'
+                END AS Data_Final,
+                {equipamento_subquery} as Equipamento_Atual
+            FROM (
+                -- Contratos Normais
+                SELECT ID, Cliente, Data_ativa_o, Status_contrato, Data_cancelamento, NULL as Data_negativa_o, Cidade
+                FROM Contratos
+                WHERE (DATE(Data_ativa_o) BETWEEN ? AND ?) 
+                   OR (Data_cancelamento IS NOT NULL AND DATE(Data_cancelamento) BETWEEN ? AND ?)
+
+                UNION
+                
+                -- Negativados
+                SELECT ID, Cliente, Data_ativa_o, 'Negativado' as Status_contrato, NULL as Data_cancelamento, Data_negativa_o, Cidade
+                FROM Contratos_Negativacao
+                WHERE (DATE(Data_ativa_o) BETWEEN ? AND ?)
+                   OR (Data_negativa_o IS NOT NULL AND DATE(Data_negativa_o) BETWEEN ? AND ?)
+            ) AS Main
+            ORDER BY Main.Data_ativa_o DESC
+            LIMIT ? OFFSET ?
+        """
+
+        # Parâmetros duplicados devido aos WHEREs e UNION
+        params = [start_date, end_date, start_date, end_date, start_date, end_date, start_date, end_date, limit, offset]
+        
+        # Query de Contagem para paginação
+        count_query = """
+            SELECT COUNT(*) FROM (
+                SELECT ID FROM Contratos WHERE (DATE(Data_ativa_o) BETWEEN ? AND ?) OR (DATE(Data_cancelamento) BETWEEN ? AND ?)
+                UNION
+                SELECT ID FROM Contratos_Negativacao WHERE (DATE(Data_ativa_o) BETWEEN ? AND ?) OR (DATE(Data_negativa_o) BETWEEN ? AND ?)
+            )
+        """
+        count_params = [start_date, end_date, start_date, end_date, start_date, end_date, start_date, end_date]
+
+        data = conn.execute(query, tuple(params)).fetchall()
+        total_rows = conn.execute(count_query, tuple(count_params)).fetchone()[0]
+
+        # Processamento final para calcular permanência
+        result_list = []
+        for row in data:
+            row_dict = dict(row)
+            
+            # Cálculo de Permanência
+            permanencia = "N/A"
+            if row_dict['Data_Final'] != 'N/A' and row_dict['Data_ativa_o']:
+                try:
+                    from datetime import datetime
+                    # Ajuste o formato da data conforme seu banco (ex: YYYY-MM-DD)
+                    fmt = '%Y-%m-%d'
+                    # Tenta pegar apenas a parte da data (primeiros 10 chars)
+                    dt_start = datetime.strptime(str(row_dict['Data_ativa_o'])[:10], fmt)
+                    dt_end = datetime.strptime(str(row_dict['Data_Final'])[:10], fmt)
+                    months = round((dt_end - dt_start).days / 30.44)
+                    permanencia = int(months)
+                except:
+                    pass
+            
+            row_dict['permanencia_meses'] = permanencia
+            result_list.append(row_dict)
+
+        return jsonify({
+            "data": result_list,
+            "total_rows": total_rows
+        })
+
+    except Exception as e:
+        print(f"Erro em detalhes de evolução diária: {e}")
+        return jsonify({"error": "Erro interno ao buscar detalhes."}), 500
+    finally:
+        if conn: conn.close()
