@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  sistema-financeiro:
+    build: .
+    container_name: dashboard_financeiro
+    ports:
+      - "5000:5000" # Mapeia a porta 5000 do seu PC para a 5000 do container
+    volumes:
+      # Mapeia o arquivo do banco de dados do seu PC para dentro do container
+      - ./analise_dados.db:/app/analise_dados.db
+      # Mapeia a pasta de uploads
+      - ./Tabelas:/app/Tabelas
+    environment:
+      # Define a chave secreta (usada no api_server.py)
+      - FLASK_SECRET_KEY=sua_chave_secreta_aqui
+    restart: unless-stopped
