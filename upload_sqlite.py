@@ -55,7 +55,7 @@ def upload_data_to_sqlite(file_path):
         print(f"Processando dados da tabela '{table_name}'...")
         
         # Super Diagnóstico para os nomes das colunas
-        if table_name in ['Contratos', 'Contratos_Negativacao', 'Contas_a_Receber']: # Adicionado Contas_a_Receber
+        if table_name in ['Contratos', 'Contratos_Negativacao', 'Contas_a_Receber', 'Equipamento']:
             print(f"--- DIAGNÓSTICO PARA '{file_name}' ---")
             print(f"Colunas ORIGINAIS encontradas: {list(original_columns)}")
             print(f"Colunas SANITIZADAS (como o script as vê): {list(df.columns)}")
@@ -68,31 +68,34 @@ def upload_data_to_sqlite(file_path):
             # Atualiza a lista de colunas sanitizadas se a renomeação ocorrer
             sanitized_columns = list(df.columns)
 
-        # --- INÍCIO DA CORREÇÃO (LÓGICA MAIS ROBUSTA) ---
-        
+        # --- CORREÇÃO NOVA: Renomeia coluna de Descrição do Equipamento ---
+        if table_name == 'Equipamento':
+            # Procura por variações comuns da sanitização de "Descrição produto"
+            # O padrão costuma gerar 'Descri_o_produto' ou 'Descri__o_produto'
+            for col in ['Descri_o_produto', 'Descri__o_produto', 'Descricao_produto']:
+                if col in df.columns and col != 'Descricao_produto':
+                    df.rename(columns={col: 'Descricao_produto'}, inplace=True)
+                    print(f"Coluna '{col}' renomeada para 'Descricao_produto'.")
+                    sanitized_columns = list(df.columns)
+                    break
+        # ------------------------------------------------------------------
+
         # Mapeamento de chaves "limpas" (sem espaços, sem underscores, minúsculas)
         DATE_COLUMNS_MAP_CLEANED = {
             'Contas_a_Receber': ['vencimento', 'emissao', 'datapagamento', 'datacredito', 'databaixa', 'datacancelamento', 'validadedescontocondicional'],
             'Atendimentos': ['criadoem', 'ultimaalteracao'],
             'OS': ['abertura', 'fechamento'],
-            
-            # --- CORREÇÃO AQUI ---
-            # As chaves agora correspondem ao resultado da sanitização:
-            # "Data ativação" -> Data_ativa_o -> "dataativao"
-            # "Data negativação" -> Data_negativa_o -> "datanegativao"
             'Contratos': ['datacadastrosistema', 'datacancelamento', 'dataativao'], 
-            'Logins': ['dataehoradologin', 'ultimaconexãofinal'], # (ultimaconexãofinal não tem 'ç' ou 'ã')
+            'Logins': ['dataehoradologin', 'ultimaconexãofinal', 'ultimaconexofinal'], # (ultimaconexãofinal não tem 'ç' ou 'ã')
             'Clientes': ['datacadastro'],
             'Contratos_Negativacao': ['datainclusao', 'datanegativao', 'dataativao'],
-            # --- FIM DA CORREÇÃO ---
-
             'Clientes_Negativacao': ['datainclusao', 'dataexclusao'],
             'Equipamento': ['data'],
         }
         
         VALUE_COLUMNS_MAP_CLEANED = {
             'Contas_a_Receber': ['valor', 'valorbaixado', 'valoraberto', 'valorrecebido', 'valorcancelado', 'descontocondicionalvalor'],
-            'Contratos_Negativacao': ['valordadívida'], # (valordadívida não tem 'í')
+            'Contratos_Negativacao': ['valordadívida', 'valordadivida'], # (valordadívida não tem 'í')
         }
 
         date_cols_to_convert = DATE_COLUMNS_MAP_CLEANED.get(table_name, [])
@@ -162,8 +165,6 @@ def upload_data_to_sqlite(file_path):
 
                 df[col_name_sanitized] = pd.to_numeric(final_series, errors='coerce').fillna(0.0)
                 # --- FIM DA CORREÇÃO ROBUSTA ---
-
-        # --- FIM DA CORREÇÃO ROBUSTA ---
 
         # --- Limpeza específica para colunas de status na tabela 'Contratos' ---
         if table_name == 'Contratos':
