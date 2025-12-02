@@ -113,12 +113,15 @@ function handleCustomAnalysisChange(page = 1) {
 
         case 'atrasos_e_nao_pagos':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
+            // Garante que o filtro de data esteja ESCONDIDO para atrasos
+            if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.add('hidden');
             customTables.fetchAndRenderLatePaymentsAnalysis(searchTerm, page);
             break;
 
         case 'saude_financeira_contrato_atraso':
         case 'saude_financeira_contrato_bloqueio':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
+            if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.add('hidden'); // Esconde data
             if (dom.financialHealthFiltersDiv) dom.financialHealthFiltersDiv.classList.remove('hidden');
             
             // --- AJUSTE: Oculta o botão duplicado ---
@@ -140,16 +143,28 @@ function handleCustomAnalysisChange(page = 1) {
 
         case 'cancellations':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
+            // Mostra o container de datas
+            if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.remove('hidden');
+            
             const relevanceSearch = dom.relevanceFilterSearch?.value || '';
+            const cancelStart = dom.customStartDate?.value || '';
+            const cancelEnd = dom.customEndDate?.value || '';
+            
             // Passa o parâmetro de ordenação (Lê do estado)
-            customTables.fetchAndRenderCancellationAnalysis(searchTerm, page, relevanceSearch, sortAsc);
+            customTables.fetchAndRenderCancellationAnalysis(searchTerm, page, relevanceSearch, sortAsc, cancelStart, cancelEnd);
             break;
 
         case 'negativacao':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
+            // Mostra o container de datas
+            if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.remove('hidden');
+            
             const relevanceSearchNeg = dom.relevanceFilterSearch?.value || '';
+            const negStart = dom.customStartDate?.value || '';
+            const negEnd = dom.customEndDate?.value || '';
+            
             // Passa o parâmetro de ordenação (Lê do estado)
-            customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, page, relevanceSearchNeg, sortAsc);
+            customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, page, relevanceSearchNeg, sortAsc, negStart, negEnd);
             break;
 
         case 'vendedores':
@@ -329,6 +344,7 @@ export function initializeEventListeners() {
         btn?.addEventListener('click', () => handleCustomAnalysisChange(1));
     });
 
+    // Listener para o botão de filtro principal (usado em cancelamento/negativação)
     dom.applyClientSearchBtn?.addEventListener('click', () => handleCustomAnalysisChange(1));
     dom.clientSearchInput?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleCustomAnalysisChange(1);
@@ -517,9 +533,13 @@ export function initializeEventListeners() {
             const isAsc = newSortOrder === 'asc';
             
             if (currentState.currentAnalysis === 'cancellations') {
-                customTables.fetchAndRenderCancellationAnalysis(searchTerm, 1, relevance, isAsc);
+                const cancelStart = dom.customStartDate?.value || '';
+                const cancelEnd = dom.customEndDate?.value || '';
+                customTables.fetchAndRenderCancellationAnalysis(searchTerm, 1, relevance, isAsc, cancelStart, cancelEnd);
             } else if (currentState.currentAnalysis === 'negativacao') {
-                customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, 1, relevance, isAsc);
+                const negStart = dom.customStartDate?.value || '';
+                const negEnd = dom.customEndDate?.value || '';
+                customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, 1, relevance, isAsc, negStart, negEnd);
             }
             return;
         }

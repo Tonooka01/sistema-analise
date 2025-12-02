@@ -31,6 +31,10 @@ export let clientSearchInput;
 export let applyClientSearchBtn;
 export let relevanceFilterSearch;
 export let sortPermanenceAsc;
+// NOVAS REFERÊNCIAS PARA DATAS EM CANCELAMENTO/NEGATIVAÇÃO
+export let customDateFilterContainer;
+export let customStartDate;
+export let customEndDate;
 
 // Filtros Saúde Financeira / Evolução Ativos
 export let financialHealthFiltersDiv;
@@ -253,12 +257,15 @@ export function initializeDom() {
     cityFilterContainer = document.getElementById('city-filter-container');
     btnFilterGeneral = document.getElementById('btnFilterGeneral'); // Inicializa botão
 
-    // Filtros Busca Cliente
+    // Filtros Busca Cliente e Datas Personalizadas
     customSearchFilterDiv = document.getElementById('custom-search-filter');
     clientSearchInput = document.getElementById('clientSearchInput');
     applyClientSearchBtn = document.getElementById('applyClientSearch');
     relevanceFilterSearch = document.getElementById('relevanceFilterSearch');
     sortPermanenceAsc = document.getElementById('sortPermanenceAsc');
+    customDateFilterContainer = document.getElementById('custom-date-filters');
+    customStartDate = document.getElementById('customStartDate');
+    customEndDate = document.getElementById('customEndDate');
 
     // Filtros Saúde Financeira
     financialHealthFiltersDiv = document.getElementById('financial-health-filters');

@@ -210,8 +210,8 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     }
 }
 
-// *** FUNÇÃO ATUALIZADA: QUANTIDADE NO TÍTULO E LEGENDA ***
-export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false) {
+// *** FUNÇÃO ATUALIZADA: AGORA ACEITA START_DATE E END_DATE ***
+export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false, startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'cancellations', currentSearchTerm: searchTerm });
     const currentState = state.getCustomAnalysisState();
@@ -223,6 +223,9 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
         offset: offset
     });
     if (relevance) params.append('relevance', relevance);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
     params.append('sort_order', sortAsc ? 'asc' : 'desc'); 
     
     const url = `${state.API_BASE_URL}/api/custom_analysis/cancellations?${params.toString()}`;
@@ -269,6 +272,7 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
         const columns = [
             { header: 'Cliente', render: r => `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>` },
             { header: 'ID Contrato', key: 'Contrato_ID' },
+            { header: 'Data Cancelamento', render: r => r.Data_cancelamento ? utils.formatDate(r.Data_cancelamento) : 'N/A' },
             { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' },
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
@@ -309,6 +313,10 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
         }
         if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
         if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
+        
+        // Mantém valores dos inputs de data
+        if (dom.customStartDate) dom.customStartDate.value = startDate;
+        if (dom.customEndDate) dom.customEndDate.value = endDate;
 
     } catch (error) {
         if (state.getCustomAnalysisState().currentAnalysis === 'cancellations') utils.showError(error.message);
@@ -317,7 +325,8 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
     }
 }
 
-export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false) {
+// *** FUNÇÃO ATUALIZADA: AGORA ACEITA START_DATE E END_DATE ***
+export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false, startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'negativacao', currentSearchTerm: searchTerm });
     const currentState = state.getCustomAnalysisState();
@@ -329,6 +338,9 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
         offset: offset
     });
     if (relevance) params.append('relevance', relevance);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
     params.append('sort_order', sortAsc ? 'asc' : 'desc');
     
     const url = `${state.API_BASE_URL}/api/custom_analysis/negativacao?${params.toString()}`;
@@ -346,6 +358,7 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
         const columns = [
             { header: 'Cliente', render: r => `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>` },
             { header: 'ID Contrato', key: 'Contrato_ID' },
+            { header: 'Data Negativação', render: r => r.end_date ? utils.formatDate(r.end_date) : 'N/A' },
             { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' },
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
@@ -357,6 +370,10 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
         }
         if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
         if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
+        
+        // Mantém valores dos inputs de data
+        if (dom.customStartDate) dom.customStartDate.value = startDate;
+        if (dom.customEndDate) dom.customEndDate.value = endDate;
 
     } catch (error) {
         if (state.getCustomAnalysisState().currentAnalysis === 'negativacao') utils.showError(error.message);
