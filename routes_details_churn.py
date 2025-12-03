@@ -13,24 +13,16 @@ def api_cancellation_context(client_name, contract_id):
     """
     conn = get_db()
     try:
-        contract_info = conn.execute('SELECT Data_cancelamento FROM Contratos WHERE ID = ?', (contract_id,)).fetchone()
-        end_date = None
-        if contract_info and contract_info['Data_cancelamento']:
-            end_date = contract_info['Data_cancelamento']
-        else:
-            try:
-                neg_info = conn.execute('SELECT Data_negativa_o FROM Contratos_Negativacao WHERE ID = ?', (contract_id,)).fetchone()
-                if neg_info and neg_info['Data_negativa_o']:
-                    end_date = neg_info['Data_negativa_o']
-            except sqlite3.Error as e:
-                 if "no such table" not in str(e): raise e
-
-        where_atendimento_date_clause = f"AND DATE(Criado_em) < DATE('{end_date}')" if end_date else ""
-        where_os_date_clause = f"AND DATE(Abertura) < DATE('{end_date}')" if end_date else ""
+        # Removida a lógica de pegar Data_cancelamento para filtro.
+        # Agora buscamos TODOS os registros independentemente da data.
 
         equipamentos = conn.execute("SELECT Descricao_produto, Status_comodato, Data FROM Equipamento WHERE TRIM(ID_contrato) = ?", (contract_id,)).fetchall()
-        os = conn.execute(f"SELECT ID, Abertura, Fechamento, SLA, Assunto, Mensagem FROM OS WHERE Cliente = ? {where_os_date_clause} ORDER BY Abertura DESC", (client_name,)).fetchall()
-        atendimentos = conn.execute(f"SELECT ID, Criado_em, ltima_altera_o, Assunto, Novo_status, Descri_o FROM Atendimentos WHERE Cliente = ? {where_atendimento_date_clause} ORDER BY Criado_em DESC", (client_name,)).fetchall()
+        
+        # Filtro de data REMOVIDO aqui:
+        os = conn.execute(f"SELECT ID, Abertura, Fechamento, SLA, Assunto, Mensagem FROM OS WHERE Cliente = ? ORDER BY Abertura DESC", (client_name,)).fetchall()
+        
+        # Filtro de data REMOVIDO aqui:
+        atendimentos = conn.execute(f"SELECT ID, Criado_em, ltima_altera_o, Assunto, Novo_status, Descri_o FROM Atendimentos WHERE Cliente = ? ORDER BY Criado_em DESC", (client_name,)).fetchall()
 
         return jsonify({
             "equipamentos": [dict(row) for row in equipamentos],

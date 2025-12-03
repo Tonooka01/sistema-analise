@@ -39,14 +39,7 @@ def api_cancellation_analysis():
             where_clauses.append("permanencia_meses <= ?")
             params.append(max_months)
             
-        # Filtro de Data (Aplicado sobre a Data de Cancelamento)
-        # Nota: Como temos UNION ALL, o filtro idealmente deve ser aplicado dentro da CTE 'AllCancellations'
-        # Mas para simplificar e reaproveitar, vamos aplicar na CTE 'BaseData' se tivermos a coluna disponível
-        # No entanto, 'AllCancellations' já define 'Data_cancelamento'.
-        
-        # VAMOS MODIFICAR A CTE 'AllCancellations' PARA INCLUIR O FILTRO DE DATA DIRETAMENTE
-        # Isso é mais performático.
-        
+        # Filtros de Data
         date_filter_contratos = ""
         date_params_contratos = []
         date_where_list_c = []
@@ -61,9 +54,9 @@ def api_cancellation_analysis():
         if date_where_list_n:
             date_filter_negativacao = " AND " + " AND ".join(date_where_list_n)
 
-        # --- QUERY 1: DADOS DA TABELA (Mantém União com Negativados para a lista) ---
+        # --- QUERY 1: DADOS DA TABELA ---
+        # ATUALIZADO: Agora exige Status Inativo e Desativado TAMBÉM para a tabela de Negativação
         
-        # Adicionamos os params de data ANTES dos params de busca/relevância
         final_params = date_params_contratos + date_params_negativacao + params 
         
         table_base_query = f"""
@@ -75,18 +68,24 @@ def api_cancellation_analysis():
                  )
             ),
             AllCancellations AS (
+                -- Contratos Normais
                 SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_cancelamento, Motivo_cancelamento, Obs_cancelamento
-                FROM Contratos WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
+                FROM Contratos 
+                WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
+                
                 UNION ALL
+                
+                -- Negativados (Agora filtrando também por Status)
                 SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_negativa_o AS Data_cancelamento, Motivo_cancelamento, Obs_cancelamento
-                FROM Contratos_Negativacao WHERE 1=1 {date_filter_negativacao}
+                FROM Contratos_Negativacao 
+                WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_negativacao}
             ),
             BaseData AS (
                 SELECT 
                     AC.Cliente, AC.Contrato_ID, 
                     COALESCE(AC.Motivo_cancelamento, 'Não Informado') AS Motivo_cancelamento,
                     COALESCE(AC.Obs_cancelamento, 'Não Informado') AS Obs_cancelamento,
-                    AC.Data_cancelamento, -- Adicionado para verificação
+                    AC.Data_cancelamento, 
                     CASE WHEN RT.Cliente IS NOT NULL THEN 'Sim' ELSE 'Não' END AS Teve_Contato_Relevante,
                     CASE WHEN AC.Data_ativa_o IS NOT NULL AND AC.Data_cancelamento IS NOT NULL 
                          THEN CAST(ROUND((JULIANDAY(AC.Data_cancelamento) - JULIANDAY(AC.Data_ativa_o)) / 30.44) AS INTEGER) 
@@ -106,15 +105,44 @@ def api_cancellation_analysis():
         except sqlite3.Error as e:
             if "no such table" in str(e).lower():
                 # Fallback se a tabela de negativação não existir
-                # Remove a parte do UNION ALL
                 fallback_query_part = f"""
                     SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_cancelamento, Motivo_cancelamento, Obs_cancelamento
                     FROM Contratos WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
                 """
                 table_base_query_fallback = table_base_query.replace(
-                    f"SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_cancelamento, Motivo_cancelamento, Obs_cancelamento\n                FROM Contratos WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}\n                UNION ALL\n                SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_negativa_o AS Data_cancelamento, Motivo_cancelamento, Obs_cancelamento\n                FROM Contratos_Negativacao WHERE 1=1 {date_filter_negativacao}", 
+                    f"SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_cancelamento, Motivo_cancelamento, Obs_cancelamento\n                FROM Contratos WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}\n                UNION ALL\n                -- Negativados (Agora filtrando também por Status)\n                SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_negativa_o AS Data_cancelamento, Motivo_cancelamento, Obs_cancelamento\n                FROM Contratos_Negativacao \n                WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_negativacao}",
                     fallback_query_part
                 )
+                # Fallback regex replace might be tricky with new lines, simplified fallback logic:
+                table_base_query_fallback = f"""
+                    WITH RelevantTickets AS (
+                         SELECT DISTINCT Cliente FROM (
+                             SELECT Cliente FROM Atendimentos WHERE Assunto IN ('MANUTENÇÃO DE FIBRA', 'VISITA TECNICA')
+                             UNION ALL
+                             SELECT Cliente FROM OS WHERE Assunto IN ('MANUTENÇÃO DE FIBRA', 'VISITA TECNICA')
+                         )
+                    ),
+                    AllCancellations AS (
+                        SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_cancelamento, Motivo_cancelamento, Obs_cancelamento
+                        FROM Contratos WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
+                    ),
+                    BaseData AS (
+                        SELECT 
+                            AC.Cliente, AC.Contrato_ID, 
+                            COALESCE(AC.Motivo_cancelamento, 'Não Informado') AS Motivo_cancelamento,
+                            COALESCE(AC.Obs_cancelamento, 'Não Informado') AS Obs_cancelamento,
+                            AC.Data_cancelamento,
+                            CASE WHEN RT.Cliente IS NOT NULL THEN 'Sim' ELSE 'Não' END AS Teve_Contato_Relevante,
+                            CASE WHEN AC.Data_ativa_o IS NOT NULL AND AC.Data_cancelamento IS NOT NULL 
+                                 THEN CAST(ROUND((JULIANDAY(AC.Data_cancelamento) - JULIANDAY(AC.Data_ativa_o)) / 30.44) AS INTEGER) 
+                                 ELSE NULL 
+                            END AS permanencia_meses
+                        FROM AllCancellations AC
+                        LEFT JOIN RelevantTickets RT ON AC.Cliente = RT.Cliente
+                    )
+                    SELECT * FROM BaseData
+                """
+                
                 final_params_fallback = date_params_contratos + params
                 count_query = f"SELECT COUNT(*) FROM ({table_base_query_fallback}) AS sub {where_sql}"
                 total_rows = conn.execute(count_query, tuple(final_params_fallback)).fetchone()[0]
@@ -131,8 +159,11 @@ def api_cancellation_analysis():
         data = conn.execute(paginated_query, tuple(final_params + [limit, offset])).fetchall()
 
 
-        # --- QUERY 2: DADOS DOS GRÁFICOS (SOMENTE INATIVO/DESATIVADO PUROS) ---
-        # Aplica o filtro de data também aqui
+        # --- QUERY 2: DADOS DOS GRÁFICOS ---
+        # ATUALIZADO: Agora busca de ambas tabelas com os mesmos filtros estritos
+        
+        charts_params = date_params_contratos + date_params_negativacao + params
+
         charts_base_query = f"""
             WITH ChartsBaseData AS (
                 SELECT 
@@ -145,11 +176,44 @@ def api_cancellation_analysis():
                     END AS permanencia_meses
                 FROM Contratos 
                 WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
+                
+                UNION ALL
+                
+                SELECT 
+                    COALESCE(Motivo_cancelamento, 'Não Informado') AS Motivo_cancelamento,
+                    COALESCE(Obs_cancelamento, 'Não Informado') AS Obs_cancelamento,
+                    Cliente,
+                    CASE WHEN Data_ativa_o IS NOT NULL AND Data_negativa_o IS NOT NULL 
+                         THEN CAST(ROUND((JULIANDAY(Data_negativa_o) - JULIANDAY(Data_ativa_o)) / 30.44) AS INTEGER) 
+                         ELSE NULL 
+                    END AS permanencia_meses
+                FROM Contratos_Negativacao
+                WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_negativacao}
             )
             SELECT * FROM ChartsBaseData
         """
         
-        charts_params = date_params_contratos + params
+        # Fallback para gráficos se tabela não existir
+        try:
+             # Teste rápido
+             conn.execute("SELECT 1 FROM Contratos_Negativacao LIMIT 1")
+        except:
+             charts_base_query = f"""
+                WITH ChartsBaseData AS (
+                    SELECT 
+                        COALESCE(Motivo_cancelamento, 'Não Informado') AS Motivo_cancelamento,
+                        COALESCE(Obs_cancelamento, 'Não Informado') AS Obs_cancelamento,
+                        Cliente,
+                        CASE WHEN Data_ativa_o IS NOT NULL AND Data_cancelamento IS NOT NULL 
+                             THEN CAST(ROUND((JULIANDAY(Data_cancelamento) - JULIANDAY(Data_ativa_o)) / 30.44) AS INTEGER) 
+                             ELSE NULL 
+                        END AS permanencia_meses
+                    FROM Contratos 
+                    WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
+                )
+                SELECT * FROM ChartsBaseData
+            """
+             charts_params = date_params_contratos + params
 
         # Dados Gráfico Motivo
         chart_motivo_query = f"""

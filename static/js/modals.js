@@ -18,6 +18,10 @@ export function openModal(collectionName) {
         title = 'Análise Completa: Saúde Financeira (Atraso > 10 dias)';
     } else if (collectionName === 'saude_financeira_contrato_bloqueio') {
         title = 'Análise Completa: Saúde Financeira (Bloqueio Automático)';
+    } else if (collectionName === 'cancellations') {
+        title = 'Análise Completa: Cancelamentos';
+    } else if (collectionName === 'negativacao') {
+        title = 'Análise Completa: Negativações';
     }
 
     if (dom.modalTitle) dom.modalTitle.textContent = title;
@@ -50,36 +54,49 @@ export async function fetchAndDisplayTableInModal(collectionName, page = 1) {
     let isFullView = false; // Flag para indicar modo "ver tudo" (Excel)
 
     // --- LÓGICA DE SELEÇÃO DE URL ---
-    // Verifica se é uma das análises de saúde financeira
-    if (collectionName === 'saude_financeira_contrato_atraso' || collectionName === 'saude_financeira_contrato_bloqueio') {
+    // Verifica se é uma das análises personalizadas que suportam modal
+    const customAnalysesTypes = [
+        'saude_financeira_contrato_atraso', 
+        'saude_financeira_contrato_bloqueio',
+        'cancellations',
+        'negativacao'
+    ];
+
+    if (customAnalysesTypes.includes(collectionName)) {
         // *** MODO "EXCEL": Traz tudo em uma página (limite alto) ***
         isFullView = true;
         limit = 100000; // Define um limite alto para trazer "todos" os registros
         offset = 0;     // Sempre começa do início
 
-        // Define o endpoint correto
-        const endpoint = collectionName === 'saude_financeira_contrato_bloqueio' 
-            ? 'financial_health_auto_block' 
-            : 'financial_health';
-            
-        // Pega os filtros atuais da tela principal para aplicar na tabela completa do modal
+        let endpoint = '';
+        let params = new URLSearchParams({ limit, offset });
+        
+        // Pega os filtros atuais do DOM para aplicar na tabela completa
         const searchTerm = dom.clientSearchInput?.value || '';
-        const contractStatus = dom.contractStatusFilter?.value || '';
-        const accessStatus = dom.accessStatusFilter?.value || '';
-        
-        // Captura o filtro de relevância
-        const relevance = dom.relevanceFilterSearch?.value || '';
+        if (searchTerm) params.append('search_term', searchTerm);
 
-        const params = new URLSearchParams({
-            limit: limit,
-            offset: offset,
-            search_term: searchTerm
-        });
-        if (contractStatus) params.append('status_contrato', contractStatus);
-        if (accessStatus) params.append('status_acesso', accessStatus);
-        
-        // Adiciona relevância à URL
-        if (relevance) params.append('relevance', relevance);
+        if (collectionName.startsWith('saude_financeira')) {
+            endpoint = collectionName.includes('bloqueio') ? 'financial_health_auto_block' : 'financial_health';
+            const contractStatus = dom.contractStatusFilter?.value || '';
+            const accessStatus = dom.accessStatusFilter?.value || '';
+            if (contractStatus) params.append('status_contrato', contractStatus);
+            if (accessStatus) params.append('status_acesso', accessStatus);
+            if (dom.relevanceFilterSearch?.value) params.append('relevance', dom.relevanceFilterSearch.value);
+
+        } else if (collectionName === 'cancellations') {
+            endpoint = 'cancellations';
+            if (dom.customStartDate?.value) params.append('start_date', dom.customStartDate.value);
+            if (dom.customEndDate?.value) params.append('end_date', dom.customEndDate.value);
+            if (dom.relevanceFilterSearch?.value) params.append('relevance', dom.relevanceFilterSearch.value);
+            params.append('sort_order', state.getCustomAnalysisState().sortOrder || 'desc');
+
+        } else if (collectionName === 'negativacao') {
+            endpoint = 'negativacao';
+            if (dom.customStartDate?.value) params.append('start_date', dom.customStartDate.value);
+            if (dom.customEndDate?.value) params.append('end_date', dom.customEndDate.value);
+            if (dom.relevanceFilterSearch?.value) params.append('relevance', dom.relevanceFilterSearch.value);
+            params.append('sort_order', state.getCustomAnalysisState().sortOrder || 'desc');
+        }
 
         url = `${state.API_BASE_URL}/api/custom_analysis/${endpoint}?${params.toString()}`;
 

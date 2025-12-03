@@ -355,9 +355,18 @@ export function initializeEventListeners() {
 
     dom.viewTableBtn?.addEventListener('click', () => {
         const selectedAnalysis = dom.customAnalysisSelector?.value;
-        if (selectedAnalysis === 'saude_financeira_contrato_atraso' || selectedAnalysis === 'saude_financeira_contrato_bloqueio') {
+        // Lista de análises que possuem suporte a modal de "Tabela Completa/Excel"
+        const supportedCustomModalAnalyses = [
+            'saude_financeira_contrato_atraso', 
+            'saude_financeira_contrato_bloqueio',
+            'cancellations',
+            'negativacao'
+        ];
+
+        if (supportedCustomModalAnalyses.includes(selectedAnalysis)) {
             openModal(selectedAnalysis);
         } else {
+            // Fallback para coleções padrão
             openModal(state.getModalCurrentCollection());
         }
     });
