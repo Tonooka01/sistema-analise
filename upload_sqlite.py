@@ -81,8 +81,9 @@ def upload_data_to_sqlite(file_path):
         # ------------------------------------------------------------------
 
         # Mapeamento de chaves "limpas" (sem espaços, sem underscores, minúsculas)
+        # ATUALIZAÇÃO: Adicionado 'datacrdito' para capturar variações de 'Data_cr_dito'
         DATE_COLUMNS_MAP_CLEANED = {
-            'Contas_a_Receber': ['vencimento', 'emissao', 'datapagamento', 'datacredito', 'databaixa', 'datacancelamento', 'validadedescontocondicional'],
+            'Contas_a_Receber': ['vencimento', 'emissao', 'datapagamento', 'datacredito', 'datacrdito', 'databaixa', 'datacancelamento', 'validadedescontocondicional'],
             'Atendimentos': ['criadoem', 'ultimaalteracao'],
             'OS': ['abertura', 'fechamento'],
             'Contratos': ['datacadastrosistema', 'datacancelamento', 'dataativao'], 

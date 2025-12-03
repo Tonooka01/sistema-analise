@@ -98,15 +98,17 @@ export async function fetchAndRenderBillingByCityAnalysis(startDate = '', endDat
         const statusColorsBilling = {'Recebido': '#48bb78', 'A receber': '#f59e0b', 'Cancelado': '#6b7280'};
         const commonStackedOptions = { scales: { x: { stacked: true }, y: { stacked: true } } };
 
+        // 1. Gráfico Original (Por Data de Pagamento)
         if (result.faturamento_total?.length > 0) {
             const data1 = result.faturamento_total;
             const labels1 = [...new Set(data1.map(item => item.Month))].sort();
             const datasets1 = [...new Set(data1.map(item => item.Status))].map(status => ({
                 label: status, data: labels1.map(label => data1.find(d => d.Month === label && d.Status === status)?.Total_Value || 0), backgroundColor: statusColorsBilling[status] || '#a0aec0'
             }));
-            renderBillingChart('billingChart1', 'Contas a Receber (Todos)', { labels: labels1, datasets: datasets1 }, [{value: 'bar_vertical', label: 'Barra V', checked: true}, {value: 'line', label: 'Linha'}], commonStackedOptions, { w: 6, h: 6, x: 0, y: 0 });
+            renderBillingChart('billingChart1', 'Contas a Receber (Todos - Pagamento)', { labels: labels1, datasets: datasets1 }, [{value: 'bar_vertical', label: 'Barra V', checked: true}, {value: 'line', label: 'Linha'}], commonStackedOptions, { w: 6, h: 6, x: 0, y: 0 });
         }
 
+        // 2. Gráfico Ativos
         if (result.faturamento_ativos?.length > 0) {
             const data2 = result.faturamento_ativos;
             const labels2 = [...new Set(data2.map(item => item.Month))].sort();
@@ -116,13 +118,32 @@ export async function fetchAndRenderBillingByCityAnalysis(startDate = '', endDat
              renderBillingChart('billingChart2', 'Contas a Receber (Ativos)', { labels: labels2, datasets: datasets2 }, [{value: 'bar_vertical', label: 'Barra V', checked: true}, {value: 'line', label: 'Linha'}], commonStackedOptions, { w: 6, h: 6, x: 6, y: 0 });
         }
 
+        // 3. NOVO GRÁFICO (Por Data de Crédito)
+        if (result.faturamento_credito?.length > 0) {
+            const dataCredito = result.faturamento_credito;
+            const labelsCredito = [...new Set(dataCredito.map(item => item.Month))].sort();
+            const datasetsCredito = [...new Set(dataCredito.map(item => item.Status))].map(status => ({
+                label: status, 
+                data: labelsCredito.map(label => dataCredito.find(d => d.Month === label && d.Status === status)?.Total_Value || 0), 
+                backgroundColor: statusColorsBilling[status] || '#a0aec0'
+            }));
+            // Posiciona na linha de baixo (y: 6), lado esquerdo (x: 0)
+            renderBillingChart('billingChartCredito', 'Contas a Receber (Todos - Data Crédito)', { labels: labelsCredito, datasets: datasetsCredito }, 
+                [{value: 'bar_vertical', label: 'Barra V', checked: true}, {value: 'line', label: 'Linha'}], 
+                commonStackedOptions, 
+                { w: 6, h: 6, x: 0, y: 6 } 
+            );
+        }
+
+        // 4. Gráfico por Dia de Vencimento
         if (result.faturamento_por_dia_vencimento?.length > 0) {
             const data3 = result.faturamento_por_dia_vencimento;
             const labels3 = [...new Set(data3.map(item => item.Due_Day))].sort((a,b) => parseInt(a) - parseInt(b));
             const datasets3 = [...new Set(data3.map(item => item.Month))].sort().map((month, index) => ({
                 label: month, data: labels3.map(day => data3.find(d => d.Month === month && d.Due_Day === day)?.Total_Value || 0), backgroundColor: ['#3b82f6', '#10b981', '#f97316', '#8b5cf6', '#ec4899'][index % 5]
             }));
-            renderBillingChart('billingChart3', 'Comparativo por Dia de Vencimento', { labels: labels3, datasets: datasets3 }, [{value: 'bar_vertical', label: 'Barra V', checked: true}, {value: 'bar_horizontal', label: 'Barra H'}], { scales: { y: { beginAtZero: true } } }, { w: 12, h: 7, x: 0, y: 6 });
+            // Reposiciona para acomodar o novo gráfico: x: 6 (lado direito), y: 6 (mesma linha do crédito)
+            renderBillingChart('billingChart3', 'Comparativo por Dia de Vencimento', { labels: labels3, datasets: datasets3 }, [{value: 'bar_vertical', label: 'Barra V', checked: true}, {value: 'bar_horizontal', label: 'Barra H'}], { scales: { y: { beginAtZero: true } } }, { w: 6, h: 6, x: 6, y: 6 });
         }
 
     } catch (error) {

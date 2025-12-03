@@ -221,12 +221,13 @@ def api_faturamento_por_cidade():
         
         from_join_clause_query1 = 'FROM "Contas_a_Receber" CR'
         
+        # --- QUERY 1: Faturamento Total (Data_pagamento) ---
         where_recebido_q1 = f"WHERE CR.Data_pagamento BETWEEN :start_date AND :end_date {city_clause_query1}"
         where_areceber_q1 = f"WHERE CR.Status = 'A receber' AND CR.Vencimento BETWEEN :start_date AND :end_date {city_clause_query1}"
         where_cancelado_q1 = f"WHERE CR.Status = 'Cancelado' AND CR.Vencimento BETWEEN :start_date AND :end_date {city_clause_query1}"
 
         query1 = f"""
-            -- 1. Recebidos
+            -- 1. Recebidos (Pagamento)
             SELECT
                 STRFTIME('%Y-%m', CR.Data_pagamento) AS Month,
                 'Recebido' AS Status,
@@ -258,6 +259,42 @@ def api_faturamento_por_cidade():
             GROUP BY Month
         """
 
+        # --- QUERY NOVO: Faturamento por Data de Crédito (Data_cr_dito) ---
+        # Usa Data_cr_dito para 'Recebido', mas mantém Vencimento para 'A receber' e 'Cancelado' para compor o gráfico
+        query_credito = f"""
+            -- 1. Recebidos (Crédito)
+            SELECT
+                STRFTIME('%Y-%m', CR.Data_cr_dito) AS Month,
+                'Recebido' AS Status,
+                SUM(CR.Valor_recebido) AS Total_Value
+            {from_join_clause_query1}
+            WHERE CR.Data_cr_dito BETWEEN :start_date AND :end_date {city_clause_query1}
+            GROUP BY Month
+            
+            UNION ALL
+            
+            -- 2. A receber (Reutiliza lógica do query1)
+            SELECT
+                STRFTIME('%Y-%m', CR.Vencimento) AS Month,
+                'A receber' AS Status,
+                SUM(CR.Valor) AS Total_Value
+            {from_join_clause_query1}
+            {where_areceber_q1}
+            GROUP BY Month
+            
+            UNION ALL
+            
+            -- 3. Cancelado (Reutiliza lógica do query1)
+            SELECT
+                STRFTIME('%Y-%m', CR.Vencimento) AS Month,
+                'Cancelado' AS Status,
+                SUM(CR.Valor_cancelado) AS Total_Value
+            {from_join_clause_query1}
+            {where_cancelado_q1}
+            GROUP BY Month
+        """
+
+        # --- QUERY 2: Faturamento Ativos ---
         where_recebido_q2 = f"WHERE CR.Data_pagamento BETWEEN :start_date AND :end_date {city_clause_query2_3}"
         where_areceber_q2 = f"WHERE CR.Status = 'A receber' AND CR.Vencimento BETWEEN :start_date AND :end_date {city_clause_query2_3}"
         where_cancelado_q2 = f"WHERE CR.Status = 'Cancelado' AND CR.Vencimento BETWEEN :start_date AND :end_date {city_clause_query2_3}"
@@ -303,6 +340,7 @@ def api_faturamento_por_cidade():
             GROUP BY Month
         """
 
+        # --- QUERY 3: Por Dia de Vencimento ---
         query3 = f"""
             SELECT C.Dia_fixo_do_vencimento AS Due_Day, STRFTIME('%Y-%m', CR.Vencimento) AS Month, SUM(CR.Valor) AS Total_Value
             {from_join_clause_grafico3}
@@ -313,7 +351,9 @@ def api_faturamento_por_cidade():
 
         cities_query = "SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' ORDER BY Cidade"
 
+        # Execução das Queries
         data1 = conn.execute(query1, params).fetchall()
+        data_credito = conn.execute(query_credito, params).fetchall() # Nova execução
         
         data2 = []
         try:
@@ -330,6 +370,7 @@ def api_faturamento_por_cidade():
 
         return jsonify({
             "faturamento_total": [dict(row) for row in data1],
+            "faturamento_credito": [dict(row) for row in data_credito], # Novo retorno
             "faturamento_ativos": [dict(row) for row in data2],
             "faturamento_por_dia_vencimento": [dict(row) for row in data3],
             "cities": [row[0] for row in cities_data]
