@@ -7,8 +7,15 @@ import { renderChart } from './charts.js';
 
 /**
  * Busca os status de contrato e acesso para preencher os filtros da análise de Saúde Financeira.
+ * FIX: Adicionada verificação para não repopular (e limpar seleção) se já estiver carregado.
  */
 export async function populateContractStatusFilters() {
+    // Verifica se já existem opções carregadas (mais de 1, pois 'Todos' é o padrão)
+    // Isso impede que o filtro selecionado seja resetado ao navegar entre páginas
+    if (dom.contractStatusFilter && dom.contractStatusFilter.options.length > 1) {
+        return; 
+    }
+
     try {
         const response = await fetch(`${state.API_BASE_URL}/api/filters/contract_statuses`);
         if (!response.ok) {
@@ -17,7 +24,11 @@ export async function populateContractStatusFilters() {
         }
         const data = await response.json();
 
+        // Popula Status Contrato
         if (dom.contractStatusFilter && data.status_contrato) {
+            // Salva valor atual se houver (para o caso de re-renderização forçada)
+            const currentValue = dom.contractStatusFilter.value;
+            
             dom.contractStatusFilter.innerHTML = '<option value="">Todos</option>';
             data.status_contrato.forEach(status => {
                 const option = document.createElement('option');
@@ -25,9 +36,20 @@ export async function populateContractStatusFilters() {
                 option.textContent = status;
                 dom.contractStatusFilter.appendChild(option);
             });
+
+            // Restaura valor se ainda existir nas opções
+            if (currentValue) dom.contractStatusFilter.value = currentValue;
         }
 
+        // Popula Status Acesso (Checkboxes)
         if (dom.accessStatusContainer && data.status_acesso) {
+            // Verifica se já tem checkboxes para não limpar seleção
+            if (dom.accessStatusContainer.children.length > 0 && dom.accessStatusContainer.querySelector('input')) {
+                 // Se já tem conteúdo, assumimos que está populado.
+                 // Se precisarmos forçar atualização, teríamos que salvar o estado dos checkboxes.
+                 return;
+            }
+
             dom.accessStatusContainer.innerHTML = '';
 
             data.status_acesso.forEach(status => {
@@ -40,6 +62,9 @@ export async function populateContractStatusFilters() {
                 checkbox.className = 'mr-2 form-checkbox h-4 w-4 text-purple-600 transition duration-150 ease-in-out cursor-pointer';
                 const uniqueId = `chk_access_${status.replace(/\s+/g, '_')}`;
                 checkbox.id = uniqueId;
+
+                // Marcar "Ativo" por padrão se desejar, mas vamos deixar limpo ou conforme lógica anterior
+                if (status === 'Ativo') checkbox.checked = true;
 
                 const label = document.createElement('label');
                 label.textContent = status;
@@ -113,7 +138,7 @@ function renderCustomAnalysisPagination() {
 
     if (paginationControls) {
         if (totalPages > 1 && currentState.totalRows > 0) {
-            if(pageInfo) pageInfo.textContent = `Página ${currentState.currentPage} de ${totalPages}`;
+            if(pageInfo) pageInfo.textContent = `Página ${currentState.currentPage} de ${totalPages} (${currentState.totalRows} registros)`;
             if(prevBtn) prevBtn.disabled = currentState.currentPage <= 1;
             if(nextBtn) nextBtn.disabled = currentState.currentPage >= totalPages;
             paginationControls.classList.remove('hidden');
@@ -159,14 +184,15 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'saude_financeira', currentSearchTerm: searchTerm, currentAnalysisType: analysisType }); 
     
     const currentState = state.getCustomAnalysisState(); 
+    
+    // Lê os filtros do DOM. 
+    // NOTA: populateContractStatusFilters deve garantir que estes elementos mantenham seus valores ao navegar.
     const contractStatus = dom.contractStatusFilter?.value || '';
     
     let accessStatus = '';
-    if (dom.accessStatusContainer && dom.accessStatusContainer.querySelector('input[type="checkbox"]')) {
+    if (dom.accessStatusContainer) {
          const checked = dom.accessStatusContainer.querySelectorAll('input[type="checkbox"]:checked');
          accessStatus = Array.from(checked).map(cb => cb.value).join(',');
-    } else if (dom.accessStatusContainer && dom.accessStatusContainer.tagName === 'SELECT') {
-         accessStatus = dom.accessStatusContainer.value;
     }
 
     const offset = (page - 1) * currentState.rowsPerPage;
@@ -243,11 +269,9 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
         // --- RENDERIZAÇÃO DOS GRÁFICOS (MOTIVO E OBS) ---
         let chartsHtml = '';
         if (result.charts) {
-            // Calcula os totais para exibir no título do card
             const totalMotivos = result.charts.motivo ? result.charts.motivo.reduce((acc, curr) => acc + (curr.Count || 0), 0) : 0;
             const totalObs = result.charts.obs ? result.charts.obs.reduce((acc, curr) => acc + (curr.Count || 0), 0) : 0;
 
-            // Altura ajustada para 500px para acomodar a lista completa de legendas
             chartsHtml = `
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                     <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
@@ -277,7 +301,6 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
         
-        // Passa o HTML dos gráficos como conteúdo extra
         renderCustomTable(result, 'Análise de Cancelamentos por Contato Técnico', columns, chartsHtml);
 
         // --- INICIALIZAÇÃO DOS GRÁFICOS ---
@@ -285,7 +308,6 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
             setTimeout(() => {
                 if (result.charts.motivo && result.charts.motivo.length > 0) {
                     renderChart('motivoCancelamentoChart', 'pie', 
-                        // LEGENDAS COM CONTAGEM: Ex: "Financeiro (15)"
                         result.charts.motivo.map(d => `${d.Motivo_cancelamento} (${d.Count})`), 
                         [{ data: result.charts.motivo.map(d => d.Count) }], 
                         '', { formatterType: 'percent_only' }
@@ -296,7 +318,6 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
 
                 if (result.charts.obs && result.charts.obs.length > 0) {
                     renderChart('obsCancelamentoChart', 'pie', 
-                        // LEGENDAS COM CONTAGEM: Ex: "Mudança (5)"
                         result.charts.obs.map(d => `${d.Obs_cancelamento} (${d.Count})`), 
                         [{ data: result.charts.obs.map(d => d.Count) }], 
                         '', { formatterType: 'percent_only' }
@@ -313,8 +334,6 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
         }
         if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
         if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
-        
-        // Mantém valores dos inputs de data
         if (dom.customStartDate) dom.customStartDate.value = startDate;
         if (dom.customEndDate) dom.customEndDate.value = endDate;
 
@@ -370,8 +389,6 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
         }
         if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
         if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
-        
-        // Mantém valores dos inputs de data
         if (dom.customStartDate) dom.customStartDate.value = startDate;
         if (dom.customEndDate) dom.customEndDate.value = endDate;
 

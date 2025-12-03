@@ -77,8 +77,17 @@ export async function fetchAndDisplayTableInModal(collectionName, page = 1) {
 
         if (collectionName.startsWith('saude_financeira')) {
             endpoint = collectionName.includes('bloqueio') ? 'financial_health_auto_block' : 'financial_health';
+            
             const contractStatus = dom.contractStatusFilter?.value || '';
-            const accessStatus = dom.accessStatusFilter?.value || '';
+            
+            // --- CORREÇÃO: Ler corretamente os checkboxes de Status de Acesso ---
+            let accessStatus = '';
+            if (dom.accessStatusContainer) {
+                 const checked = dom.accessStatusContainer.querySelectorAll('input[type="checkbox"]:checked');
+                 accessStatus = Array.from(checked).map(cb => cb.value).join(',');
+            }
+            // -------------------------------------------------------------------
+
             if (contractStatus) params.append('status_contrato', contractStatus);
             if (accessStatus) params.append('status_acesso', accessStatus);
             if (dom.relevanceFilterSearch?.value) params.append('relevance', dom.relevanceFilterSearch.value);
