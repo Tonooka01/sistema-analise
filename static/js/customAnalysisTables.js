@@ -1,7 +1,7 @@
 import * as state from './state.js';
 import * as dom from './dom.js';
 import * as utils from './utils.js';
-import { renderChart } from './charts.js';
+import { renderChart, destroySpecificChart } from './charts.js';
 
 // --- Helper: Badge de Comportamento de Pagamento ---
 function getPaymentBehaviorBadge(avgDays) {
@@ -260,6 +260,112 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
         if (state.getCustomAnalysisState().currentAnalysis === 'saude_financeira') utils.showError(error.message);
     } finally {
         if (state.getCustomAnalysisState().currentAnalysis === 'saude_financeira') utils.showLoading(false);
+    }
+}
+
+// *** NOVA FUNÇÃO PARA RENDERIZAR A TABELA DE PERMANÊNCIA REAL ***
+export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page = 1, relevance = '', startDate = '', endDate = '') {
+    utils.showLoading(true);
+    state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'real_permanence', currentSearchTerm: searchTerm });
+    const currentState = state.getCustomAnalysisState();
+    const offset = (page - 1) * currentState.rowsPerPage;
+
+    // --- LEITURA DOS FILTROS DE STATUS DO DOM ---
+    const contractStatus = dom.contractStatusFilter?.value || '';
+    let accessStatus = '';
+    if (dom.accessStatusContainer) {
+         const checked = dom.accessStatusContainer.querySelectorAll('input[type="checkbox"]:checked');
+         accessStatus = Array.from(checked).map(cb => cb.value).join(',');
+    }
+
+    const params = new URLSearchParams({
+        search_term: searchTerm,
+        limit: currentState.rowsPerPage,
+        offset: offset
+    });
+    if (relevance) params.append('relevance', relevance); // Filtra por meses pagos
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    if (contractStatus) params.append('status_contrato', contractStatus); // NOVO
+    if (accessStatus) params.append('status_acesso', accessStatus);       // NOVO
+
+    const url = `${state.API_BASE_URL}/api/custom_analysis/real_permanence?${params.toString()}`;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar análise de permanência.'));
+        const result = await response.json();
+
+        if (state.getCustomAnalysisState().currentAnalysis !== 'real_permanence') return;
+
+        const columns = [
+            { 
+                header: 'Cliente', 
+                render: r => {
+                    const clientLink = `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline font-medium" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>`;
+                    return `<div class="flex flex-col">${clientLink}</div>`;
+                } 
+            },
+            { header: 'ID Contrato', key: 'Contrato_ID' },
+            // --- NOVAS COLUNAS DE STATUS ---
+            { 
+                header: 'Status Contrato', 
+                render: r => {
+                    let color = 'bg-gray-100 text-gray-800';
+                    if (r.Status_contrato === 'Ativo') color = 'bg-green-100 text-green-800';
+                    else if (['Inativo', 'Cancelado'].includes(r.Status_contrato)) color = 'bg-red-100 text-red-800';
+                    else if (r.Status_contrato === 'Negativado') color = 'bg-orange-100 text-orange-800';
+                    return `<span class="text-xs font-bold px-2 py-1 rounded-full ${color}">${r.Status_contrato}</span>`;
+                }
+            },
+            { header: 'Status Acesso', key: 'Status_acesso', render: r => `<span class="text-xs text-gray-600">${r.Status_acesso}</span>` },
+            // -------------------------------
+            { 
+                header: 'Permanência Paga', 
+                render: r => `<span class="text-lg font-bold text-green-700 bg-green-50 px-3 py-1 rounded-lg shadow-sm border border-green-200" title="Meses efetivamente pagos">${r.Permanencia_Paga} meses</span>`,
+                cssClass: 'text-center'
+            },
+            { 
+                header: 'Permanência Real', 
+                render: r => `<span class="text-gray-600 font-medium" title="Tempo corrido desde a ativação">${r.Permanencia_Real_Calendario} meses</span>`,
+                cssClass: 'text-center'
+            },
+            { 
+                header: 'Faturas (Resumo)', 
+                render: r => {
+                    return `
+                    <div class="text-xs space-y-1">
+                        <div class="flex justify-between w-32"><span class="text-gray-500">Total:</span> <span class="font-bold text-gray-800 invoice-detail-trigger cursor-pointer hover:underline" data-type="all_invoices" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Total_Faturas}</span></div>
+                        <div class="flex justify-between w-32"><span class="text-green-600">Pagas:</span> <span class="font-bold text-green-700">${r.Faturas_Pagas}</span></div>
+                        <div class="flex justify-between w-32"><span class="text-red-500">Abertas:</span> <span class="font-bold text-red-600 invoice-detail-trigger cursor-pointer hover:underline" data-type="faturas_nao_pagas" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Faturas_Nao_Pagas}</span></div>
+                        <div class="flex justify-between w-32"><span class="text-orange-500">Atrasos PG:</span> <span class="font-bold text-orange-600 invoice-detail-trigger cursor-pointer hover:underline" data-type="atrasos_pagos" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Atrasos_Pagos}</span></div>
+                    </div>
+                    `;
+                }
+            },
+            { 
+                header: 'Equipamento (Comodato)', 
+                render: r => {
+                    if (!r.Equipamento_Comodato || r.Equipamento_Comodato === 'Nenhum') return '<span class="text-gray-400 text-xs italic">Nenhum</span>';
+                    return `<span class="text-xs text-blue-800 bg-blue-50 px-2 py-1 rounded max-w-[200px] truncate block" title="${r.Equipamento_Comodato}">${r.Equipamento_Comodato}</span>`;
+                }
+            },
+            { header: 'Vendedor', render: r => `<span class="text-xs font-medium text-gray-700">${r.Vendedor_Nome || 'N/A'}</span>` },
+            { header: 'Cidade', key: 'Cidade' },
+            { header: 'Bairro', key: 'Bairro' }
+        ];
+
+        renderCustomTable(result, 'Análise de Permanência Real (Meses Pagos vs Calendário)', columns);
+
+        if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
+        if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
+        if (dom.customStartDate) dom.customStartDate.value = startDate;
+        if (dom.customEndDate) dom.customEndDate.value = endDate;
+
+    } catch (error) {
+        if (state.getCustomAnalysisState().currentAnalysis === 'real_permanence') utils.showError(error.message);
+    } finally {
+        if (state.getCustomAnalysisState().currentAnalysis === 'real_permanence') utils.showLoading(false);
     }
 }
 

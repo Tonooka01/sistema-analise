@@ -167,6 +167,28 @@ function handleCustomAnalysisChange(page = 1) {
             customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, page, relevanceSearchNeg, sortAsc, negStart, negEnd);
             break;
 
+        case 'real_permanence':
+            // 1. Filtros de Busca e Data (Relevância, Data Inicial/Final)
+            if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
+            if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.remove('hidden');
+            
+            // 2. Filtros de Status (Contrato e Acesso)
+            if (dom.financialHealthFiltersDiv) dom.financialHealthFiltersDiv.classList.remove('hidden');
+            
+            // IMPORTANTE: Oculta o botão "Filtrar" do container de status para evitar duplicação,
+            // pois usaremos o botão "Filtrar" principal (do topo) para aplicar tudo.
+            if (dom.filterActiveClientsBtn) dom.filterActiveClientsBtn.classList.add('hidden');
+            
+            // Popula os selects de status se estiverem vazios
+            customTables.populateContractStatusFilters();
+
+            const relevancePermanence = dom.relevanceFilterSearch?.value || '';
+            const permStart = dom.customStartDate?.value || '';
+            const permEnd = dom.customEndDate?.value || '';
+            
+            customTables.fetchAndRenderRealPermanenceAnalysis(searchTerm, page, relevancePermanence, permStart, permEnd);
+            break;
+
         case 'vendedores':
             if (dom.sellerAnalysisFiltersDiv) dom.sellerAnalysisFiltersDiv.classList.remove('hidden');
             const sellerStart = dom.sellerStartDate?.value || '';
@@ -540,15 +562,15 @@ export function initializeEventListeners() {
             const searchTerm = dom.clientSearchInput?.value || '';
             const relevance = dom.relevanceFilterSearch?.value || '';
             const isAsc = newSortOrder === 'asc';
+            const permStart = dom.customStartDate?.value || '';
+            const permEnd = dom.customEndDate?.value || '';
             
             if (currentState.currentAnalysis === 'cancellations') {
-                const cancelStart = dom.customStartDate?.value || '';
-                const cancelEnd = dom.customEndDate?.value || '';
-                customTables.fetchAndRenderCancellationAnalysis(searchTerm, 1, relevance, isAsc, cancelStart, cancelEnd);
+                customTables.fetchAndRenderCancellationAnalysis(searchTerm, 1, relevance, isAsc, permStart, permEnd);
             } else if (currentState.currentAnalysis === 'negativacao') {
-                const negStart = dom.customStartDate?.value || '';
-                const negEnd = dom.customEndDate?.value || '';
-                customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, 1, relevance, isAsc, negStart, negEnd);
+                customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, 1, relevance, isAsc, permStart, permEnd);
+            } else if (currentState.currentAnalysis === 'real_permanence') { // Adicionado para a nova análise
+                customTables.fetchAndRenderRealPermanenceAnalysis(searchTerm, 1, relevance, permStart, permEnd);
             }
             return;
         }

@@ -16,6 +16,8 @@ financial_cte = """
             SUM(CASE WHEN Data_pagamento > Vencimento THEN 1 ELSE 0 END) AS Atrasos_Pagos,
             SUM(CASE WHEN Status = 'A receber' AND Vencimento < date('now') THEN 1 ELSE 0 END) AS Faturas_Nao_Pagas,
             COUNT(*) AS Total_Faturas,
+            SUM(CASE WHEN Data_pagamento IS NOT NULL THEN 1 ELSE 0 END) AS Faturas_Pagas,
+            SUM(CASE WHEN Status = 'Cancelado' THEN 1 ELSE 0 END) AS Faturas_Canceladas,
             AVG(
                 CASE 
                     WHEN Data_pagamento IS NOT NULL 
@@ -399,6 +401,153 @@ def api_negativacao_analysis():
             return jsonify({"error": "A tabela 'Contratos_Negativacao' não foi encontrada."}), 500
         print(f"Erro na base de dados na análise de negativação: {e}")
         return jsonify({"error": f"Erro interno ao processar a análise. Detalhe: {e}"}), 500
+    finally:
+        if conn: conn.close()
+
+# --- NOVA ROTA: PERMANÊNCIA REAL (PAGA VS CALENDÁRIO) ---
+@churn_bp.route('/real_permanence')
+def api_real_permanence():
+    conn = get_db()
+    try:
+        search_term = request.args.get('search_term', '').strip()
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        
+        # Filtros de data para "Ativação" ou "Cancelamento"
+        # Na "Permanência Real", geralmente olhamos contratos ativos ou inativos num período
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
+        
+        relevance = request.args.get('relevance', '') # Filtro por meses de permanência real
+
+        # --- NOVOS FILTROS DE STATUS ---
+        status_contrato = request.args.get('status_contrato')
+        status_acesso = request.args.get('status_acesso')
+
+        params = []
+        where_clauses = []
+
+        if search_term:
+            where_clauses.append("C.Cliente LIKE ?")
+            params.append(f'%{search_term}%')
+
+        # Se houver filtro de data, aplicamos na Data de Ativação (para ver safras) 
+        # OU Data de Cancelamento (para ver churn). 
+        # Como é uma análise geral, vamos aplicar na Data de Ativação por padrão se o usuário filtrar.
+        if start_date:
+            where_clauses.append("DATE(C.Data_ativa_o) >= ?")
+            params.append(start_date)
+        if end_date:
+            where_clauses.append("DATE(C.Data_ativa_o) <= ?")
+            params.append(end_date)
+
+        # Filtros de Status
+        if status_contrato:
+            status_list = status_contrato.split(',')
+            placeholders = ','.join(['?'] * len(status_list))
+            where_clauses.append(f"C.Status_contrato IN ({placeholders})")
+            params.extend(status_list)
+
+        if status_acesso:
+            acesso_list = status_acesso.split(',')
+            placeholders = ','.join(['?'] * len(acesso_list))
+            where_clauses.append(f"C.Status_acesso IN ({placeholders})")
+            params.extend(acesso_list)
+
+        # Base CTE reutilizando a lógica financeira
+        # Adiciona Equipment CTE
+        base_query = f"""
+            WITH {financial_cte},
+            EquipmentInfo AS (
+                SELECT 
+                    TRIM(ID_contrato) as ID_Contrato,
+                    GROUP_CONCAT(Descricao_produto, ', ') as Equipamentos
+                FROM Equipamento 
+                WHERE Status_comodato = 'Emprestado'
+                GROUP BY ID_Contrato
+            ),
+            SellerInfo AS (
+                SELECT ID, Vendedor FROM Vendedores
+            ),
+            JoinedData AS (
+                SELECT
+                    C.ID AS Contrato_ID,
+                    C.Cliente,
+                    C.Vendedor AS Vendedor_ID,
+                    COALESCE(S.Vendedor, 'N/A') AS Vendedor_Nome,
+                    C.Cidade,
+                    C.Bairro,
+                    C.Data_ativa_o,
+                    C.Data_cancelamento,
+                    C.Status_contrato,
+                    C.Status_acesso,
+                    
+                    -- Métricas Financeiras
+                    COALESCE(FS.Total_Faturas, 0) AS Total_Faturas,
+                    COALESCE(FS.Faturas_Pagas, 0) AS Faturas_Pagas,
+                    COALESCE(FS.Faturas_Canceladas, 0) AS Faturas_Canceladas,
+                    COALESCE(FS.Faturas_Nao_Pagas, 0) AS Faturas_Nao_Pagas,
+                    COALESCE(FS.Atrasos_Pagos, 0) AS Atrasos_Pagos,
+                    FS.Media_Atraso,
+                    
+                    -- Equipamentos
+                    COALESCE(EI.Equipamentos, 'Nenhum') AS Equipamento_Comodato,
+                    
+                    -- Permanência Real (Meses Pagos)
+                    COALESCE(FS.Faturas_Pagas, 0) AS Permanencia_Paga,
+                    
+                    -- Permanência Calendário (Meses corridos)
+                    CASE 
+                        WHEN C.Data_ativa_o IS NOT NULL THEN
+                            CAST(ROUND(
+                                (JULIANDAY(COALESCE(C.Data_cancelamento, DATE('now'))) - JULIANDAY(C.Data_ativa_o)) / 30.44
+                            ) AS INTEGER)
+                        ELSE 0
+                    END AS Permanencia_Real_Calendario
+
+                FROM Contratos C
+                LEFT JOIN FinancialStats FS ON C.ID = FS.ID_Contrato_Recorrente
+                LEFT JOIN EquipmentInfo EI ON C.ID = EI.ID_Contrato
+                LEFT JOIN SellerInfo S ON C.Vendedor = S.ID
+            )
+        """
+        
+        # Filtro de Relevância (Aplicado na Permanência PAGA, conforme pedido)
+        min_months, max_months = parse_relevance_filter(relevance)
+        if min_months is not None:
+            where_clauses.append("Permanencia_Paga >= ?")
+            params.append(min_months)
+        if max_months is not None:
+            where_clauses.append("Permanencia_Paga <= ?")
+            params.append(max_months)
+
+        where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+        # Query de Contagem
+        count_query = f"{base_query} SELECT COUNT(*) FROM JoinedData C {where_sql}"
+        total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
+
+        # Query de Dados
+        data_query = f"""
+            {base_query} 
+            SELECT * FROM JoinedData C 
+            {where_sql} 
+            ORDER BY Permanencia_Paga DESC, Cliente 
+            LIMIT ? OFFSET ?
+        """
+        params.extend([limit, offset])
+        
+        data = conn.execute(data_query, tuple(params)).fetchall()
+
+        return jsonify({
+            "data": [dict(row) for row in data],
+            "total_rows": total_rows
+        })
+
+    except sqlite3.Error as e:
+        print(f"Erro na análise de permanência real: {e}")
+        traceback.print_exc()
+        return jsonify({"error": f"Erro interno ao processar análise. Detalhe: {e}"}), 500
     finally:
         if conn: conn.close()
 
