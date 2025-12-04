@@ -8,6 +8,7 @@ from utils_api import get_db, parse_relevance_filter, add_date_range_filter
 churn_bp = Blueprint('churn_bp', __name__)
 
 # --- CTE FINANCEIRA ATUALIZADA ---
+# Calcula Atrasos, Não Pagas, MÉDIA de dias de atraso e agora TOTAL DE FATURAS
 financial_cte = """
     FinancialStats AS (
         SELECT
@@ -27,10 +28,51 @@ financial_cte = """
     )
 """
 
+def apply_chart_filters(where_clauses, params, filter_col, filter_val):
+    """
+    Helper function to apply filters clicked from charts.
+    Uses TRIM() and UPPER() for more robust matching.
+    """
+    if not filter_col or not filter_val:
+        return
+
+    # Limpa espaços extras que possam vir do frontend
+    filter_val = filter_val.strip()
+
+    if filter_col == 'motivo':
+        # Filtro por Motivo de Cancelamento
+        if filter_val == 'Não Informado':
+             where_clauses.append("(Motivo_cancelamento IS NULL OR TRIM(Motivo_cancelamento) = 'Não Informado')")
+        else:
+            # Usa UPPER para evitar problemas de case sensitivity
+            where_clauses.append("UPPER(TRIM(Motivo_cancelamento)) = UPPER(TRIM(?))")
+            params.append(filter_val)
+            
+    elif filter_col == 'obs':
+        # Filtro por Observação de Cancelamento
+        if filter_val == 'Não Informado':
+             where_clauses.append("(Obs_cancelamento IS NULL OR TRIM(Obs_cancelamento) = 'Não Informado')")
+        else:
+            where_clauses.append("UPPER(TRIM(Obs_cancelamento)) = UPPER(TRIM(?))")
+            params.append(filter_val)
+            
+    elif filter_col == 'financeiro':
+        # Filtro por Comportamento Financeiro (baseado na Media_Atraso)
+        if filter_val == 'Em dia / Adiantado':
+            where_clauses.append("Media_Atraso <= 0")
+        elif filter_val == 'Pagamento Atrasado':
+            where_clauses.append("Media_Atraso BETWEEN 1 AND 30")
+        elif filter_val == 'Inadimplente (>30d)':
+            where_clauses.append("Media_Atraso > 30")
+        elif filter_val == 'Sem Histórico':
+            where_clauses.append("Media_Atraso IS NULL")
+
+
 @churn_bp.route('/cancellations')
 def api_cancellation_analysis():
     conn = get_db()
     try:
+        # Parâmetros padrão
         search_term = request.args.get('search_term', '').strip()
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
@@ -40,7 +82,11 @@ def api_cancellation_analysis():
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
 
-        # --- PREPARAÇÃO DOS FILTROS ---
+        # Novos parâmetros de filtro de gráfico (vindos do clique no frontend)
+        chart_filter_col = request.args.get('filter_column', '')
+        chart_filter_val = request.args.get('filter_value', '').strip()
+
+        # --- PREPARAÇÃO DOS FILTROS GERAIS ---
         params = []
         where_clauses = []
         
@@ -56,6 +102,7 @@ def api_cancellation_analysis():
             where_clauses.append("permanencia_meses <= ?")
             params.append(max_months)
             
+        # Filtros de Data específicos para as subqueries
         date_filter_contratos = ""
         date_params_contratos = []
         date_where_list_c = []
@@ -70,9 +117,11 @@ def api_cancellation_analysis():
         if date_where_list_n:
             date_filter_negativacao = " AND " + " AND ".join(date_where_list_n)
 
+        # Parâmetros base (Datas + Filtros Gerais)
+        # IMPORTANTE: A ordem deve ser (Datas Contratos) + (Datas Negativação) + (Filtros Gerais)
         final_params = date_params_contratos + date_params_negativacao + params 
         
-        # CTEs combinadas para uso nas tabelas e gráficos
+        # CTEs combinadas (Base de dados unificada)
         base_cte_logic = f"""
             WITH {financial_cte},
             RelevantTickets AS (
@@ -90,7 +139,7 @@ def api_cancellation_analysis():
                 
                 UNION ALL
                 
-                -- Negativados
+                -- Negativados (Também aparecem em cancelamentos se tiverem data)
                 SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_negativa_o AS Data_cancelamento, Motivo_cancelamento, Obs_cancelamento
                 FROM Contratos_Negativacao 
                 WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_negativacao}
@@ -121,49 +170,64 @@ def api_cancellation_analysis():
             )
         """
 
-        where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+        # --- Aplicação do Filtro de Gráfico para TABELA E CONTAGEM ---
+        where_clauses_table = list(where_clauses) # Começa com os filtros gerais (busca, relevancia)
+        params_table = list(final_params)         # Começa com os params globais (datas, busca, relevancia)
+        
+        # AQUI ESTAVA O PROBLEMA: O filtro de gráfico precisa ser aplicado AGORA, antes da count_query
+        apply_chart_filters(where_clauses_table, params_table, chart_filter_col, chart_filter_val)
+
+        where_sql_table = " WHERE " + " AND ".join(where_clauses_table) if where_clauses_table else ""
 
         try:
-            # Total de Linhas
-            count_query = f"{base_cte_logic} SELECT COUNT(*) FROM FinalView {where_sql}"
-            total_rows = conn.execute(count_query, tuple(final_params)).fetchone()[0]
+            # 1. Total de Linhas (CORRIGIDO: Agora usa os filtros completos, incluindo o do gráfico)
+            count_query = f"{base_cte_logic} SELECT COUNT(*) FROM FinalView {where_sql_table}"
+            total_rows = conn.execute(count_query, tuple(params_table)).fetchone()[0]
         except sqlite3.Error as e:
             if "no such table" in str(e).lower():
                 return jsonify({"error": "Tabelas necessárias não encontradas."}), 500
             else:
                 raise e
 
-        # Dados da Tabela (Paginados)
+        # 2. Dados da Tabela (Paginados e com todos os filtros)
         order_by = "ORDER BY Cliente, Contrato_ID"
         if sort_order == 'asc': order_by = "ORDER BY permanencia_meses ASC, Cliente"
         elif sort_order == 'desc': order_by = "ORDER BY permanencia_meses DESC, Cliente"
 
-        paginated_query = f"{base_cte_logic} SELECT * FROM FinalView {where_sql} {order_by} LIMIT ? OFFSET ?"
-        data = conn.execute(paginated_query, tuple(final_params + [limit, offset])).fetchall()
+        paginated_query = f"{base_cte_logic} SELECT * FROM FinalView {where_sql_table} {order_by} LIMIT ? OFFSET ?"
+        
+        # Adiciona limit e offset aos parametros da tabela
+        params_table_paginated = params_table + [limit, offset]
+        
+        data = conn.execute(paginated_query, tuple(params_table_paginated)).fetchall()
 
-        # --- DADOS DOS GRÁFICOS (Agregados sobre TODO o filtro, sem paginação) ---
+        # --- DADOS DOS GRÁFICOS (Agregados - SEM O FILTRO DE GRÁFICO) ---
+        # Mantemos apenas os filtros "Globais" (Data, Busca, Relevância) para os gráficos,
+        # senão ao clicar numa fatia, o gráfico viraria 100% daquela fatia.
+        
+        # IMPORTANTE: Reconstruir where_sql apenas com where_clauses originais (sem filtro de gráfico)
+        where_sql_charts = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+        
         # 1. Motivos
-        chart_motivo_query = f"{base_cte_logic} SELECT Motivo_cancelamento, COUNT(*) as Count FROM FinalView {where_sql} GROUP BY Motivo_cancelamento ORDER BY Count DESC"
+        chart_motivo_query = f"{base_cte_logic} SELECT Motivo_cancelamento, COUNT(*) as Count FROM FinalView {where_sql_charts} GROUP BY Motivo_cancelamento ORDER BY Count DESC"
         chart_motivo_data = conn.execute(chart_motivo_query, tuple(final_params)).fetchall()
 
         # 2. Observações
-        chart_obs_query = f"{base_cte_logic} SELECT Obs_cancelamento, COUNT(*) as Count FROM FinalView {where_sql} GROUP BY Obs_cancelamento ORDER BY Count DESC"
+        chart_obs_query = f"{base_cte_logic} SELECT Obs_cancelamento, COUNT(*) as Count FROM FinalView {where_sql_charts} GROUP BY Obs_cancelamento ORDER BY Count DESC"
         chart_obs_data = conn.execute(chart_obs_query, tuple(final_params)).fetchall()
 
-        # 3. Comportamento Financeiro (NOVO)
+        # 3. Comportamento Financeiro (AGRUPADO)
         chart_finance_query = f"""
             {base_cte_logic}
             SELECT 
                 CASE
                     WHEN Media_Atraso <= 0 THEN 'Em dia / Adiantado'
-                    WHEN Media_Atraso <= 5 THEN 'Atraso Curto (1-5d)'
-                    WHEN Media_Atraso <= 15 THEN 'Atraso Médio (6-15d)'
-                    WHEN Media_Atraso <= 30 THEN 'Atraso Longo (16-30d)'
+                    WHEN Media_Atraso BETWEEN 1 AND 30 THEN 'Pagamento Atrasado'
                     WHEN Media_Atraso > 30 THEN 'Inadimplente (>30d)'
                     ELSE 'Sem Histórico'
                 END AS Status_Pagamento,
                 COUNT(*) as Count 
-            FROM FinalView {where_sql} 
+            FROM FinalView {where_sql_charts} 
             GROUP BY Status_Pagamento 
             ORDER BY Count DESC
         """
@@ -175,7 +239,7 @@ def api_cancellation_analysis():
             "charts": {
                 "motivo": [dict(row) for row in chart_motivo_data],
                 "obs": [dict(row) for row in chart_obs_data],
-                "financeiro": [dict(row) for row in chart_finance_data] # Novo
+                "financeiro": [dict(row) for row in chart_finance_data]
             }
         })
 
@@ -200,7 +264,11 @@ def api_negativacao_analysis():
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
 
-        # Filtros de data
+        # Novos parâmetros de filtro de gráfico
+        chart_filter_col = request.args.get('filter_column', '')
+        chart_filter_val = request.args.get('filter_value', '').strip()
+
+        # Filtros de data para subqueries
         where_date_neg = []
         add_date_range_filter(where_date_neg, [], "Data_negativa_o", start_date, end_date)
         sql_date_neg = " AND " + " AND ".join(where_date_neg) if where_date_neg else ""
@@ -252,13 +320,15 @@ def api_negativacao_analysis():
             )
         """
 
+        # Preparação dos parâmetros para Filtros Gerais
         final_params = []
+        # Adiciona params de data (duas vezes, uma pra cada parte do UNION na CTE)
         temp_p = []
         add_date_range_filter([], temp_p, "x", start_date, end_date)
-        final_params.extend(temp_p)
+        final_params.extend(temp_p) # Para a primeira parte do union
         temp_p = []
         add_date_range_filter([], temp_p, "x", start_date, end_date)
-        final_params.extend(temp_p)
+        final_params.extend(temp_p) # Para a segunda parte do union
 
         where_clauses = []
         if search_term:
@@ -273,19 +343,30 @@ def api_negativacao_analysis():
             where_clauses.append("permanencia_meses <= ?")
             final_params.append(max_months)
         
-        where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+        # --- Aplicação do Filtro de Gráfico (apenas para a Tabela e Contagem) ---
+        where_clauses_table = list(where_clauses)
+        params_table = list(final_params)
+        
+        # IMPORTANTE: Filtro aplicado aqui
+        apply_chart_filters(where_clauses_table, params_table, chart_filter_col, chart_filter_val)
 
-        # Total Rows
-        count_query = f"{base_cte_logic} SELECT COUNT(*) FROM FinalView {where_sql}"
-        total_rows = conn.execute(count_query, tuple(final_params)).fetchone()[0]
+        where_sql_table = " WHERE " + " AND ".join(where_clauses_table) if where_clauses_table else ""
 
-        # Dados da Tabela
+        # 1. Total Rows (COM FILTROS DO GRÁFICO)
+        count_query = f"{base_cte_logic} SELECT COUNT(*) FROM FinalView {where_sql_table}"
+        total_rows = conn.execute(count_query, tuple(params_table)).fetchone()[0]
+
+        # 2. Dados da Tabela (COM FILTROS DO GRÁFICO)
         order_by = "ORDER BY Cliente, Contrato_ID"
         if sort_order == 'asc': order_by = "ORDER BY permanencia_meses ASC, Cliente"
         elif sort_order == 'desc': order_by = "ORDER BY permanencia_meses DESC, Cliente"
 
-        paginated_query = f"{base_cte_logic} SELECT * FROM FinalView {where_sql} {order_by} LIMIT ? OFFSET ?"
-        data = conn.execute(paginated_query, tuple(final_params + [limit, offset])).fetchall()
+        paginated_query = f"{base_cte_logic} SELECT * FROM FinalView {where_sql_table} {order_by} LIMIT ? OFFSET ?"
+        params_table_paginated = params_table + [limit, offset]
+        data = conn.execute(paginated_query, tuple(params_table_paginated)).fetchall()
+
+        # --- DADOS DOS GRÁFICOS (Sem filtro de gráfico, apenas globais) ---
+        where_sql_charts = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
         # --- Gráfico Financeiro (NOVO) ---
         chart_finance_query = f"""
@@ -293,17 +374,16 @@ def api_negativacao_analysis():
             SELECT 
                 CASE
                     WHEN Media_Atraso <= 0 THEN 'Em dia / Adiantado'
-                    WHEN Media_Atraso <= 5 THEN 'Atraso Curto (1-5d)'
-                    WHEN Media_Atraso <= 15 THEN 'Atraso Médio (6-15d)'
-                    WHEN Media_Atraso <= 30 THEN 'Atraso Longo (16-30d)'
+                    WHEN Media_Atraso BETWEEN 1 AND 30 THEN 'Pagamento Atrasado'
                     WHEN Media_Atraso > 30 THEN 'Inadimplente (>30d)'
                     ELSE 'Sem Histórico'
                 END AS Status_Pagamento,
                 COUNT(*) as Count 
-            FROM FinalView {where_sql} 
+            FROM FinalView {where_sql_charts} 
             GROUP BY Status_Pagamento 
             ORDER BY Count DESC
         """
+        # Usa final_params (lista limpa) para o gráfico
         chart_finance_data = conn.execute(chart_finance_query, tuple(final_params)).fetchall()
 
         return jsonify({
@@ -322,10 +402,7 @@ def api_negativacao_analysis():
     finally:
         if conn: conn.close()
 
-# Demais rotas permanecem iguais (cancellations_by_city, cohort, etc)
-# ... [O restante do código das outras rotas deve ser mantido igual ao arquivo anterior] ...
-# Para brevidade, vou reinserir as outras rotas inalteradas para garantir a integridade do arquivo.
-
+# Demais rotas (cancellations_by_city, etc) permanecem inalteradas...
 @churn_bp.route('/cancellations_by_city')
 def api_cancellations_by_city():
     conn = get_db()

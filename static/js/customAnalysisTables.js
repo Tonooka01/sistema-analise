@@ -98,6 +98,19 @@ function renderCustomTable(result, title, columns, extraContentHtml = '') {
 
     const titleHtml = `<h2 class="text-2xl font-semibold mb-4 text-gray-800">${title}</h2>`;
 
+    // Mensagem de filtro ativo (feedback visual)
+    let activeFilterHtml = '';
+    if (currentState.chartFilterColumn && currentState.chartFilterValue) {
+        let colName = currentState.chartFilterColumn === 'motivo' ? 'Motivo' : 
+                      currentState.chartFilterColumn === 'obs' ? 'Observação' : 'Financeiro';
+        activeFilterHtml = `
+            <div class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-md mb-4 flex justify-between items-center">
+                <span>Filtrado por <strong>${colName}: ${currentState.chartFilterValue}</strong></span>
+                <button id="clearChartFilterBtn" class="text-sm font-bold text-blue-800 hover:text-blue-900 underline">Limpar Filtro</button>
+            </div>
+        `;
+    }
+
     let tableHtml = '<p class="text-center text-gray-500 mt-4">Nenhum resultado encontrado.</p>';
     if (data && data.length > 0) {
         const generatedTableHtml = utils.renderGenericDetailTable(null, data, columns, true);
@@ -116,10 +129,31 @@ function renderCustomTable(result, title, columns, extraContentHtml = '') {
         `;
     }
 
-    dom.dashboardContentDiv.innerHTML = extraContentHtml + titleHtml + tableHtml + paginationHtml;
+    dom.dashboardContentDiv.innerHTML = extraContentHtml + activeFilterHtml + titleHtml + tableHtml + paginationHtml;
 
     if (totalPages > 1) {
         renderCustomAnalysisPagination();
+    }
+
+    // Listener para limpar filtro
+    const clearBtn = document.getElementById('clearChartFilterBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            state.setCustomAnalysisState({ chartFilterColumn: null, chartFilterValue: null });
+            // Re-fetch baseado no tipo atual
+            const currentType = currentState.currentAnalysis;
+            const search = currentState.currentSearchTerm || '';
+            const relev = dom.relevanceFilterSearch?.value || '';
+            const start = dom.customStartDate?.value || '';
+            const end = dom.customEndDate?.value || '';
+            const sort = currentState.sortOrder === 'asc';
+
+            if (currentType === 'cancellations') {
+                fetchAndRenderCancellationAnalysis(search, 1, relev, sort, start, end);
+            } else if (currentType === 'negativacao') {
+                fetchAndRenderNegativacaoAnalysis(search, 1, relev, sort, start, end);
+            }
+        });
     }
 }
 
@@ -229,7 +263,7 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     }
 }
 
-// *** FUNÇÃO ATUALIZADA: AGORA COM 3 GRÁFICOS (Financeiro AGRUPADO) ***
+// *** FUNÇÃO ATUALIZADA COM CORREÇÃO DO FILTRO DE CLIQUE ***
 export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false, startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'cancellations', currentSearchTerm: searchTerm });
@@ -244,6 +278,8 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
     if (relevance) params.append('relevance', relevance);
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
+    if (currentState.chartFilterColumn) params.append('filter_column', currentState.chartFilterColumn);
+    if (currentState.chartFilterValue) params.append('filter_value', currentState.chartFilterValue);
     
     params.append('sort_order', sortAsc ? 'asc' : 'desc'); 
     
@@ -267,24 +303,26 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
 
             chartsHtml = `
                 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
                         <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Motivos de Cancelamento: ${totalMotivos}</h3>
                         <div class="chart-canvas-container" style="height: 400px;">
                             <canvas id="motivoCancelamentoChart"></canvas>
                         </div>
+                        <p class="text-xs text-center text-gray-400 mt-2">Clique para filtrar</p>
                     </div>
-                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
                         <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Observações de Cancelamento: ${totalObs}</h3>
                         <div class="chart-canvas-container" style="height: 400px;">
                             <canvas id="obsCancelamentoChart"></canvas>
                         </div>
+                        <p class="text-xs text-center text-gray-400 mt-2">Clique para filtrar</p>
                     </div>
-                    <!-- NOVO GRÁFICO FINANCEIRO -->
-                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
                         <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Comportamento Financeiro: ${totalFinanceiro}</h3>
                         <div class="chart-canvas-container" style="height: 400px;">
                             <canvas id="financeiroCancelamentoChart"></canvas>
                         </div>
+                        <p class="text-xs text-center text-gray-400 mt-2">Clique para filtrar</p>
                     </div>
                 </div>
             `;
@@ -303,6 +341,10 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
                 } 
             },
             { header: 'ID Contrato', key: 'Contrato_ID' },
+            // --- NOVAS COLUNAS: Motivo e Observação ---
+            { header: 'Motivo', key: 'Motivo_cancelamento', render: r => `<span class="text-xs font-medium text-gray-700">${r.Motivo_cancelamento || '-'}</span>` },
+            { header: 'Observação', key: 'Obs_cancelamento', render: r => `<div class="text-xs text-gray-500 max-w-[150px] truncate" title="${(r.Obs_cancelamento || '').replace(/"/g, '&quot;')}">${r.Obs_cancelamento || '-'}</div>` },
+            // ------------------------------------------
             { header: 'Data Cancelamento', render: r => r.Data_cancelamento ? utils.formatDate(r.Data_cancelamento) : 'N/A' },
             { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' },
             { 
@@ -319,11 +361,31 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
 
         if (result.charts) {
             setTimeout(() => {
+                // --- CALLBACK CORRIGIDO PARA REMOVER A CONTAGEM DO RÓTULO ---
+                const chartClickCallback = (column) => (evt, elements, chart) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        let label = chart.data.labels[index];
+
+                        // IMPORTANTE: Remove " (15)" do final da string para filtrar corretamente
+                        if (column === 'motivo' || column === 'obs') {
+                             label = label.replace(/ \(\d+\)$/, '');
+                        }
+
+                        state.setCustomAnalysisState({ chartFilterColumn: column, chartFilterValue: label });
+                        fetchAndRenderCancellationAnalysis(searchTerm, 1, relevance, sortAsc, startDate, endDate);
+                    }
+                };
+
                 if (result.charts.motivo && result.charts.motivo.length > 0) {
                     renderChart('motivoCancelamentoChart', 'pie', 
                         result.charts.motivo.map(d => `${d.Motivo_cancelamento} (${d.Count})`), 
                         [{ data: result.charts.motivo.map(d => d.Count) }], 
-                        '', { formatterType: 'percent_only' }
+                        '', 
+                        { 
+                            formatterType: 'percent_only',
+                            onClick: chartClickCallback('motivo') // Passa o callback corrigido
+                        }
                     );
                 } else if (document.getElementById('motivoCancelamentoChart')) {
                     document.getElementById('motivoCancelamentoChart').parentNode.innerHTML = '<p class="text-center text-gray-500 mt-10">Sem dados de motivo.</p>';
@@ -333,26 +395,30 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
                     renderChart('obsCancelamentoChart', 'pie', 
                         result.charts.obs.map(d => `${d.Obs_cancelamento} (${d.Count})`), 
                         [{ data: result.charts.obs.map(d => d.Count) }], 
-                        '', { formatterType: 'percent_only' }
+                        '', 
+                        { 
+                            formatterType: 'percent_only',
+                            onClick: chartClickCallback('obs') // Passa o callback corrigido
+                        }
                     );
                 } else if (document.getElementById('obsCancelamentoChart')) {
                     document.getElementById('obsCancelamentoChart').parentNode.innerHTML = '<p class="text-center text-gray-500 mt-10">Sem dados de observação.</p>';
                 }
 
-                // Renderiza o novo gráfico financeiro
                 if (result.charts.financeiro && result.charts.financeiro.length > 0) {
                     renderChart('financeiroCancelamentoChart', 'pie', 
                         result.charts.financeiro.map(d => d.Status_Pagamento), 
                         [{ 
                             data: result.charts.financeiro.map(d => d.Count),
                             backgroundColor: [
-                                '#10b981', // Verde (Em dia)
-                                '#f59e0b', // Laranja (Pagamento Atrasado - Agrupado)
-                                '#991b1b', // Vermelho Escuro (Inadimplente)
-                                '#9ca3af'  // Cinza (Sem histórico)
+                                '#10b981', '#f59e0b', '#991b1b', '#9ca3af'
                             ]
                         }], 
-                        '', { formatterType: 'percent_only' }
+                        '', 
+                        { 
+                            formatterType: 'percent_only',
+                            onClick: chartClickCallback('financeiro') // Passa o callback corrigido (embora financeiro não tenha contagem no label)
+                        }
                     );
                 } else if (document.getElementById('financeiroCancelamentoChart')) {
                     document.getElementById('financeiroCancelamentoChart').parentNode.innerHTML = '<p class="text-center text-gray-500 mt-10">Sem dados financeiros.</p>';
@@ -376,7 +442,7 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
     }
 }
 
-// *** FUNÇÃO ATUALIZADA: AGORA COM 3 GRÁFICOS (Financeiro AGRUPADO) ***
+// *** FUNÇÃO ATUALIZADA: AGORA COM 3 GRÁFICOS INTERATIVOS ***
 export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false, startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'negativacao', currentSearchTerm: searchTerm });
@@ -391,6 +457,8 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
     if (relevance) params.append('relevance', relevance);
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
+    if (currentState.chartFilterColumn) params.append('filter_column', currentState.chartFilterColumn);
+    if (currentState.chartFilterValue) params.append('filter_value', currentState.chartFilterValue);
     
     params.append('sort_order', sortAsc ? 'asc' : 'desc');
     
@@ -405,19 +473,18 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
 
         // --- RENDERIZAÇÃO DOS GRÁFICOS ---
         let chartsHtml = '';
-        // Para negativação, pode não haver os gráficos de Motivo e Obs na API,
-        // mas vamos garantir que o financeiro apareça se estiver disponível
         const totalFinanceiro = result.charts?.financeiro ? result.charts.financeiro.reduce((acc, curr) => acc + (curr.Count || 0), 0) : 0;
 
         if (totalFinanceiro > 0) {
              chartsHtml = `
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 justify-center">
                     <!-- NOVO GRÁFICO FINANCEIRO -->
-                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200 col-span-1 md:col-span-2 lg:col-span-1 lg:col-start-2">
+                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200 col-span-1 md:col-span-2 lg:col-span-1 lg:col-start-2 hover:shadow-lg transition-shadow cursor-pointer">
                         <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Comportamento Financeiro: ${totalFinanceiro}</h3>
                         <div class="chart-canvas-container" style="height: 400px;">
                             <canvas id="financeiroNegativacaoChart"></canvas>
                         </div>
+                        <p class="text-xs text-center text-gray-400 mt-2">Clique para filtrar</p>
                     </div>
                 </div>
             `;
@@ -451,6 +518,16 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
 
         if (result.charts && result.charts.financeiro) {
              setTimeout(() => {
+                const chartClickCallback = (column) => (evt, elements, chart) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        const label = chart.data.labels[index];
+                        // Não precisa de replace aqui pois financeiro não tem contagem no label
+                        state.setCustomAnalysisState({ chartFilterColumn: column, chartFilterValue: label });
+                        fetchAndRenderNegativacaoAnalysis(searchTerm, 1, relevance, sortAsc, startDate, endDate);
+                    }
+                };
+
                 if (result.charts.financeiro.length > 0) {
                     renderChart('financeiroNegativacaoChart', 'pie', 
                         result.charts.financeiro.map(d => d.Status_Pagamento), 
@@ -463,7 +540,11 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
                                 '#9ca3af'  // Cinza
                             ]
                         }], 
-                        '', { formatterType: 'percent_only' }
+                        '', 
+                        { 
+                            formatterType: 'percent_only',
+                            onClick: chartClickCallback('financeiro') // INTERATIVIDADE
+                        }
                     );
                 }
              }, 50);

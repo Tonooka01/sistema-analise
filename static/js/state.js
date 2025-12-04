@@ -37,7 +37,11 @@ let customAnalysisState = {
     currentAnalysis: '',
     currentSearchTerm: '',
     currentAnalysisType: '', // Para Saúde Financeira (atraso/bloqueio)
-    sortOrder: 'desc' // <--- Ordenação padrão: Descendente (Maior para Menor)
+    sortOrder: 'desc', // <--- Ordenação padrão: Descendente (Maior para Menor)
+    
+    // --- NOVOS CAMPOS PARA FILTRO DE GRÁFICO ---
+    chartFilterColumn: null, // 'motivo', 'obs', 'financeiro'
+    chartFilterValue: null   // O valor clicado (ex: 'Financeira', 'Pagamento Atrasado')
 };
 
 // Estado Modal Detalhes Fatura (Atrasos/Não Pagas)
@@ -202,7 +206,9 @@ export function resetCustomAnalysisState() {
     customAnalysisState = {
         currentPage: 1, rowsPerPage: 50, totalRows: 0,
         currentAnalysis: '', currentSearchTerm: '', currentAnalysisType: '',
-        sortOrder: 'desc' // Reset para descendente por padrão
+        sortOrder: 'desc', // Reset para descendente por padrão
+        chartFilterColumn: null, // Reset do filtro de gráfico
+        chartFilterValue: null
     };
     console.log("Estado customAnalysisState resetado.");
 }
