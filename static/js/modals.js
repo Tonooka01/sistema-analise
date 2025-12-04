@@ -76,18 +76,20 @@ export async function fetchAndDisplayTableInModal(collectionName, page = 1) {
         const searchTerm = dom.clientSearchInput?.value || '';
         if (searchTerm) params.append('search_term', searchTerm);
 
+        // --- CORREÇÃO: Obter o estado atual dos filtros de gráfico ---
+        const currentState = state.getCustomAnalysisState();
+        // ----------------------------------------------------------------
+
         if (collectionName.startsWith('saude_financeira')) {
             endpoint = collectionName.includes('bloqueio') ? 'financial_health_auto_block' : 'financial_health';
             
             const contractStatus = dom.contractStatusFilter?.value || '';
             
-            // --- CORREÇÃO: Ler corretamente os checkboxes de Status de Acesso ---
             let accessStatus = '';
             if (dom.accessStatusContainer) {
                  const checked = dom.accessStatusContainer.querySelectorAll('input[type="checkbox"]:checked');
                  accessStatus = Array.from(checked).map(cb => cb.value).join(',');
             }
-            // -------------------------------------------------------------------
 
             if (contractStatus) params.append('status_contrato', contractStatus);
             if (accessStatus) params.append('status_acesso', accessStatus);
@@ -98,6 +100,14 @@ export async function fetchAndDisplayTableInModal(collectionName, page = 1) {
             if (dom.customStartDate?.value) params.append('start_date', dom.customStartDate.value);
             if (dom.customEndDate?.value) params.append('end_date', dom.customEndDate.value);
             if (dom.relevanceFilterSearch?.value) params.append('relevance', dom.relevanceFilterSearch.value);
+            
+            // --- INSERIR ISTO: Passar os filtros do gráfico para o Modal ---
+            if (currentState.chartFilterColumn && currentState.chartFilterValue) {
+                params.append('filter_column', currentState.chartFilterColumn);
+                params.append('filter_value', currentState.chartFilterValue);
+            }
+            // -------------------------------------------------------------
+
             params.append('sort_order', state.getCustomAnalysisState().sortOrder || 'desc');
 
         } else if (collectionName === 'negativacao') {
@@ -105,6 +115,14 @@ export async function fetchAndDisplayTableInModal(collectionName, page = 1) {
             if (dom.customStartDate?.value) params.append('start_date', dom.customStartDate.value);
             if (dom.customEndDate?.value) params.append('end_date', dom.customEndDate.value);
             if (dom.relevanceFilterSearch?.value) params.append('relevance', dom.relevanceFilterSearch.value);
+            
+            // --- INSERIR ISTO: Passar os filtros do gráfico para o Modal ---
+            if (currentState.chartFilterColumn && currentState.chartFilterValue) {
+                params.append('filter_column', currentState.chartFilterColumn);
+                params.append('filter_value', currentState.chartFilterValue);
+            }
+            // -------------------------------------------------------------
+
             params.append('sort_order', state.getCustomAnalysisState().sortOrder || 'desc');
         }
 
@@ -142,7 +160,7 @@ export async function fetchAndDisplayTableInModal(collectionName, page = 1) {
                  // Substitui os botões por uma mensagem informativa
                  dom.modalPaginationControls.innerHTML = `
                     <div class="text-center w-full text-gray-600 text-sm">
-                        Exibindo <strong>${result.data.length}</strong> registros. Role a tabela para ver mais.
+                        Exibindo <strong>${result.data.length}</strong> registros filtrados (Total Original: ${result.total_rows}). Role a tabela para ver mais.
                     </div>
                  `;
              }
