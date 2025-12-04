@@ -3,15 +3,37 @@ import * as dom from './dom.js';
 import * as utils from './utils.js';
 import { renderChart } from './charts.js';
 
+// --- Helper: Badge de Comportamento de Pagamento ---
+// Regras:
+// <= -1: Adiantado (Verde)
+// 0: Em dia (Cinza/Verde)
+// 1-5: Atraso Curto (Amarelo)
+// 6-15: Atraso Médio (Laranja)
+// 16-30: Atraso Longo (Vermelho)
+// >30: Inadimplente Provável (Vermelho Escuro)
+function getPaymentBehaviorBadge(avgDays) {
+    if (avgDays === null || avgDays === undefined) return '<span class="text-xs text-gray-400 mt-1 block">Sem histórico</span>';
+    
+    const days = Math.round(avgDays);
+    
+    if (days <= -1) {
+        return `<span class="text-xs font-semibold text-green-700 mt-1 bg-green-100 px-2 py-0.5 rounded-full w-fit block" title="Média: ${days} dias">Adiantado (${Math.abs(days)} dias)</span>`;
+    }
+    if (days === 0) {
+        return `<span class="text-xs font-semibold text-gray-600 mt-1 bg-gray-100 px-2 py-0.5 rounded-full w-fit block">Em dia</span>`;
+    }
+    
+    // Pagamento Atrasado
+    if (days <= 5) return `<span class="text-xs font-semibold text-yellow-700 mt-1 bg-yellow-100 px-2 py-0.5 rounded-full w-fit block">Atraso Curto (+${days} dias)</span>`;
+    if (days <= 15) return `<span class="text-xs font-semibold text-orange-700 mt-1 bg-orange-100 px-2 py-0.5 rounded-full w-fit block">Atraso Médio (+${days} dias)</span>`;
+    if (days <= 30) return `<span class="text-xs font-semibold text-red-700 mt-1 bg-red-100 px-2 py-0.5 rounded-full w-fit block">Atraso Longo (+${days} dias)</span>`;
+    
+    return `<span class="text-xs font-bold text-white mt-1 bg-red-800 px-2 py-0.5 rounded-full w-fit block">Inadimplente Provável (+${days} dias)</span>`;
+}
+
 // --- Lógica para Análises Personalizadas (Tabelas) ---
 
-/**
- * Busca os status de contrato e acesso para preencher os filtros da análise de Saúde Financeira.
- * FIX: Adicionada verificação para não repopular (e limpar seleção) se já estiver carregado.
- */
 export async function populateContractStatusFilters() {
-    // Verifica se já existem opções carregadas (mais de 1, pois 'Todos' é o padrão)
-    // Isso impede que o filtro selecionado seja resetado ao navegar entre páginas
     if (dom.contractStatusFilter && dom.contractStatusFilter.options.length > 1) {
         return; 
     }
@@ -24,9 +46,7 @@ export async function populateContractStatusFilters() {
         }
         const data = await response.json();
 
-        // Popula Status Contrato
         if (dom.contractStatusFilter && data.status_contrato) {
-            // Salva valor atual se houver (para o caso de re-renderização forçada)
             const currentValue = dom.contractStatusFilter.value;
             
             dom.contractStatusFilter.innerHTML = '<option value="">Todos</option>';
@@ -37,16 +57,11 @@ export async function populateContractStatusFilters() {
                 dom.contractStatusFilter.appendChild(option);
             });
 
-            // Restaura valor se ainda existir nas opções
             if (currentValue) dom.contractStatusFilter.value = currentValue;
         }
 
-        // Popula Status Acesso (Checkboxes)
         if (dom.accessStatusContainer && data.status_acesso) {
-            // Verifica se já tem checkboxes para não limpar seleção
             if (dom.accessStatusContainer.children.length > 0 && dom.accessStatusContainer.querySelector('input')) {
-                 // Se já tem conteúdo, assumimos que está populado.
-                 // Se precisarmos forçar atualização, teríamos que salvar o estado dos checkboxes.
                  return;
             }
 
@@ -63,7 +78,6 @@ export async function populateContractStatusFilters() {
                 const uniqueId = `chk_access_${status.replace(/\s+/g, '_')}`;
                 checkbox.id = uniqueId;
 
-                // Marcar "Ativo" por padrão se desejar, mas vamos deixar limpo ou conforme lógica anterior
                 if (status === 'Ativo') checkbox.checked = true;
 
                 const label = document.createElement('label');
@@ -81,13 +95,6 @@ export async function populateContractStatusFilters() {
     }
 }
 
-/**
- * Renderiza uma tabela de dados personalizada no painel principal, incluindo paginação.
- * @param {object} result - Objeto de resposta da API (data, total_rows).
- * @param {string} title - Título da tabela.
- * @param {array} columns - Definição das colunas.
- * @param {string} extraContentHtml - (Opcional) HTML extra para inserir ACIMA da tabela (ex: gráficos).
- */
 function renderCustomTable(result, title, columns, extraContentHtml = '') {
     const { data, total_rows } = result;
     state.setCustomAnalysisState({ totalRows: total_rows });
@@ -116,7 +123,6 @@ function renderCustomTable(result, title, columns, extraContentHtml = '') {
         `;
     }
 
-    // Renderiza: Conteúdo Extra (Gráficos) + Título + Tabela + Paginação
     dom.dashboardContentDiv.innerHTML = extraContentHtml + titleHtml + tableHtml + paginationHtml;
 
     if (totalPages > 1) {
@@ -124,9 +130,6 @@ function renderCustomTable(result, title, columns, extraContentHtml = '') {
     }
 }
 
-/**
- * Atualiza os textos e estados (disabled) dos controles de paginação.
- */
 function renderCustomAnalysisPagination() {
     const currentState = state.getCustomAnalysisState();
     const totalPages = Math.ceil(currentState.totalRows / currentState.rowsPerPage);
@@ -184,9 +187,6 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'saude_financeira', currentSearchTerm: searchTerm, currentAnalysisType: analysisType }); 
     
     const currentState = state.getCustomAnalysisState(); 
-    
-    // Lê os filtros do DOM. 
-    // NOTA: populateContractStatusFilters deve garantir que estes elementos mantenham seus valores ao navegar.
     const contractStatus = dom.contractStatusFilter?.value || '';
     
     let accessStatus = '';
@@ -236,7 +236,7 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     }
 }
 
-// *** FUNÇÃO ATUALIZADA: AGORA ACEITA START_DATE E END_DATE ***
+// *** FUNÇÃO ATUALIZADA: AGORA COM BADGE DE COMPORTAMENTO FINANCEIRO ***
 export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false, startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'cancellations', currentSearchTerm: searchTerm });
@@ -263,7 +263,6 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
         
         if (state.getCustomAnalysisState().currentAnalysis !== 'cancellations') return;
 
-        // Limpa o conteúdo principal antes de renderizar
         if (dom.dashboardContentDiv) dom.dashboardContentDiv.innerHTML = '';
 
         // --- RENDERIZAÇÃO DOS GRÁFICOS (MOTIVO E OBS) ---
@@ -294,16 +293,26 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
         const headerHtml = `<div class="flex items-center gap-1 cursor-pointer select-none sort-permanence-header hover:text-blue-600 transition-colors" title="Clique para ordenar">Permanência (Meses) <span class="text-lg font-bold leading-none">${arrowIcon}</span></div>`;
 
         const columns = [
-            { header: 'Cliente', render: r => `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>` },
+            { 
+                header: 'Cliente', 
+                render: r => {
+                    // Nome do Cliente com Link
+                    const clientLink = `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline text-base" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>`;
+                    // Badge de Regra de Pagamento (Media de Dias)
+                    const behaviorBadge = getPaymentBehaviorBadge(r.Media_Atraso);
+                    return `<div class="flex flex-col items-start">${clientLink}${behaviorBadge}</div>`;
+                } 
+            },
             { header: 'ID Contrato', key: 'Contrato_ID' },
             { header: 'Data Cancelamento', render: r => r.Data_cancelamento ? utils.formatDate(r.Data_cancelamento) : 'N/A' },
             { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' },
+            { header: 'Atrasos Pagos', render: r => r.Atrasos_Pagos > 0 ? `<span class="invoice-detail-trigger cursor-pointer text-orange-600 font-bold hover:underline" data-type="atrasos_pagos" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Atrasos_Pagos}</span>` : r.Atrasos_Pagos },
+            { header: 'Faturas Vencidas (Não Pagas)', render: r => r.Faturas_Nao_Pagas > 0 ? `<span class="invoice-detail-trigger cursor-pointer text-red-600 font-bold hover:underline" data-type="faturas_nao_pagas" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Faturas_Nao_Pagas}</span>` : r.Faturas_Nao_Pagas },
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
         
         renderCustomTable(result, 'Análise de Cancelamentos por Contato Técnico', columns, chartsHtml);
 
-        // --- INICIALIZAÇÃO DOS GRÁFICOS ---
         if (result.charts) {
             setTimeout(() => {
                 if (result.charts.motivo && result.charts.motivo.length > 0) {
@@ -344,7 +353,7 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
     }
 }
 
-// *** FUNÇÃO ATUALIZADA: AGORA ACEITA START_DATE E END_DATE ***
+// *** FUNÇÃO ATUALIZADA: AGORA COM BADGE DE COMPORTAMENTO FINANCEIRO ***
 export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false, startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'negativacao', currentSearchTerm: searchTerm });
@@ -375,10 +384,19 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
         const headerHtml = `<div class="flex items-center gap-1 cursor-pointer select-none sort-permanence-header hover:text-blue-600 transition-colors" title="Clique para ordenar">Permanência (Meses) <span class="text-lg font-bold leading-none">${arrowIcon}</span></div>`;
 
         const columns = [
-            { header: 'Cliente', render: r => `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>` },
+            { 
+                header: 'Cliente', 
+                render: r => {
+                    const clientLink = `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline text-base" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>`;
+                    const behaviorBadge = getPaymentBehaviorBadge(r.Media_Atraso);
+                    return `<div class="flex flex-col items-start">${clientLink}${behaviorBadge}</div>`;
+                } 
+            },
             { header: 'ID Contrato', key: 'Contrato_ID' },
             { header: 'Data Negativação', render: r => r.end_date ? utils.formatDate(r.end_date) : 'N/A' },
             { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' },
+            { header: 'Atrasos Pagos', render: r => r.Atrasos_Pagos > 0 ? `<span class="invoice-detail-trigger cursor-pointer text-orange-600 font-bold hover:underline" data-type="atrasos_pagos" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Atrasos_Pagos}</span>` : r.Atrasos_Pagos },
+            { header: 'Faturas Vencidas (Não Pagas)', render: r => r.Faturas_Nao_Pagas > 0 ? `<span class="invoice-detail-trigger cursor-pointer text-red-600 font-bold hover:underline" data-type="faturas_nao_pagas" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Faturas_Nao_Pagas}</span>` : r.Faturas_Nao_Pagas },
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
         renderCustomTable(result, 'Análise de Negativação por Contato Técnico', columns);

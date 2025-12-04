@@ -7,6 +7,26 @@ from utils_api import get_db, parse_relevance_filter, add_date_range_filter
 # Define o Blueprint para rotas de churn e cancelamento
 churn_bp = Blueprint('churn_bp', __name__)
 
+# --- CTE FINANCEIRA ATUALIZADA ---
+# Calcula Atrasos, Não Pagas e agora a MÉDIA de dias de atraso (Media_Atraso)
+financial_cte = """
+    FinancialStats AS (
+        SELECT
+            ID_Contrato_Recorrente,
+            SUM(CASE WHEN Data_pagamento > Vencimento THEN 1 ELSE 0 END) AS Atrasos_Pagos,
+            SUM(CASE WHEN Status = 'A receber' AND Vencimento < date('now') THEN 1 ELSE 0 END) AS Faturas_Nao_Pagas,
+            AVG(
+                CASE 
+                    WHEN Data_pagamento IS NOT NULL 
+                    THEN JULIANDAY(Data_pagamento) - JULIANDAY(Vencimento) 
+                    ELSE NULL 
+                END
+            ) AS Media_Atraso
+        FROM Contas_a_Receber
+        GROUP BY ID_Contrato_Recorrente
+    )
+"""
+
 @churn_bp.route('/cancellations')
 def api_cancellation_analysis():
     conn = get_db()
@@ -17,7 +37,6 @@ def api_cancellation_analysis():
         relevance = request.args.get('relevance', '')
         sort_order = request.args.get('sort_order', '') 
         
-        # NOVOS PARÂMETROS
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
 
@@ -25,12 +44,10 @@ def api_cancellation_analysis():
         params = []
         where_clauses = []
         
-        # Filtro de Busca (Nome do Cliente)
         if search_term:
             where_clauses.append("Cliente LIKE ?")
             params.append(f'%{search_term}%')
 
-        # Filtro de Relevância (Meses de Permanência)
         min_months, max_months = parse_relevance_filter(relevance)
         if min_months is not None:
             where_clauses.append("permanencia_meses >= ?")
@@ -39,7 +56,6 @@ def api_cancellation_analysis():
             where_clauses.append("permanencia_meses <= ?")
             params.append(max_months)
             
-        # Filtros de Data
         date_filter_contratos = ""
         date_params_contratos = []
         date_where_list_c = []
@@ -54,13 +70,11 @@ def api_cancellation_analysis():
         if date_where_list_n:
             date_filter_negativacao = " AND " + " AND ".join(date_where_list_n)
 
-        # --- QUERY 1: DADOS DA TABELA ---
-        # ATUALIZADO: Agora exige Status Inativo e Desativado TAMBÉM para a tabela de Negativação
-        
         final_params = date_params_contratos + date_params_negativacao + params 
         
         table_base_query = f"""
-            WITH RelevantTickets AS (
+            WITH {financial_cte},
+            RelevantTickets AS (
                  SELECT DISTINCT Cliente FROM (
                      SELECT Cliente FROM Atendimentos WHERE Assunto IN ('MANUTENÇÃO DE FIBRA', 'VISITA TECNICA')
                      UNION ALL
@@ -75,7 +89,7 @@ def api_cancellation_analysis():
                 
                 UNION ALL
                 
-                -- Negativados (Agora filtrando também por Status)
+                -- Negativados
                 SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_negativa_o AS Data_cancelamento, Motivo_cancelamento, Obs_cancelamento
                 FROM Contratos_Negativacao 
                 WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_negativacao}
@@ -94,7 +108,13 @@ def api_cancellation_analysis():
                 FROM AllCancellations AC
                 LEFT JOIN RelevantTickets RT ON AC.Cliente = RT.Cliente
             )
-            SELECT * FROM BaseData
+            SELECT 
+                BaseData.*,
+                COALESCE(FS.Atrasos_Pagos, 0) AS Atrasos_Pagos,
+                COALESCE(FS.Faturas_Nao_Pagas, 0) AS Faturas_Nao_Pagas,
+                FS.Media_Atraso -- Nova coluna
+            FROM BaseData
+            LEFT JOIN FinancialStats FS ON BaseData.Contrato_ID = FS.ID_Contrato_Recorrente
         """
 
         where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
@@ -104,50 +124,7 @@ def api_cancellation_analysis():
             total_rows = conn.execute(count_query, tuple(final_params)).fetchone()[0]
         except sqlite3.Error as e:
             if "no such table" in str(e).lower():
-                # Fallback se a tabela de negativação não existir
-                fallback_query_part = f"""
-                    SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_cancelamento, Motivo_cancelamento, Obs_cancelamento
-                    FROM Contratos WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
-                """
-                table_base_query_fallback = table_base_query.replace(
-                    f"SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_cancelamento, Motivo_cancelamento, Obs_cancelamento\n                FROM Contratos WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}\n                UNION ALL\n                -- Negativados (Agora filtrando também por Status)\n                SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_negativa_o AS Data_cancelamento, Motivo_cancelamento, Obs_cancelamento\n                FROM Contratos_Negativacao \n                WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_negativacao}",
-                    fallback_query_part
-                )
-                # Fallback regex replace might be tricky with new lines, simplified fallback logic:
-                table_base_query_fallback = f"""
-                    WITH RelevantTickets AS (
-                         SELECT DISTINCT Cliente FROM (
-                             SELECT Cliente FROM Atendimentos WHERE Assunto IN ('MANUTENÇÃO DE FIBRA', 'VISITA TECNICA')
-                             UNION ALL
-                             SELECT Cliente FROM OS WHERE Assunto IN ('MANUTENÇÃO DE FIBRA', 'VISITA TECNICA')
-                         )
-                    ),
-                    AllCancellations AS (
-                        SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_cancelamento, Motivo_cancelamento, Obs_cancelamento
-                        FROM Contratos WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
-                    ),
-                    BaseData AS (
-                        SELECT 
-                            AC.Cliente, AC.Contrato_ID, 
-                            COALESCE(AC.Motivo_cancelamento, 'Não Informado') AS Motivo_cancelamento,
-                            COALESCE(AC.Obs_cancelamento, 'Não Informado') AS Obs_cancelamento,
-                            AC.Data_cancelamento,
-                            CASE WHEN RT.Cliente IS NOT NULL THEN 'Sim' ELSE 'Não' END AS Teve_Contato_Relevante,
-                            CASE WHEN AC.Data_ativa_o IS NOT NULL AND AC.Data_cancelamento IS NOT NULL 
-                                 THEN CAST(ROUND((JULIANDAY(AC.Data_cancelamento) - JULIANDAY(AC.Data_ativa_o)) / 30.44) AS INTEGER) 
-                                 ELSE NULL 
-                            END AS permanencia_meses
-                        FROM AllCancellations AC
-                        LEFT JOIN RelevantTickets RT ON AC.Cliente = RT.Cliente
-                    )
-                    SELECT * FROM BaseData
-                """
-                
-                final_params_fallback = date_params_contratos + params
-                count_query = f"SELECT COUNT(*) FROM ({table_base_query_fallback}) AS sub {where_sql}"
-                total_rows = conn.execute(count_query, tuple(final_params_fallback)).fetchone()[0]
-                table_base_query = table_base_query_fallback
-                final_params = final_params_fallback
+                return jsonify({"error": "Tabelas necessárias não encontradas."}), 500
             else:
                 raise e
 
@@ -158,12 +135,8 @@ def api_cancellation_analysis():
         paginated_query = f"SELECT * FROM ({table_base_query}) AS sub {where_sql} {order_by} LIMIT ? OFFSET ?"
         data = conn.execute(paginated_query, tuple(final_params + [limit, offset])).fetchall()
 
-
-        # --- QUERY 2: DADOS DOS GRÁFICOS ---
-        # ATUALIZADO: Agora busca de ambas tabelas com os mesmos filtros estritos
-        
+        # --- QUERY GRÁFICOS (Mantida original para não quebrar lógica de gráficos) ---
         charts_params = date_params_contratos + date_params_negativacao + params
-
         charts_base_query = f"""
             WITH ChartsBaseData AS (
                 SELECT 
@@ -176,9 +149,7 @@ def api_cancellation_analysis():
                     END AS permanencia_meses
                 FROM Contratos 
                 WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
-                
                 UNION ALL
-                
                 SELECT 
                     COALESCE(Motivo_cancelamento, 'Não Informado') AS Motivo_cancelamento,
                     COALESCE(Obs_cancelamento, 'Não Informado') AS Obs_cancelamento,
@@ -193,10 +164,8 @@ def api_cancellation_analysis():
             SELECT * FROM ChartsBaseData
         """
         
-        # Fallback para gráficos se tabela não existir
-        try:
-             # Teste rápido
-             conn.execute("SELECT 1 FROM Contratos_Negativacao LIMIT 1")
+        # Fallback
+        try: conn.execute("SELECT 1 FROM Contratos_Negativacao LIMIT 1")
         except:
              charts_base_query = f"""
                 WITH ChartsBaseData AS (
@@ -215,22 +184,10 @@ def api_cancellation_analysis():
             """
              charts_params = date_params_contratos + params
 
-        # Dados Gráfico Motivo
-        chart_motivo_query = f"""
-            SELECT Motivo_cancelamento, COUNT(*) as Count 
-            FROM ({charts_base_query}) AS sub {where_sql} 
-            GROUP BY Motivo_cancelamento 
-            ORDER BY Count DESC
-        """
+        chart_motivo_query = f"SELECT Motivo_cancelamento, COUNT(*) as Count FROM ({charts_base_query}) AS sub {where_sql} GROUP BY Motivo_cancelamento ORDER BY Count DESC"
         chart_motivo_data = conn.execute(chart_motivo_query, tuple(charts_params)).fetchall()
 
-        # Dados Gráfico Observação
-        chart_obs_query = f"""
-            SELECT Obs_cancelamento, COUNT(*) as Count 
-            FROM ({charts_base_query}) AS sub {where_sql} 
-            GROUP BY Obs_cancelamento 
-            ORDER BY Count DESC
-        """
+        chart_obs_query = f"SELECT Obs_cancelamento, COUNT(*) as Count FROM ({charts_base_query}) AS sub {where_sql} GROUP BY Obs_cancelamento ORDER BY Count DESC"
         chart_obs_data = conn.execute(chart_obs_query, tuple(charts_params)).fetchall()
 
         return jsonify({
@@ -259,16 +216,10 @@ def api_negativacao_analysis():
         relevance = request.args.get('relevance', '')
         sort_order = request.args.get('sort_order', '')
         
-        # NOVOS PARÂMETROS
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
 
-        # Preparando filtros de data para SQL
-        date_filter_neg = ""
-        date_params_neg = []
-        add_date_range_filter([], date_params_neg, "Data_negativa_o", start_date, end_date) # Helper populate params list
-        
-        # Constrói cláusulas WHERE para datas
+        # Filtros de data
         where_date_neg = []
         add_date_range_filter(where_date_neg, [], "Data_negativa_o", start_date, end_date)
         sql_date_neg = " AND " + " AND ".join(where_date_neg) if where_date_neg else ""
@@ -277,9 +228,9 @@ def api_negativacao_analysis():
         add_date_range_filter(where_date_canc, [], "Data_cancelamento", start_date, end_date)
         sql_date_canc = " AND " + " AND ".join(where_date_canc) if where_date_canc else ""
 
-        # Query Base com filtros de data nas subqueries
         base_query = f"""
-            WITH RelevantTickets AS (
+            WITH {financial_cte},
+            RelevantTickets AS (
                 SELECT DISTINCT Cliente FROM (
                     SELECT Cliente FROM Atendimentos WHERE Assunto IN ('MANUTENÇÃO DE FIBRA', 'VISITA TECNICA')
                     UNION ALL
@@ -297,7 +248,7 @@ def api_negativacao_analysis():
                 SELECT
                     AN.Cliente,
                     AN.ID AS Contrato_ID,
-                    AN.end_date, -- Adicionado para verificação
+                    AN.end_date, 
                     CASE WHEN RT.Cliente IS NOT NULL THEN 'Sim' ELSE 'Não' END AS Teve_Contato_Relevante,
                     CASE
                         WHEN AN.Data_ativa_o IS NOT NULL AND AN.end_date IS NOT NULL
@@ -307,21 +258,19 @@ def api_negativacao_analysis():
                 FROM AllNegativados AN
                 LEFT JOIN RelevantTickets RT ON AN.Cliente = RT.Cliente
             )
-            SELECT * FROM BaseData
+            SELECT 
+                BaseData.*,
+                COALESCE(FS.Atrasos_Pagos, 0) AS Atrasos_Pagos,
+                COALESCE(FS.Faturas_Nao_Pagas, 0) AS Faturas_Nao_Pagas,
+                FS.Media_Atraso -- Nova coluna
+            FROM BaseData
+            LEFT JOIN FinancialStats FS ON BaseData.Contrato_ID = FS.ID_Contrato_Recorrente
         """
 
-        params = []
-        # Adiciona params de data duas vezes (uma para cada parte do UNION) se eles existirem
-        # Nota: add_date_range_filter adiciona ao array. 
-        # Precisamos da ordem correta: data_params (neg) + data_params (canc) + search_params
-        
         final_params = []
-        # Params para Contratos_Negativacao
         temp_p = []
         add_date_range_filter([], temp_p, "x", start_date, end_date)
         final_params.extend(temp_p)
-        
-        # Params para Contratos
         temp_p = []
         add_date_range_filter([], temp_p, "x", start_date, end_date)
         final_params.extend(temp_p)
@@ -362,7 +311,7 @@ def api_negativacao_analysis():
     finally:
         if conn: conn.close()
 
-
+# Demais rotas permanecem iguais (cancellations_by_city, cohort, etc)
 @churn_bp.route('/cancellations_by_city')
 def api_cancellations_by_city():
     conn = get_db()
