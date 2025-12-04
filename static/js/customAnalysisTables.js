@@ -4,13 +4,6 @@ import * as utils from './utils.js';
 import { renderChart } from './charts.js';
 
 // --- Helper: Badge de Comportamento de Pagamento ---
-// Regras:
-// <= -1: Adiantado (Verde)
-// 0: Em dia (Cinza/Verde)
-// 1-5: Atraso Curto (Amarelo)
-// 6-15: Atraso Médio (Laranja)
-// 16-30: Atraso Longo (Vermelho)
-// >30: Inadimplente Provável (Vermelho Escuro)
 function getPaymentBehaviorBadge(avgDays) {
     if (avgDays === null || avgDays === undefined) return '<span class="text-xs text-gray-400 mt-1 block">Sem histórico</span>';
     
@@ -236,7 +229,7 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     }
 }
 
-// *** FUNÇÃO ATUALIZADA: AGORA COM BADGE DE COMPORTAMENTO FINANCEIRO ***
+// *** FUNÇÃO ATUALIZADA: AGORA COM 3 GRÁFICOS (Financeiro AGRUPADO) ***
 export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false, startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'cancellations', currentSearchTerm: searchTerm });
@@ -265,24 +258,32 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
 
         if (dom.dashboardContentDiv) dom.dashboardContentDiv.innerHTML = '';
 
-        // --- RENDERIZAÇÃO DOS GRÁFICOS (MOTIVO E OBS) ---
+        // --- RENDERIZAÇÃO DOS GRÁFICOS (MOTIVO, OBS e FINANCEIRO) ---
         let chartsHtml = '';
         if (result.charts) {
             const totalMotivos = result.charts.motivo ? result.charts.motivo.reduce((acc, curr) => acc + (curr.Count || 0), 0) : 0;
             const totalObs = result.charts.obs ? result.charts.obs.reduce((acc, curr) => acc + (curr.Count || 0), 0) : 0;
+            const totalFinanceiro = result.charts.financeiro ? result.charts.financeiro.reduce((acc, curr) => acc + (curr.Count || 0), 0) : 0;
 
             chartsHtml = `
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
                     <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
                         <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Motivos de Cancelamento: ${totalMotivos}</h3>
-                        <div class="chart-canvas-container" style="height: 500px;">
+                        <div class="chart-canvas-container" style="height: 400px;">
                             <canvas id="motivoCancelamentoChart"></canvas>
                         </div>
                     </div>
                     <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
                         <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Observações de Cancelamento: ${totalObs}</h3>
-                        <div class="chart-canvas-container" style="height: 500px;">
+                        <div class="chart-canvas-container" style="height: 400px;">
                             <canvas id="obsCancelamentoChart"></canvas>
+                        </div>
+                    </div>
+                    <!-- NOVO GRÁFICO FINANCEIRO -->
+                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Comportamento Financeiro: ${totalFinanceiro}</h3>
+                        <div class="chart-canvas-container" style="height: 400px;">
+                            <canvas id="financeiroCancelamentoChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -296,9 +297,7 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
             { 
                 header: 'Cliente', 
                 render: r => {
-                    // Nome do Cliente com Link
                     const clientLink = `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline text-base" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}" title="${r.Cliente}">${r.Cliente}</span>`;
-                    // Badge de Regra de Pagamento (Media de Dias)
                     const behaviorBadge = getPaymentBehaviorBadge(r.Media_Atraso);
                     return `<div class="flex flex-col items-start">${clientLink}${behaviorBadge}</div>`;
                 } 
@@ -306,6 +305,11 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
             { header: 'ID Contrato', key: 'Contrato_ID' },
             { header: 'Data Cancelamento', render: r => r.Data_cancelamento ? utils.formatDate(r.Data_cancelamento) : 'N/A' },
             { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' },
+            { 
+                header: 'Faturas', 
+                render: r => `<span class="invoice-detail-trigger cursor-pointer text-blue-600 font-bold hover:underline" data-type="all_invoices" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Total_Faturas || 0}</span>`,
+                cssClass: 'text-center' 
+            },
             { header: 'Atrasos Pagos', render: r => r.Atrasos_Pagos > 0 ? `<span class="invoice-detail-trigger cursor-pointer text-orange-600 font-bold hover:underline" data-type="atrasos_pagos" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Atrasos_Pagos}</span>` : r.Atrasos_Pagos },
             { header: 'Faturas Vencidas (Não Pagas)', render: r => r.Faturas_Nao_Pagas > 0 ? `<span class="invoice-detail-trigger cursor-pointer text-red-600 font-bold hover:underline" data-type="faturas_nao_pagas" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Faturas_Nao_Pagas}</span>` : r.Faturas_Nao_Pagas },
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
@@ -334,6 +338,25 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
                 } else if (document.getElementById('obsCancelamentoChart')) {
                     document.getElementById('obsCancelamentoChart').parentNode.innerHTML = '<p class="text-center text-gray-500 mt-10">Sem dados de observação.</p>';
                 }
+
+                // Renderiza o novo gráfico financeiro
+                if (result.charts.financeiro && result.charts.financeiro.length > 0) {
+                    renderChart('financeiroCancelamentoChart', 'pie', 
+                        result.charts.financeiro.map(d => d.Status_Pagamento), 
+                        [{ 
+                            data: result.charts.financeiro.map(d => d.Count),
+                            backgroundColor: [
+                                '#10b981', // Verde (Em dia)
+                                '#f59e0b', // Laranja (Pagamento Atrasado - Agrupado)
+                                '#991b1b', // Vermelho Escuro (Inadimplente)
+                                '#9ca3af'  // Cinza (Sem histórico)
+                            ]
+                        }], 
+                        '', { formatterType: 'percent_only' }
+                    );
+                } else if (document.getElementById('financeiroCancelamentoChart')) {
+                    document.getElementById('financeiroCancelamentoChart').parentNode.innerHTML = '<p class="text-center text-gray-500 mt-10">Sem dados financeiros.</p>';
+                }
             }, 50);
         }
 
@@ -353,7 +376,7 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
     }
 }
 
-// *** FUNÇÃO ATUALIZADA: AGORA COM BADGE DE COMPORTAMENTO FINANCEIRO ***
+// *** FUNÇÃO ATUALIZADA: AGORA COM 3 GRÁFICOS (Financeiro AGRUPADO) ***
 export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false, startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'negativacao', currentSearchTerm: searchTerm });
@@ -380,6 +403,26 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
 
         if (state.getCustomAnalysisState().currentAnalysis !== 'negativacao') return;
 
+        // --- RENDERIZAÇÃO DOS GRÁFICOS ---
+        let chartsHtml = '';
+        // Para negativação, pode não haver os gráficos de Motivo e Obs na API,
+        // mas vamos garantir que o financeiro apareça se estiver disponível
+        const totalFinanceiro = result.charts?.financeiro ? result.charts.financeiro.reduce((acc, curr) => acc + (curr.Count || 0), 0) : 0;
+
+        if (totalFinanceiro > 0) {
+             chartsHtml = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 justify-center">
+                    <!-- NOVO GRÁFICO FINANCEIRO -->
+                    <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200 col-span-1 md:col-span-2 lg:col-span-1 lg:col-start-2">
+                        <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Comportamento Financeiro: ${totalFinanceiro}</h3>
+                        <div class="chart-canvas-container" style="height: 400px;">
+                            <canvas id="financeiroNegativacaoChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         const arrowIcon = sortAsc ? '↓' : '↑';
         const headerHtml = `<div class="flex items-center gap-1 cursor-pointer select-none sort-permanence-header hover:text-blue-600 transition-colors" title="Clique para ordenar">Permanência (Meses) <span class="text-lg font-bold leading-none">${arrowIcon}</span></div>`;
 
@@ -395,11 +438,36 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
             { header: 'ID Contrato', key: 'Contrato_ID' },
             { header: 'Data Negativação', render: r => r.end_date ? utils.formatDate(r.end_date) : 'N/A' },
             { header: headerHtml, key: 'permanencia_meses', cssClass: 'text-center' },
+            { 
+                header: 'Faturas', 
+                render: r => `<span class="invoice-detail-trigger cursor-pointer text-blue-600 font-bold hover:underline" data-type="all_invoices" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Total_Faturas || 0}</span>`,
+                cssClass: 'text-center' 
+            },
             { header: 'Atrasos Pagos', render: r => r.Atrasos_Pagos > 0 ? `<span class="invoice-detail-trigger cursor-pointer text-orange-600 font-bold hover:underline" data-type="atrasos_pagos" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Atrasos_Pagos}</span>` : r.Atrasos_Pagos },
             { header: 'Faturas Vencidas (Não Pagas)', render: r => r.Faturas_Nao_Pagas > 0 ? `<span class="invoice-detail-trigger cursor-pointer text-red-600 font-bold hover:underline" data-type="faturas_nao_pagas" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}">${r.Faturas_Nao_Pagas}</span>` : r.Faturas_Nao_Pagas },
             { header: 'Teve Contato Relevante?', render: r => r.Teve_Contato_Relevante === 'Não' ? `<span class="bg-yellow-200 text-yellow-800 font-bold py-1 px-2 rounded-md text-xs">${r.Teve_Contato_Relevante}</span>` : `<span class="cancellation-detail-trigger cursor-pointer text-green-700 font-bold hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Teve_Contato_Relevante}</span>` }
         ];
-        renderCustomTable(result, 'Análise de Negativação por Contato Técnico', columns);
+        renderCustomTable(result, 'Análise de Negativação por Contato Técnico', columns, chartsHtml);
+
+        if (result.charts && result.charts.financeiro) {
+             setTimeout(() => {
+                if (result.charts.financeiro.length > 0) {
+                    renderChart('financeiroNegativacaoChart', 'pie', 
+                        result.charts.financeiro.map(d => d.Status_Pagamento), 
+                        [{ 
+                            data: result.charts.financeiro.map(d => d.Count),
+                            backgroundColor: [
+                                '#10b981', // Verde
+                                '#f59e0b', // Laranja (Pagamento Atrasado)
+                                '#991b1b', // Vermelho Escuro
+                                '#9ca3af'  // Cinza
+                            ]
+                        }], 
+                        '', { formatterType: 'percent_only' }
+                    );
+                }
+             }, 50);
+        }
 
         if (dom.viewTableBtn) {
             dom.viewTableBtn.classList.remove('hidden');

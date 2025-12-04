@@ -8,13 +8,13 @@ from utils_api import get_db, parse_relevance_filter, add_date_range_filter
 churn_bp = Blueprint('churn_bp', __name__)
 
 # --- CTE FINANCEIRA ATUALIZADA ---
-# Calcula Atrasos, Não Pagas e agora a MÉDIA de dias de atraso (Media_Atraso)
 financial_cte = """
     FinancialStats AS (
         SELECT
             ID_Contrato_Recorrente,
             SUM(CASE WHEN Data_pagamento > Vencimento THEN 1 ELSE 0 END) AS Atrasos_Pagos,
             SUM(CASE WHEN Status = 'A receber' AND Vencimento < date('now') THEN 1 ELSE 0 END) AS Faturas_Nao_Pagas,
+            COUNT(*) AS Total_Faturas,
             AVG(
                 CASE 
                     WHEN Data_pagamento IS NOT NULL 
@@ -72,7 +72,8 @@ def api_cancellation_analysis():
 
         final_params = date_params_contratos + date_params_negativacao + params 
         
-        table_base_query = f"""
+        # CTEs combinadas para uso nas tabelas e gráficos
+        base_cte_logic = f"""
             WITH {financial_cte},
             RelevantTickets AS (
                  SELECT DISTINCT Cliente FROM (
@@ -107,20 +108,24 @@ def api_cancellation_analysis():
                     END AS permanencia_meses
                 FROM AllCancellations AC
                 LEFT JOIN RelevantTickets RT ON AC.Cliente = RT.Cliente
+            ),
+            FinalView AS (
+                SELECT 
+                    BaseData.*,
+                    COALESCE(FS.Atrasos_Pagos, 0) AS Atrasos_Pagos,
+                    COALESCE(FS.Faturas_Nao_Pagas, 0) AS Faturas_Nao_Pagas,
+                    COALESCE(FS.Total_Faturas, 0) AS Total_Faturas,
+                    FS.Media_Atraso
+                FROM BaseData
+                LEFT JOIN FinancialStats FS ON BaseData.Contrato_ID = FS.ID_Contrato_Recorrente
             )
-            SELECT 
-                BaseData.*,
-                COALESCE(FS.Atrasos_Pagos, 0) AS Atrasos_Pagos,
-                COALESCE(FS.Faturas_Nao_Pagas, 0) AS Faturas_Nao_Pagas,
-                FS.Media_Atraso -- Nova coluna
-            FROM BaseData
-            LEFT JOIN FinancialStats FS ON BaseData.Contrato_ID = FS.ID_Contrato_Recorrente
         """
 
         where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
         try:
-            count_query = f"SELECT COUNT(*) FROM ({table_base_query}) AS sub {where_sql}"
+            # Total de Linhas
+            count_query = f"{base_cte_logic} SELECT COUNT(*) FROM FinalView {where_sql}"
             total_rows = conn.execute(count_query, tuple(final_params)).fetchone()[0]
         except sqlite3.Error as e:
             if "no such table" in str(e).lower():
@@ -128,79 +133,55 @@ def api_cancellation_analysis():
             else:
                 raise e
 
+        # Dados da Tabela (Paginados)
         order_by = "ORDER BY Cliente, Contrato_ID"
         if sort_order == 'asc': order_by = "ORDER BY permanencia_meses ASC, Cliente"
         elif sort_order == 'desc': order_by = "ORDER BY permanencia_meses DESC, Cliente"
 
-        paginated_query = f"SELECT * FROM ({table_base_query}) AS sub {where_sql} {order_by} LIMIT ? OFFSET ?"
+        paginated_query = f"{base_cte_logic} SELECT * FROM FinalView {where_sql} {order_by} LIMIT ? OFFSET ?"
         data = conn.execute(paginated_query, tuple(final_params + [limit, offset])).fetchall()
 
-        # --- QUERY GRÁFICOS (Mantida original para não quebrar lógica de gráficos) ---
-        charts_params = date_params_contratos + date_params_negativacao + params
-        charts_base_query = f"""
-            WITH ChartsBaseData AS (
-                SELECT 
-                    COALESCE(Motivo_cancelamento, 'Não Informado') AS Motivo_cancelamento,
-                    COALESCE(Obs_cancelamento, 'Não Informado') AS Obs_cancelamento,
-                    Cliente,
-                    CASE WHEN Data_ativa_o IS NOT NULL AND Data_cancelamento IS NOT NULL 
-                         THEN CAST(ROUND((JULIANDAY(Data_cancelamento) - JULIANDAY(Data_ativa_o)) / 30.44) AS INTEGER) 
-                         ELSE NULL 
-                    END AS permanencia_meses
-                FROM Contratos 
-                WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
-                UNION ALL
-                SELECT 
-                    COALESCE(Motivo_cancelamento, 'Não Informado') AS Motivo_cancelamento,
-                    COALESCE(Obs_cancelamento, 'Não Informado') AS Obs_cancelamento,
-                    Cliente,
-                    CASE WHEN Data_ativa_o IS NOT NULL AND Data_negativa_o IS NOT NULL 
-                         THEN CAST(ROUND((JULIANDAY(Data_negativa_o) - JULIANDAY(Data_ativa_o)) / 30.44) AS INTEGER) 
-                         ELSE NULL 
-                    END AS permanencia_meses
-                FROM Contratos_Negativacao
-                WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_negativacao}
-            )
-            SELECT * FROM ChartsBaseData
+        # --- DADOS DOS GRÁFICOS (Agregados sobre TODO o filtro, sem paginação) ---
+        # 1. Motivos
+        chart_motivo_query = f"{base_cte_logic} SELECT Motivo_cancelamento, COUNT(*) as Count FROM FinalView {where_sql} GROUP BY Motivo_cancelamento ORDER BY Count DESC"
+        chart_motivo_data = conn.execute(chart_motivo_query, tuple(final_params)).fetchall()
+
+        # 2. Observações
+        chart_obs_query = f"{base_cte_logic} SELECT Obs_cancelamento, COUNT(*) as Count FROM FinalView {where_sql} GROUP BY Obs_cancelamento ORDER BY Count DESC"
+        chart_obs_data = conn.execute(chart_obs_query, tuple(final_params)).fetchall()
+
+        # 3. Comportamento Financeiro (NOVO)
+        chart_finance_query = f"""
+            {base_cte_logic}
+            SELECT 
+                CASE
+                    WHEN Media_Atraso <= 0 THEN 'Em dia / Adiantado'
+                    WHEN Media_Atraso <= 5 THEN 'Atraso Curto (1-5d)'
+                    WHEN Media_Atraso <= 15 THEN 'Atraso Médio (6-15d)'
+                    WHEN Media_Atraso <= 30 THEN 'Atraso Longo (16-30d)'
+                    WHEN Media_Atraso > 30 THEN 'Inadimplente (>30d)'
+                    ELSE 'Sem Histórico'
+                END AS Status_Pagamento,
+                COUNT(*) as Count 
+            FROM FinalView {where_sql} 
+            GROUP BY Status_Pagamento 
+            ORDER BY Count DESC
         """
-        
-        # Fallback
-        try: conn.execute("SELECT 1 FROM Contratos_Negativacao LIMIT 1")
-        except:
-             charts_base_query = f"""
-                WITH ChartsBaseData AS (
-                    SELECT 
-                        COALESCE(Motivo_cancelamento, 'Não Informado') AS Motivo_cancelamento,
-                        COALESCE(Obs_cancelamento, 'Não Informado') AS Obs_cancelamento,
-                        Cliente,
-                        CASE WHEN Data_ativa_o IS NOT NULL AND Data_cancelamento IS NOT NULL 
-                             THEN CAST(ROUND((JULIANDAY(Data_cancelamento) - JULIANDAY(Data_ativa_o)) / 30.44) AS INTEGER) 
-                             ELSE NULL 
-                        END AS permanencia_meses
-                    FROM Contratos 
-                    WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
-                )
-                SELECT * FROM ChartsBaseData
-            """
-             charts_params = date_params_contratos + params
-
-        chart_motivo_query = f"SELECT Motivo_cancelamento, COUNT(*) as Count FROM ({charts_base_query}) AS sub {where_sql} GROUP BY Motivo_cancelamento ORDER BY Count DESC"
-        chart_motivo_data = conn.execute(chart_motivo_query, tuple(charts_params)).fetchall()
-
-        chart_obs_query = f"SELECT Obs_cancelamento, COUNT(*) as Count FROM ({charts_base_query}) AS sub {where_sql} GROUP BY Obs_cancelamento ORDER BY Count DESC"
-        chart_obs_data = conn.execute(chart_obs_query, tuple(charts_params)).fetchall()
+        chart_finance_data = conn.execute(chart_finance_query, tuple(final_params)).fetchall()
 
         return jsonify({
             "data": [dict(row) for row in data],
             "total_rows": total_rows,
             "charts": {
                 "motivo": [dict(row) for row in chart_motivo_data],
-                "obs": [dict(row) for row in chart_obs_data]
+                "obs": [dict(row) for row in chart_obs_data],
+                "financeiro": [dict(row) for row in chart_finance_data] # Novo
             }
         })
 
     except sqlite3.Error as e:
         print(f"Erro na base de dados na análise de cancelamento: {e}")
+        traceback.print_exc()
         return jsonify({"error": f"Erro interno ao processar a análise de cancelamento. Detalhe: {e}"}), 500
     finally:
         if conn: conn.close()
@@ -228,7 +209,8 @@ def api_negativacao_analysis():
         add_date_range_filter(where_date_canc, [], "Data_cancelamento", start_date, end_date)
         sql_date_canc = " AND " + " AND ".join(where_date_canc) if where_date_canc else ""
 
-        base_query = f"""
+        # CTE Combinada
+        base_cte_logic = f"""
             WITH {financial_cte},
             RelevantTickets AS (
                 SELECT DISTINCT Cliente FROM (
@@ -257,14 +239,17 @@ def api_negativacao_analysis():
                     END AS permanencia_meses
                 FROM AllNegativados AN
                 LEFT JOIN RelevantTickets RT ON AN.Cliente = RT.Cliente
+            ),
+            FinalView AS (
+                SELECT 
+                    BaseData.*,
+                    COALESCE(FS.Atrasos_Pagos, 0) AS Atrasos_Pagos,
+                    COALESCE(FS.Faturas_Nao_Pagas, 0) AS Faturas_Nao_Pagas,
+                    COALESCE(FS.Total_Faturas, 0) AS Total_Faturas,
+                    FS.Media_Atraso
+                FROM BaseData
+                LEFT JOIN FinancialStats FS ON BaseData.Contrato_ID = FS.ID_Contrato_Recorrente
             )
-            SELECT 
-                BaseData.*,
-                COALESCE(FS.Atrasos_Pagos, 0) AS Atrasos_Pagos,
-                COALESCE(FS.Faturas_Nao_Pagas, 0) AS Faturas_Nao_Pagas,
-                FS.Media_Atraso -- Nova coluna
-            FROM BaseData
-            LEFT JOIN FinancialStats FS ON BaseData.Contrato_ID = FS.ID_Contrato_Recorrente
         """
 
         final_params = []
@@ -290,18 +275,44 @@ def api_negativacao_analysis():
         
         where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
-        count_query = f"SELECT COUNT(*) FROM ({base_query}) AS sub {where_sql}"
+        # Total Rows
+        count_query = f"{base_cte_logic} SELECT COUNT(*) FROM FinalView {where_sql}"
         total_rows = conn.execute(count_query, tuple(final_params)).fetchone()[0]
 
+        # Dados da Tabela
         order_by = "ORDER BY Cliente, Contrato_ID"
         if sort_order == 'asc': order_by = "ORDER BY permanencia_meses ASC, Cliente"
         elif sort_order == 'desc': order_by = "ORDER BY permanencia_meses DESC, Cliente"
 
-        paginated_query = f"SELECT * FROM ({base_query}) AS sub {where_sql} {order_by} LIMIT ? OFFSET ?"
-        final_params.extend([limit, offset])
-        data = conn.execute(paginated_query, tuple(final_params)).fetchall()
+        paginated_query = f"{base_cte_logic} SELECT * FROM FinalView {where_sql} {order_by} LIMIT ? OFFSET ?"
+        data = conn.execute(paginated_query, tuple(final_params + [limit, offset])).fetchall()
 
-        return jsonify({"data": [dict(row) for row in data], "total_rows": total_rows})
+        # --- Gráfico Financeiro (NOVO) ---
+        chart_finance_query = f"""
+            {base_cte_logic}
+            SELECT 
+                CASE
+                    WHEN Media_Atraso <= 0 THEN 'Em dia / Adiantado'
+                    WHEN Media_Atraso <= 5 THEN 'Atraso Curto (1-5d)'
+                    WHEN Media_Atraso <= 15 THEN 'Atraso Médio (6-15d)'
+                    WHEN Media_Atraso <= 30 THEN 'Atraso Longo (16-30d)'
+                    WHEN Media_Atraso > 30 THEN 'Inadimplente (>30d)'
+                    ELSE 'Sem Histórico'
+                END AS Status_Pagamento,
+                COUNT(*) as Count 
+            FROM FinalView {where_sql} 
+            GROUP BY Status_Pagamento 
+            ORDER BY Count DESC
+        """
+        chart_finance_data = conn.execute(chart_finance_query, tuple(final_params)).fetchall()
+
+        return jsonify({
+            "data": [dict(row) for row in data], 
+            "total_rows": total_rows,
+            "charts": {
+                "financeiro": [dict(row) for row in chart_finance_data]
+            }
+        })
 
     except sqlite3.Error as e:
         if "no such table" in str(e).lower():
@@ -312,6 +323,9 @@ def api_negativacao_analysis():
         if conn: conn.close()
 
 # Demais rotas permanecem iguais (cancellations_by_city, cohort, etc)
+# ... [O restante do código das outras rotas deve ser mantido igual ao arquivo anterior] ...
+# Para brevidade, vou reinserir as outras rotas inalteradas para garantir a integridade do arquivo.
+
 @churn_bp.route('/cancellations_by_city')
 def api_cancellations_by_city():
     conn = get_db()

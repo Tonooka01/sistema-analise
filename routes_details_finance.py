@@ -24,6 +24,8 @@ def api_invoice_details():
             where_condition = "WHERE CAR.ID_Contrato_Recorrente = ? AND (CAR.Data_pagamento > CAR.Vencimento)"
         elif analysis_type == 'faturas_nao_pagas':
             where_condition = "WHERE CAR.ID_Contrato_Recorrente = ? AND (CAR.Status = 'A receber' AND CAR.Vencimento < date('now'))"
+        elif analysis_type == 'all_invoices': # Novo tipo para buscar todas as faturas
+            where_condition = "WHERE CAR.ID_Contrato_Recorrente = ?"
         else:
             abort(400, "Tipo de análise inválido.")
 
@@ -53,6 +55,7 @@ def api_invoice_details():
 def api_financial_details(contract_id):
     """
     Busca os detalhes financeiros (contas a receber) de um contrato.
+    Esta rota é usada pelo modal de detalhes gerais do contrato (aba 'Financeiro').
     """
     conn = get_db()
     try:

@@ -1,6 +1,7 @@
 import * as state from './state.js';
 import * as dom from './dom.js';
 import { formatDate, handleFetchError, renderGenericDetailTable, renderGenericPagination, createGenericPaginationHtml } from './utils.js';
+import { renderChart } from './charts.js'; // Importação necessária para o gráfico
 
 // --- Modal Principal de Tabela ---
 
@@ -230,7 +231,16 @@ export function openInvoiceDetailModal(contractId, clientName, type) {
     state.setCurrentInvoiceDetailContractId(contractId);
     state.setCurrentInvoiceDetailType(type);
     state.setInvoiceDetailCurrentPage(1);
-    const typeText = type === 'atrasos_pagos' ? 'Atrasos Pagos' : 'Faturas Vencidas e Não Pagas';
+    
+    let typeText = '';
+    if (type === 'atrasos_pagos') {
+        typeText = 'Atrasos Pagos';
+    } else if (type === 'faturas_nao_pagas') {
+        typeText = 'Faturas Vencidas e Não Pagas';
+    } else if (type === 'all_invoices') {
+        typeText = 'Todas as Faturas';
+    }
+
     if (dom.invoiceDetailModalTitle) dom.invoiceDetailModalTitle.textContent = `Detalhes: ${typeText} para ${clientName} (Contrato: ${contractId})`;
     if (dom.invoiceDetailModal) dom.invoiceDetailModal.classList.add('show');
     fetchAndDisplayInvoiceDetails(1);
@@ -271,20 +281,141 @@ export async function fetchAndDisplayInvoiceDetails(page) {
 }
 
 function renderInvoiceDetailTable(data) {
-     if (!dom.invoiceDetailContent) return;
+    if (!dom.invoiceDetailContent) return;
     if (!data || data.length === 0) {
         dom.invoiceDetailContent.innerHTML = '<p class="text-center text-gray-500 p-4">Nenhum detalhe encontrado.</p>';
         return;
     }
+
+    // --- CÁLCULO DE ESTATÍSTICAS PARA O GRÁFICO ---
+    let adiantadoCount = 0;
+    let emDiaCount = 0;
+    let atrasadoCount = 0;
+
+    data.forEach(row => {
+        const payDate = row.Data_pagamento;
+        const dueDate = row.Vencimento;
+
+        if (payDate && dueDate) {
+            try {
+                const dPay = new Date(payDate.split(' ')[0]);
+                const dDue = new Date(dueDate.split(' ')[0]);
+
+                if (!isNaN(dPay) && !isNaN(dDue)) {
+                    const diffTime = dPay - dDue;
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    if (diffDays > 0) {
+                        atrasadoCount++;
+                    } else if (diffDays < 0) {
+                        adiantadoCount++;
+                    } else {
+                        emDiaCount++;
+                    }
+                }
+            } catch (e) {
+                // Ignora erros de parse na contagem
+            }
+        }
+    });
+
+    // --- HTML DO GRÁFICO (Canvas) ---
+    // Inserimos o canvas antes da tabela apenas se houver dados de pagamento
+    let chartHtml = '';
+    const totalPagos = adiantadoCount + emDiaCount + atrasadoCount;
+    
+    if (totalPagos > 0) {
+        chartHtml = `
+            <div class="flex justify-center items-center mb-6 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <div style="max-width: 300px; width: 100%;">
+                    <h3 class="text-center text-sm font-semibold text-gray-600 mb-2">Comportamento de Pagamento (Página Atual)</h3>
+                    <div class="chart-canvas-container" style="height: 200px; position: relative;">
+                        <canvas id="invoicePaymentBehaviorChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     const columns = [
         { header: 'ID', key: 'ID' },
         { header: 'Emissão', key: 'Emissao', isDate: true },
         { header: 'Vencimento', key: 'Vencimento', isDate: true },
-        { header: 'Data Pagamento', key: 'Data_pagamento', isDate: true },
+        { 
+            header: 'Data Pagamento', 
+            render: (row) => {
+                const payDate = row.Data_pagamento;
+                if (!payDate) return 'N/A';
+                
+                const formattedDate = formatDate(payDate);
+                const dueDate = row.Vencimento;
+
+                if (!dueDate) return formattedDate;
+
+                try {
+                    // Normaliza para comparar apenas as datas (ignora horas se existirem)
+                    const dPay = new Date(payDate.split(' ')[0]);
+                    const dDue = new Date(dueDate.split(' ')[0]);
+
+                    if (isNaN(dPay) || isNaN(dDue)) return formattedDate;
+
+                    // Diferença em milissegundos
+                    const diffTime = dPay - dDue; 
+                    // Converte para dias
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    let badge = '';
+                    if (diffDays > 0) {
+                        // Atrasado (Vermelho)
+                        badge = `<span class="ml-2 text-xs font-bold text-red-600 bg-red-100 px-1 rounded border border-red-200" title="Atraso de ${diffDays} dias">+${diffDays}d</span>`;
+                    } else if (diffDays < 0) {
+                        // Adiantado (Verde)
+                        badge = `<span class="ml-2 text-xs font-bold text-green-600 bg-green-100 px-1 rounded border border-green-200" title="Adiantado ${Math.abs(diffDays)} dias">${diffDays}d</span>`;
+                    } else {
+                        // Em dia (Cinza/Neutro)
+                        badge = `<span class="ml-2 text-xs font-bold text-gray-500 bg-gray-100 px-1 rounded border border-gray-200" title="Pago no dia">0d</span>`;
+                    }
+
+                    return `<div class="flex items-center">${formattedDate}${badge}</div>`;
+                } catch (e) {
+                    return formattedDate;
+                }
+            }
+        },
         { header: 'Valor', key: 'Valor', isCurrency: true },
         { header: 'Status', key: 'Status' }
     ];
-    dom.invoiceDetailContent.innerHTML = renderGenericDetailTable(null, data, columns, true);
+    
+    // Gera o HTML da tabela
+    const tableHtml = renderGenericDetailTable(null, data, columns, true);
+    
+    // Combina Gráfico + Tabela
+    dom.invoiceDetailContent.innerHTML = chartHtml + tableHtml;
+
+    // --- RENDERIZA O GRÁFICO (Se aplicável) ---
+    if (totalPagos > 0) {
+        // Pequeno timeout para garantir que o canvas está no DOM
+        setTimeout(() => {
+            renderChart(
+                'invoicePaymentBehaviorChart',
+                'pie',
+                ['Adiantado', 'Em dia', 'Atrasado'],
+                [{
+                    data: [adiantadoCount, emDiaCount, atrasadoCount],
+                    backgroundColor: ['#10b981', '#6b7280', '#ef4444'], // Verde, Cinza, Vermelho
+                    borderColor: '#ffffff',
+                    borderWidth: 2
+                }],
+                '', // Sem título interno (já tem no HTML)
+                {
+                    formatterType: 'percent_only', // Mostra porcentagem nas fatias
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            );
+        }, 50);
+    }
 }
 
 function renderInvoiceDetailPagination() {
