@@ -24,8 +24,9 @@
         body { font-family: 'Inter', sans-serif; background-color: #f0f2f5; }
     </style>
 </head>
-<body class="p-4">
-    <div class="container mx-auto"> <!-- Adicionado mx-auto para centralizar container se necessário -->
+<body class="p-2 md:p-4">
+    <!-- ALTERAÇÃO CRÍTICA: Mudado de 'container' para 'custom-container' para remover limite fixo do Tailwind -->
+    <div class="custom-container mx-auto"> 
         {% block content %}{% endblock %}
     </div>
 
@@ -54,8 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearTimeout(timeoutId);
         timeoutId = setTimeout(checkInactivity, (timeoutMinutes * 60 * 1000) + 1000); 
     }
-    // ... (código anterior do TimeOut e Modal) ...
-
+    
     const usersTableBody = document.getElementById('usersTableBody');
     const refreshUsersBtn = document.getElementById('refreshUsersBtn');
 
@@ -103,9 +103,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 let actionBtnClass = u.is_active ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-green-100 text-green-700 hover:bg-green-200';
                 let actionBtnText = u.is_active ? 'Bloquear 🚫' : 'Ativar ✅';
                 let rowOpacity = u.is_active ? '' : 'opacity-60 bg-red-50'; // Deixa meio transparente se bloqueado
-
-                // Link para ver logs específicos desse usuário
-                let logsLink = `/admin/logs?username=${u.username}`; // (Ainda precisamos ajustar o backend para suportar esse filtro, veja passo extra abaixo)
 
                 const row = `
                     <tr class="border-b border-gray-100 ${rowOpacity}">
@@ -240,16 +237,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 </script>
-    {% include 'partials/modals.html' %}
-
-    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
-
-</body>
-</html>
-
+    
     <!-- Carrega o JavaScript principal COMO MÓDULO e usando url_for -->
     <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
 
 </body>
 </html>
-

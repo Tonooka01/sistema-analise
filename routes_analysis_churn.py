@@ -8,7 +8,6 @@ from utils_api import get_db, parse_relevance_filter, add_date_range_filter
 churn_bp = Blueprint('churn_bp', __name__)
 
 # --- CTE FINANCEIRA ATUALIZADA ---
-# Calcula Atrasos, Não Pagas, MÉDIA de dias de atraso e agora TOTAL DE FATURAS
 financial_cte = """
     FinancialStats AS (
         SELECT
@@ -31,35 +30,22 @@ financial_cte = """
 """
 
 def apply_chart_filters(where_clauses, params, filter_col, filter_val):
-    """
-    Helper function to apply filters clicked from charts.
-    Uses TRIM() and UPPER() for more robust matching.
-    """
     if not filter_col or not filter_val:
         return
-
-    # Limpa espaços extras que possam vir do frontend
     filter_val = filter_val.strip()
-
     if filter_col == 'motivo':
-        # Filtro por Motivo de Cancelamento
         if filter_val == 'Não Informado':
              where_clauses.append("(Motivo_cancelamento IS NULL OR TRIM(Motivo_cancelamento) = 'Não Informado')")
         else:
-            # Usa UPPER para evitar problemas de case sensitivity
             where_clauses.append("UPPER(TRIM(Motivo_cancelamento)) = UPPER(TRIM(?))")
             params.append(filter_val)
-            
     elif filter_col == 'obs':
-        # Filtro por Observação de Cancelamento
         if filter_val == 'Não Informado':
              where_clauses.append("(Obs_cancelamento IS NULL OR TRIM(Obs_cancelamento) = 'Não Informado')")
         else:
             where_clauses.append("UPPER(TRIM(Obs_cancelamento)) = UPPER(TRIM(?))")
             params.append(filter_val)
-            
     elif filter_col == 'financeiro':
-        # Filtro por Comportamento Financeiro (baseado na Media_Atraso)
         if filter_val == 'Em dia / Adiantado':
             where_clauses.append("Media_Atraso <= 0")
         elif filter_val == 'Pagamento Atrasado':
@@ -69,33 +55,25 @@ def apply_chart_filters(where_clauses, params, filter_col, filter_val):
         elif filter_val == 'Sem Histórico':
             where_clauses.append("Media_Atraso IS NULL")
 
-
 @churn_bp.route('/cancellations')
 def api_cancellation_analysis():
     conn = get_db()
     try:
-        # Parâmetros padrão
         search_term = request.args.get('search_term', '').strip()
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
         relevance = request.args.get('relevance', '')
         sort_order = request.args.get('sort_order', '') 
-        
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
-
-        # Novos parâmetros de filtro de gráfico (vindos do clique no frontend)
         chart_filter_col = request.args.get('filter_column', '')
         chart_filter_val = request.args.get('filter_value', '').strip()
 
-        # --- PREPARAÇÃO DOS FILTROS GERAIS ---
         params = []
         where_clauses = []
-        
         if search_term:
             where_clauses.append("Cliente LIKE ?")
             params.append(f'%{search_term}%')
-
         min_months, max_months = parse_relevance_filter(relevance)
         if min_months is not None:
             where_clauses.append("permanencia_meses >= ?")
@@ -104,7 +82,6 @@ def api_cancellation_analysis():
             where_clauses.append("permanencia_meses <= ?")
             params.append(max_months)
             
-        # Filtros de Data específicos para as subqueries
         date_filter_contratos = ""
         date_params_contratos = []
         date_where_list_c = []
@@ -119,11 +96,8 @@ def api_cancellation_analysis():
         if date_where_list_n:
             date_filter_negativacao = " AND " + " AND ".join(date_where_list_n)
 
-        # Parâmetros base (Datas + Filtros Gerais)
-        # IMPORTANTE: A ordem deve ser (Datas Contratos) + (Datas Negativação) + (Filtros Gerais)
         final_params = date_params_contratos + date_params_negativacao + params 
         
-        # CTEs combinadas (Base de dados unificada)
         base_cte_logic = f"""
             WITH {financial_cte},
             RelevantTickets AS (
@@ -134,14 +108,10 @@ def api_cancellation_analysis():
                  )
             ),
             AllCancellations AS (
-                -- Contratos Normais
                 SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_cancelamento, Motivo_cancelamento, Obs_cancelamento
                 FROM Contratos 
                 WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_contratos}
-                
                 UNION ALL
-                
-                -- Negativados (Também aparecem em cancelamentos se tiverem data)
                 SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_negativa_o AS Data_cancelamento, Motivo_cancelamento, Obs_cancelamento
                 FROM Contratos_Negativacao 
                 WHERE Status_contrato = 'Inativo' AND Status_acesso = 'Desativado' {date_filter_negativacao}
@@ -172,17 +142,12 @@ def api_cancellation_analysis():
             )
         """
 
-        # --- Aplicação do Filtro de Gráfico para TABELA E CONTAGEM ---
-        where_clauses_table = list(where_clauses) # Começa com os filtros gerais (busca, relevancia)
-        params_table = list(final_params)         # Começa com os params globais (datas, busca, relevancia)
-        
-        # AQUI ESTAVA O PROBLEMA: O filtro de gráfico precisa ser aplicado AGORA, antes da count_query
+        where_clauses_table = list(where_clauses)
+        params_table = list(final_params)
         apply_chart_filters(where_clauses_table, params_table, chart_filter_col, chart_filter_val)
-
         where_sql_table = " WHERE " + " AND ".join(where_clauses_table) if where_clauses_table else ""
 
         try:
-            # 1. Total de Linhas (CORRIGIDO: Agora usa os filtros completos, incluindo o do gráfico)
             count_query = f"{base_cte_logic} SELECT COUNT(*) FROM FinalView {where_sql_table}"
             total_rows = conn.execute(count_query, tuple(params_table)).fetchone()[0]
         except sqlite3.Error as e:
@@ -191,34 +156,22 @@ def api_cancellation_analysis():
             else:
                 raise e
 
-        # 2. Dados da Tabela (Paginados e com todos os filtros)
         order_by = "ORDER BY Cliente, Contrato_ID"
         if sort_order == 'asc': order_by = "ORDER BY permanencia_meses ASC, Cliente"
         elif sort_order == 'desc': order_by = "ORDER BY permanencia_meses DESC, Cliente"
 
         paginated_query = f"{base_cte_logic} SELECT * FROM FinalView {where_sql_table} {order_by} LIMIT ? OFFSET ?"
-        
-        # Adiciona limit e offset aos parametros da tabela
         params_table_paginated = params_table + [limit, offset]
-        
         data = conn.execute(paginated_query, tuple(params_table_paginated)).fetchall()
 
-        # --- DADOS DOS GRÁFICOS (Agregados - SEM O FILTRO DE GRÁFICO) ---
-        # Mantemos apenas os filtros "Globais" (Data, Busca, Relevância) para os gráficos,
-        # senão ao clicar numa fatia, o gráfico viraria 100% daquela fatia.
-        
-        # IMPORTANTE: Reconstruir where_sql apenas com where_clauses originais (sem filtro de gráfico)
         where_sql_charts = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
         
-        # 1. Motivos
         chart_motivo_query = f"{base_cte_logic} SELECT Motivo_cancelamento, COUNT(*) as Count FROM FinalView {where_sql_charts} GROUP BY Motivo_cancelamento ORDER BY Count DESC"
         chart_motivo_data = conn.execute(chart_motivo_query, tuple(final_params)).fetchall()
 
-        # 2. Observações
         chart_obs_query = f"{base_cte_logic} SELECT Obs_cancelamento, COUNT(*) as Count FROM FinalView {where_sql_charts} GROUP BY Obs_cancelamento ORDER BY Count DESC"
         chart_obs_data = conn.execute(chart_obs_query, tuple(final_params)).fetchall()
 
-        # 3. Comportamento Financeiro (AGRUPADO)
         chart_finance_query = f"""
             {base_cte_logic}
             SELECT 
@@ -252,7 +205,6 @@ def api_cancellation_analysis():
     finally:
         if conn: conn.close()
 
-
 @churn_bp.route('/negativacao')
 def api_negativacao_analysis():
     conn = get_db()
@@ -262,24 +214,18 @@ def api_negativacao_analysis():
         offset = request.args.get('offset', 0, type=int)
         relevance = request.args.get('relevance', '')
         sort_order = request.args.get('sort_order', '')
-        
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
-
-        # Novos parâmetros de filtro de gráfico
         chart_filter_col = request.args.get('filter_column', '')
         chart_filter_val = request.args.get('filter_value', '').strip()
 
-        # Filtros de data para subqueries
         where_date_neg = []
         add_date_range_filter(where_date_neg, [], "Data_negativa_o", start_date, end_date)
         sql_date_neg = " AND " + " AND ".join(where_date_neg) if where_date_neg else ""
-        
         where_date_canc = []
         add_date_range_filter(where_date_canc, [], "Data_cancelamento", start_date, end_date)
         sql_date_canc = " AND " + " AND ".join(where_date_canc) if where_date_canc else ""
 
-        # CTE Combinada
         base_cte_logic = f"""
             WITH {financial_cte},
             RelevantTickets AS (
@@ -322,21 +268,18 @@ def api_negativacao_analysis():
             )
         """
 
-        # Preparação dos parâmetros para Filtros Gerais
         final_params = []
-        # Adiciona params de data (duas vezes, uma pra cada parte do UNION na CTE)
         temp_p = []
         add_date_range_filter([], temp_p, "x", start_date, end_date)
-        final_params.extend(temp_p) # Para a primeira parte do union
+        final_params.extend(temp_p)
         temp_p = []
         add_date_range_filter([], temp_p, "x", start_date, end_date)
-        final_params.extend(temp_p) # Para a segunda parte do union
+        final_params.extend(temp_p)
 
         where_clauses = []
         if search_term:
             where_clauses.append("Cliente LIKE ?")
             final_params.append(f'%{search_term}%')
-
         min_months, max_months = parse_relevance_filter(relevance)
         if min_months is not None:
             where_clauses.append("permanencia_meses >= ?")
@@ -345,20 +288,14 @@ def api_negativacao_analysis():
             where_clauses.append("permanencia_meses <= ?")
             final_params.append(max_months)
         
-        # --- Aplicação do Filtro de Gráfico (apenas para a Tabela e Contagem) ---
         where_clauses_table = list(where_clauses)
         params_table = list(final_params)
-        
-        # IMPORTANTE: Filtro aplicado aqui
         apply_chart_filters(where_clauses_table, params_table, chart_filter_col, chart_filter_val)
-
         where_sql_table = " WHERE " + " AND ".join(where_clauses_table) if where_clauses_table else ""
 
-        # 1. Total Rows (COM FILTROS DO GRÁFICO)
         count_query = f"{base_cte_logic} SELECT COUNT(*) FROM FinalView {where_sql_table}"
         total_rows = conn.execute(count_query, tuple(params_table)).fetchone()[0]
 
-        # 2. Dados da Tabela (COM FILTROS DO GRÁFICO)
         order_by = "ORDER BY Cliente, Contrato_ID"
         if sort_order == 'asc': order_by = "ORDER BY permanencia_meses ASC, Cliente"
         elif sort_order == 'desc': order_by = "ORDER BY permanencia_meses DESC, Cliente"
@@ -367,10 +304,7 @@ def api_negativacao_analysis():
         params_table_paginated = params_table + [limit, offset]
         data = conn.execute(paginated_query, tuple(params_table_paginated)).fetchall()
 
-        # --- DADOS DOS GRÁFICOS (Sem filtro de gráfico, apenas globais) ---
         where_sql_charts = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
-
-        # --- Gráfico Financeiro (NOVO) ---
         chart_finance_query = f"""
             {base_cte_logic}
             SELECT 
@@ -385,7 +319,6 @@ def api_negativacao_analysis():
             GROUP BY Status_Pagamento 
             ORDER BY Count DESC
         """
-        # Usa final_params (lista limpa) para o gráfico
         chart_finance_data = conn.execute(chart_finance_query, tuple(final_params)).fetchall()
 
         return jsonify({
@@ -413,16 +346,41 @@ def api_real_permanence():
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
         
-        # Filtros de data para "Ativação" ou "Cancelamento"
-        # Na "Permanência Real", geralmente olhamos contratos ativos ou inativos num período
         start_date = request.args.get('start_date', '')
         end_date = request.args.get('end_date', '')
-        
-        relevance = request.args.get('relevance', '') # Filtro por meses de permanência real
-
-        # --- NOVOS FILTROS DE STATUS ---
+        relevance = request.args.get('relevance', '')
         status_contrato = request.args.get('status_contrato')
         status_acesso = request.args.get('status_acesso')
+
+        # --- DETECÇÃO DINÂMICA DE COLUNAS E TABELAS ---
+        cursor = conn.cursor()
+        existing_tables = [row[0] for row in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        has_equipamento = 'Equipamento' in existing_tables
+        has_vendedores = 'Vendedores' in existing_tables
+        has_negativacao = 'Contratos_Negativacao' in existing_tables
+        
+        contract_columns = [row[1] for row in cursor.execute("PRAGMA table_info(Contratos)").fetchall()]
+        has_col_vendedor = 'Vendedor' in contract_columns
+
+        # --- DETECÇÃO CRÍTICA DE COLUNAS EM EQUIPAMENTO ---
+        col_status_equip = 'Status' # Fallback
+        col_desc_equip = 'Descricao_produto' # Fallback
+        col_data_equip = 'Data' # Fallback
+
+        if has_equipamento:
+            equip_columns = [row[1] for row in cursor.execute("PRAGMA table_info(Equipamento)").fetchall()]
+            
+            # Detecta Status
+            for cand in ['Status_comodato', 'Status', 'STATUS', 'status']:
+                if cand in equip_columns: col_status_equip = cand; break
+            
+            # Detecta Produto/Descrição
+            for cand in ['Descricao_produto', 'Descri_o_produto', 'Produto', 'PRODUTO', 'produto', 'Equipamento']:
+                if cand in equip_columns: col_desc_equip = cand; break
+            
+            # Detecta Data
+            for cand in ['Data', 'DATA', 'data', 'Data_movimento']:
+                if cand in equip_columns: col_data_equip = cand; break
 
         params = []
         where_clauses = []
@@ -431,9 +389,6 @@ def api_real_permanence():
             where_clauses.append("C.Cliente LIKE ?")
             params.append(f'%{search_term}%')
 
-        # Se houver filtro de data, aplicamos na Data de Ativação (para ver safras) 
-        # OU Data de Cancelamento (para ver churn). 
-        # Como é uma análise geral, vamos aplicar na Data de Ativação por padrão se o usuário filtrar.
         if start_date:
             where_clauses.append("DATE(C.Data_ativa_o) >= ?")
             params.append(start_date)
@@ -441,7 +396,6 @@ def api_real_permanence():
             where_clauses.append("DATE(C.Data_ativa_o) <= ?")
             params.append(end_date)
 
-        # Filtros de Status
         if status_contrato:
             status_list = status_contrato.split(',')
             placeholders = ','.join(['?'] * len(status_list))
@@ -454,26 +408,101 @@ def api_real_permanence():
             where_clauses.append(f"C.Status_acesso IN ({placeholders})")
             params.extend(acesso_list)
 
-        # Base CTE reutilizando a lógica financeira
-        # Adiciona Equipment CTE
-        base_query = f"""
-            WITH {financial_cte},
-            EquipmentInfo AS (
+        # --- CONSTRUÇÃO DINÂMICA DAS CTEs ---
+        
+        equipment_joins = ""
+        equipment_select = "'Nenhum' AS Equipamento_Comodato," 
+
+        if has_equipamento:
+            # Lógica corrigida para ordenar datas e pegar o último devolvido
+            cte_equipment = f"""
+            ActiveEquipments AS (
                 SELECT 
                     TRIM(ID_contrato) as ID_Contrato,
-                    GROUP_CONCAT(Descricao_produto, ', ') as Equipamentos
+                    GROUP_CONCAT({col_desc_equip}, ', ') as Equipamentos_Ativos
                 FROM Equipamento 
-                WHERE Status_comodato = 'Emprestado'
+                WHERE UPPER({col_status_equip}) = 'EMPRESTADO'
                 GROUP BY ID_Contrato
             ),
-            SellerInfo AS (
-                SELECT ID, Vendedor FROM Vendedores
-            ),
+            LastReturnedEquipments AS (
+                SELECT 
+                    ID_Contrato,
+                    {col_desc_equip} as Equipamento_Devolvido
+                FROM (
+                    SELECT 
+                        TRIM(ID_contrato) as ID_Contrato, 
+                        {col_desc_equip},
+                        ROW_NUMBER() OVER (
+                            PARTITION BY TRIM(ID_contrato) 
+                            ORDER BY 
+                                -- Tenta converter DD/MM/YYYY para YYYY-MM-DD para ordenar corretamente
+                                CASE 
+                                    WHEN {col_data_equip} LIKE '%/%/%' THEN 
+                                        SUBSTR({col_data_equip}, 7, 4) || '-' || SUBSTR({col_data_equip}, 4, 2) || '-' || SUBSTR({col_data_equip}, 1, 2)
+                                    ELSE {col_data_equip}
+                                END DESC
+                        ) as rn
+                    FROM Equipamento
+                    WHERE UPPER({col_status_equip}) IN ('BAIXA', 'DEVOLVIDO')
+                )
+                WHERE rn = 1
+            )"""
+            
+            equipment_joins = """
+                LEFT JOIN ActiveEquipments AE ON C.ID = AE.ID_Contrato
+                LEFT JOIN LastReturnedEquipments LRE ON C.ID = LRE.ID_Contrato
+            """
+            equipment_select = "COALESCE(AE.Equipamentos_Ativos, LRE.Equipamento_Devolvido, 'Nenhum') AS Equipamento_Comodato,"
+            
+        else:
+            cte_equipment = """
+            ActiveEquipments AS (SELECT NULL as ID_Contrato, NULL as Equipamentos_Ativos WHERE 0),
+            LastReturnedEquipments AS (SELECT NULL as ID_Contrato, NULL as Equipamento_Devolvido WHERE 0)
+            """
+
+        if has_vendedores:
+            cte_seller = "SellerInfo AS (SELECT ID, Vendedor FROM Vendedores)"
+        else:
+            cte_seller = "SellerInfo AS (SELECT NULL as ID, NULL as Vendedor WHERE 0)"
+
+        col_vendedor_select = "C.Vendedor AS Vendedor_ID," if has_col_vendedor else "NULL AS Vendedor_ID,"
+        join_seller = "LEFT JOIN SellerInfo S ON C.Vendedor = S.ID" if has_col_vendedor else "LEFT JOIN SellerInfo S ON 1=0"
+
+        cols_contratos = "ID, Cliente, Cidade, Bairro, Data_ativa_o, Data_cancelamento, Status_contrato, Status_acesso"
+        cols_negativacao = "ID, Cliente, Cidade, Bairro, Data_ativa_o, Data_negativa_o AS Data_cancelamento, 'Negativado' AS Status_contrato, 'Desativado' AS Status_acesso"
+        
+        if has_col_vendedor:
+            cols_contratos += ", Vendedor"
+            cols_negativacao += ", Vendedor"
+        else:
+            cols_contratos += ", NULL AS Vendedor"
+            cols_negativacao += ", NULL AS Vendedor"
+
+        if has_negativacao:
+            cte_all_contracts = f"""
+            AllContracts AS (
+                SELECT {cols_contratos} FROM Contratos
+                UNION
+                SELECT {cols_negativacao} FROM Contratos_Negativacao
+            )
+            """
+        else:
+            cte_all_contracts = f"""
+            AllContracts AS (
+                SELECT {cols_contratos} FROM Contratos
+            )
+            """
+
+        base_query = f"""
+            WITH {financial_cte},
+            {cte_equipment},
+            {cte_seller},
+            {cte_all_contracts},
             JoinedData AS (
                 SELECT
                     C.ID AS Contrato_ID,
                     C.Cliente,
-                    C.Vendedor AS Vendedor_ID,
+                    {col_vendedor_select}
                     COALESCE(S.Vendedor, 'N/A') AS Vendedor_Nome,
                     C.Cidade,
                     C.Bairro,
@@ -482,7 +511,6 @@ def api_real_permanence():
                     C.Status_contrato,
                     C.Status_acesso,
                     
-                    -- Métricas Financeiras
                     COALESCE(FS.Total_Faturas, 0) AS Total_Faturas,
                     COALESCE(FS.Faturas_Pagas, 0) AS Faturas_Pagas,
                     COALESCE(FS.Faturas_Canceladas, 0) AS Faturas_Canceladas,
@@ -490,13 +518,10 @@ def api_real_permanence():
                     COALESCE(FS.Atrasos_Pagos, 0) AS Atrasos_Pagos,
                     FS.Media_Atraso,
                     
-                    -- Equipamentos
-                    COALESCE(EI.Equipamentos, 'Nenhum') AS Equipamento_Comodato,
+                    {equipment_select}
                     
-                    -- Permanência Real (Meses Pagos)
                     COALESCE(FS.Faturas_Pagas, 0) AS Permanencia_Paga,
                     
-                    -- Permanência Calendário (Meses corridos)
                     CASE 
                         WHEN C.Data_ativa_o IS NOT NULL THEN
                             CAST(ROUND(
@@ -505,14 +530,13 @@ def api_real_permanence():
                         ELSE 0
                     END AS Permanencia_Real_Calendario
 
-                FROM Contratos C
+                FROM AllContracts C
                 LEFT JOIN FinancialStats FS ON C.ID = FS.ID_Contrato_Recorrente
-                LEFT JOIN EquipmentInfo EI ON C.ID = EI.ID_Contrato
-                LEFT JOIN SellerInfo S ON C.Vendedor = S.ID
+                {equipment_joins}
+                {join_seller}
             )
         """
         
-        # Filtro de Relevância (Aplicado na Permanência PAGA, conforme pedido)
         min_months, max_months = parse_relevance_filter(relevance)
         if min_months is not None:
             where_clauses.append("Permanencia_Paga >= ?")
@@ -523,11 +547,9 @@ def api_real_permanence():
 
         where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
-        # Query de Contagem
         count_query = f"{base_query} SELECT COUNT(*) FROM JoinedData C {where_sql}"
         total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
 
-        # Query de Dados
         data_query = f"""
             {base_query} 
             SELECT * FROM JoinedData C 
@@ -536,7 +558,6 @@ def api_real_permanence():
             LIMIT ? OFFSET ?
         """
         params.extend([limit, offset])
-        
         data = conn.execute(data_query, tuple(params)).fetchall()
 
         return jsonify({
@@ -551,7 +572,8 @@ def api_real_permanence():
     finally:
         if conn: conn.close()
 
-# Demais rotas (cancellations_by_city, etc) permanecem inalteradas...
+# Demais rotas inalteradas (cancellations_by_city, cohort, etc.)
+# ... (restante do arquivo mantido igual) ...
 @churn_bp.route('/cancellations_by_city')
 def api_cancellations_by_city():
     conn = get_db()
