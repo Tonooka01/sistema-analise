@@ -10,18 +10,43 @@ details_churn_bp = Blueprint('details_churn_bp', __name__)
 def api_cancellation_context(client_name, contract_id):
     """
     Busca o contexto de um cliente que cancelou ou foi negativado (OS, Atendimentos, Equipamentos).
+    Agora com detecção dinâmica de nomes de colunas para evitar erros.
     """
     conn = get_db()
     try:
-        # Removida a lógica de pegar Data_cancelamento para filtro.
-        # Agora buscamos TODOS os registros independentemente da data.
+        # --- DETECÇÃO DINÂMICA DE COLUNAS DA TABELA EQUIPAMENTO ---
+        cursor = conn.cursor()
+        try:
+            equip_columns = [row[1] for row in cursor.execute("PRAGMA table_info(Equipamento)").fetchall()]
+        except:
+            equip_columns = []
 
-        equipamentos = conn.execute("SELECT Descricao_produto, Status_comodato, Data FROM Equipamento WHERE TRIM(ID_contrato) = ?", (contract_id,)).fetchall()
+        # Padrões de nomes de coluna para tentar
+        col_desc_equip = 'Descricao_produto' # Padrão
+        for cand in ['Descricao_produto', 'Descri_o_produto', 'Produto', 'PRODUTO', 'produto', 'Equipamento']:
+            if cand in equip_columns: 
+                col_desc_equip = cand
+                break
         
-        # Filtro de data REMOVIDO aqui:
+        col_status_equip = 'Status_comodato' # Padrão
+        for cand in ['Status_comodato', 'Status', 'STATUS', 'status']:
+            if cand in equip_columns: 
+                col_status_equip = cand
+                break
+
+        col_data_equip = 'Data' # Padrão
+        for cand in ['Data', 'DATA', 'data', 'Data_movimento']:
+            if cand in equip_columns: 
+                col_data_equip = cand
+                break
+
+        # Query Segura com Aliases
+        equip_query = f"SELECT {col_desc_equip} as Descricao_produto, {col_status_equip} as Status_comodato, {col_data_equip} as Data FROM Equipamento WHERE TRIM(ID_contrato) = ?"
+        
+        equipamentos = conn.execute(equip_query, (contract_id,)).fetchall()
+        
         os = conn.execute(f"SELECT ID, Abertura, Fechamento, SLA, Assunto, Mensagem FROM OS WHERE Cliente = ? ORDER BY Abertura DESC", (client_name,)).fetchall()
         
-        # Filtro de data REMOVIDO aqui:
         atendimentos = conn.execute(f"SELECT ID, Criado_em, ltima_altera_o, Assunto, Novo_status, Descri_o FROM Atendimentos WHERE Cliente = ? ORDER BY Criado_em DESC", (client_name,)).fetchall()
 
         return jsonify({
@@ -138,10 +163,7 @@ def api_neighborhood_clients():
         if client_type == 'cancelado':
             where_sql = "WHERE Cidade = ? AND Bairro = ? AND Status_contrato = 'Inativo' AND Status_acesso = 'Desativado'"
             params.extend([city, neighborhood])
-            add_date_range_filter([where_sql], params, "Data_cancelamento", start_date, end_date) # Ajuste manual pois where_sql já é string
-            
-            # Reconstruindo para usar a função padrão corretamente se possível, mas aqui já concatenamos.
-            # Ajuste rápido:
+            # Ajuste manual pois where_sql já é string e add_date_range_filter espera lista
             if start_date: where_sql += " AND DATE(Data_cancelamento) >= ?"; params.append(start_date)
             if end_date: where_sql += " AND DATE(Data_cancelamento) <= ?"; params.append(end_date)
 
@@ -221,25 +243,25 @@ def api_equipment_clients():
 
         # --- 1. Busca Contratos Cancelados/Negativados com Filtros ---
         params_cancelados = []
-        where_cancelados_list = ["Status_contrato = 'Inativo'", "Status_acesso = 'Desativado'"]
-        add_date_range_filter(where_cancelados_list, params_cancelados, "Data_cancelamento", start_date, end_date)
-        if city: where_cancelados_list.append("Cidade = ?"); params_cancelados.append(city)
+        where_cancelados_list = ["C.Status_contrato = 'Inativo'", "C.Status_acesso = 'Desativado'"]
+        add_date_range_filter(where_cancelados_list, params_cancelados, "C.Data_cancelamento", start_date, end_date)
+        if city: where_cancelados_list.append("C.Cidade = ?"); params_cancelados.append(city)
         where_cancelados_sql = " AND ".join(where_cancelados_list)
-        query_cancelados = f"SELECT ID, Cliente, Data_cancelamento, NULL AS Data_negativacao, Cidade, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos WHERE {where_cancelados_sql}"
+        query_cancelados = f"SELECT ID, Cliente, Data_cancelamento, NULL AS Data_negativacao, Cidade, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos C WHERE {where_cancelados_sql}"
 
         params_negativados_cn = []
-        where_negativados_cn_list = ["Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
-        add_date_range_filter(where_negativados_cn_list, params_negativados_cn, "Data_negativa_o", start_date, end_date)
-        if city: where_negativados_cn_list.append("Cidade = ?"); params_negativados_cn.append(city)
+        where_negativados_cn_list = ["CN.Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
+        add_date_range_filter(where_negativados_cn_list, params_negativados_cn, "CN.Data_negativa_o", start_date, end_date)
+        if city: where_negativados_cn_list.append("CN.Cidade = ?"); params_negativados_cn.append(city)
         where_negativados_cn_sql = " AND ".join(where_negativados_cn_list)
-        query_negativados_cn = f"SELECT ID, Cliente, NULL AS Data_cancelamento, Data_negativa_o AS Data_negativacao, Cidade, Data_ativa_o, Data_negativa_o AS end_date FROM Contratos_Negativacao WHERE {where_negativados_cn_sql}"
+        query_negativados_cn = f"SELECT ID, Cliente, NULL AS Data_cancelamento, Data_negativa_o AS Data_negativacao, Cidade, Data_ativa_o, Data_negativa_o AS end_date FROM Contratos_Negativacao CN WHERE {where_negativados_cn_sql}"
 
         params_negativados_c = []
-        where_negativados_c_list = ["Status_contrato = 'Negativado'", "Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
-        add_date_range_filter(where_negativados_c_list, params_negativados_c, "Data_cancelamento", start_date, end_date)
-        if city: where_negativados_c_list.append("Cidade = ?"); params_negativados_c.append(city)
+        where_negativados_c_list = ["C.Status_contrato = 'Negativado'", "C.Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"]
+        add_date_range_filter(where_negativados_c_list, params_negativados_c, "C.Data_cancelamento", start_date, end_date)
+        if city: where_negativados_c_list.append("C.Cidade = ?"); params_negativados_c.append(city)
         where_negativados_c_sql = " AND ".join(where_negativados_c_list)
-        query_negativados_c = f"SELECT ID, Cliente, NULL AS Data_cancelamento, Data_cancelamento AS Data_negativacao, Cidade, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos WHERE {where_negativados_c_sql}"
+        query_negativados_c = f"SELECT ID, Cliente, NULL AS Data_cancelamento, Data_cancelamento AS Data_negativacao, Cidade, Data_ativa_o, Data_cancelamento AS end_date FROM Contratos C WHERE {where_negativados_c_sql}"
 
         # Executa as queries
         df_cancelados = pd.read_sql_query(query_cancelados, conn, params=tuple(params_cancelados))

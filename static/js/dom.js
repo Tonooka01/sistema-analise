@@ -29,6 +29,7 @@ export let btnFilterGeneral; // NOVO: Botão Filtrar Geral
 export let customSearchFilterDiv;
 export let clientSearchInput;
 export let applyClientSearchBtn;
+export let clearFiltersBtn; // <-- NOVO: Botão Limpar Filtros
 export let relevanceFilterSearch;
 export let sortPermanenceAsc;
 // NOVAS REFERÊNCIAS PARA DATAS EM CANCELAMENTO/NEGATIVAÇÃO
@@ -36,7 +37,7 @@ export let customDateFilterContainer;
 export let customStartDate;
 export let customEndDate;
 
-// Filtros Saúde Financeira / Evolução Ativos
+// ... (Restante das exportações inalteradas) ...
 export let financialHealthFiltersDiv;
 export let contractStatusFilter;
 export let accessStatusContainer;
@@ -261,12 +262,14 @@ export function initializeDom() {
     customSearchFilterDiv = document.getElementById('custom-search-filter');
     clientSearchInput = document.getElementById('clientSearchInput');
     applyClientSearchBtn = document.getElementById('applyClientSearch');
+    clearFiltersBtn = document.getElementById('clearFiltersBtn'); // <-- Inicializa botão Limpar
     relevanceFilterSearch = document.getElementById('relevanceFilterSearch');
     sortPermanenceAsc = document.getElementById('sortPermanenceAsc');
     customDateFilterContainer = document.getElementById('custom-date-filters');
     customStartDate = document.getElementById('customStartDate');
     customEndDate = document.getElementById('customEndDate');
 
+    // ... (Restante da inicialização mantida) ...
     // Filtros Saúde Financeira
     financialHealthFiltersDiv = document.getElementById('financial-health-filters');
     contractStatusFilter = document.getElementById('contractStatusFilter');
