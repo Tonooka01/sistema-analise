@@ -347,6 +347,12 @@ export function initializeEventListeners() {
             analysis.fetchAndRenderMainAnalysis(collection, start, end, city);
         }
     });
+    
+    // --- NOVO LISTENER: Botão Limpar Filtros ---
+    dom.clearFiltersBtn?.addEventListener('click', () => {
+        utils.resetAllFilters(); // Reseta os valores dos inputs e estados
+        handleCustomAnalysisChange(1); // Recarrega a análise atual com os filtros vazios
+    });
 
     // --- LISTENERS DOS BOTÕES DE FILTRO PERSONALIZADOS (Novos) ---
     // Todos chamam handleCustomAnalysisChange(1), que relê os inputs e dispara a busca
@@ -549,7 +555,7 @@ export function initializeEventListeners() {
 
     document.body.addEventListener('click', (e) => {
         
-        // --- NOVO: Listener para ordenação da coluna Permanência ---
+        // --- Listener para ordenação da coluna Permanência ---
         const sortHeader = e.target.closest('.sort-permanence-header');
         if (sortHeader) {
             const currentState = state.getCustomAnalysisState();

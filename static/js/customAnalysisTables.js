@@ -2,6 +2,7 @@ import * as state from './state.js';
 import * as dom from './dom.js';
 import * as utils from './utils.js';
 import { renderChart, destroySpecificChart } from './charts.js';
+import { getGridStack } from './state.js'; // Importação necessária para o GridStack
 
 // --- Helper: Badge de Comportamento de Pagamento ---
 function getPaymentBehaviorBadge(avgDays) {
@@ -111,6 +112,11 @@ function renderCustomTable(result, title, columns, extraContentHtml = '') {
         `;
     }
 
+    // Se extraContentHtml (mensagem de filtro de permanência) foi passado, use-o
+    if (extraContentHtml) {
+        activeFilterHtml += extraContentHtml;
+    }
+
     let tableHtml = '<p class="text-center text-gray-500 mt-4">Nenhum resultado encontrado.</p>';
     if (data && data.length > 0) {
         const generatedTableHtml = utils.renderGenericDetailTable(null, data, columns, true);
@@ -129,13 +135,21 @@ function renderCustomTable(result, title, columns, extraContentHtml = '') {
         `;
     }
 
-    dom.dashboardContentDiv.innerHTML = extraContentHtml + activeFilterHtml + titleHtml + tableHtml + paginationHtml;
+    // Estratégia de append seguro para a tabela, preservando gráficos acima
+    let tableContainer = document.getElementById('custom-table-container');
+    if (!tableContainer) {
+        tableContainer = document.createElement('div');
+        tableContainer.id = 'custom-table-container';
+        dom.dashboardContentDiv.appendChild(tableContainer);
+    }
+    
+    tableContainer.innerHTML = activeFilterHtml + titleHtml + tableHtml + paginationHtml;
 
     if (totalPages > 1) {
         renderCustomAnalysisPagination();
     }
 
-    // Listener para limpar filtro
+    // Listener para limpar filtro de gráfico de cancelamento/negativação
     const clearBtn = document.getElementById('clearChartFilterBtn');
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
@@ -195,7 +209,8 @@ export async function fetchAndRenderLatePaymentsAnalysis(searchTerm = '', page =
         const result = await response.json();
         
         if (state.getCustomAnalysisState().currentAnalysis !== 'atrasos_e_nao_pagos') return;
-
+        
+        dom.dashboardContentDiv.innerHTML = ''; // Limpa dashboard
         renderCustomTable(result, 'Análise de Atrasos e Faturas Não Pagas', [
             { header: 'Cliente', render: r => `<span title="${r.Cliente}">${r.Cliente}</span>` },
             { header: 'ID Contrato', key: 'Contrato_ID' },
@@ -241,6 +256,7 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
 
         if (state.getCustomAnalysisState().currentAnalysis !== 'saude_financeira') return;
 
+        dom.dashboardContentDiv.innerHTML = ''; // Limpa dashboard
         renderCustomTable(result, title, [
             { header: 'Cliente', render: r => `<span title="${r.Razao_Social}">${r.Razao_Social}</span>` },
             { header: 'ID Contrato', key: 'Contrato_ID' },
@@ -263,14 +279,13 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     }
 }
 
-// *** NOVA FUNÇÃO PARA RENDERIZAR A TABELA DE PERMANÊNCIA REAL ***
-export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page = 1, relevance = '', startDate = '', endDate = '') {
+// *** FUNÇÃO ATUALIZADA PARA RENDERIZAR A TABELA DE PERMANÊNCIA REAL COM GRÁFICOS INTERATIVOS ***
+export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page = 1, relevance = '', startDate = '', endDate = '', relevanceReal = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'real_permanence', currentSearchTerm: searchTerm });
     const currentState = state.getCustomAnalysisState();
     const offset = (page - 1) * currentState.rowsPerPage;
 
-    // --- LEITURA DOS FILTROS DE STATUS DO DOM ---
     const contractStatus = dom.contractStatusFilter?.value || '';
     let accessStatus = '';
     if (dom.accessStatusContainer) {
@@ -284,10 +299,11 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
         offset: offset
     });
     if (relevance) params.append('relevance', relevance); // Filtra por meses pagos
+    if (relevanceReal) params.append('relevance_real', relevanceReal); // Filtra por meses reais (NOVO)
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
-    if (contractStatus) params.append('status_contrato', contractStatus); // NOVO
-    if (accessStatus) params.append('status_acesso', accessStatus);       // NOVO
+    if (contractStatus) params.append('status_contrato', contractStatus);
+    if (accessStatus) params.append('status_acesso', accessStatus);
 
     const url = `${state.API_BASE_URL}/api/custom_analysis/real_permanence?${params.toString()}`;
 
@@ -298,6 +314,128 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
 
         if (state.getCustomAnalysisState().currentAnalysis !== 'real_permanence') return;
 
+        // Limpa o dashboard para a renderização inicial
+        if (dom.dashboardContentDiv && dom.dashboardContentDiv.innerHTML !== '') {
+             // Só limpamos se estivermos recarregando completamente (ex: mudou de análise)
+             // Se já temos a estrutura de gráficos, não limpamos para não piscar
+             if (!document.getElementById('pagaChart')) {
+                 dom.dashboardContentDiv.innerHTML = '';
+             }
+        }
+
+        // --- 1. RENDERIZAÇÃO DOS GRÁFICOS ---
+        // Só renderiza/atualiza os gráficos se eles existirem na resposta
+        if (dom.mainChartsArea && result.charts) {
+            // Garante que a área de gráficos está no DOM
+            if (!dom.dashboardContentDiv.contains(dom.mainChartsArea)) {
+                dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
+            }
+            dom.mainChartsArea.classList.remove('hidden');
+            
+            // Verifica se o GridStack já foi inicializado com widgets. Se sim, apenas atualiza dados se necessário.
+            const grid = getGridStack();
+            
+            // Se o grid estiver vazio, cria os widgets
+            if (grid && grid.engine.nodes.length === 0) {
+                 // --- Gráfico de Pizza: Permanência Paga ---
+                if (result.charts.paga_distribution) {
+                    grid.addWidget({
+                        w: 4, h: 6, x: 0, y: 0,
+                        content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 id="pagaChartTitle" class="chart-title">Permanência Paga</h3></div><div class="chart-canvas-container"><canvas id="pagaChart"></canvas></div></div>`
+                    });
+                }
+
+                // --- Gráfico de Pizza: Permanência Real ---
+                if (result.charts.real_distribution) {
+                    grid.addWidget({
+                        w: 4, h: 6, x: 4, y: 0,
+                        content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 id="realChartTitle" class="chart-title">Permanência Real</h3></div><div class="chart-canvas-container"><canvas id="realChart"></canvas></div></div>`
+                    });
+                }
+
+                // --- Gráfico de Cidade: Barras Empilhadas ---
+                if (result.charts.city_distribution) {
+                    grid.addWidget({
+                        w: 12, h: 8, x: 0, y: 6,
+                        content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 id="cityChartTitle" class="chart-title">Distribuição por Cidade</h3></div><div class="chart-canvas-container"><canvas id="cityChart"></canvas></div></div>`
+                    });
+                }
+            }
+
+            // Atualiza os dados dos gráficos (mesmo se widgets já existirem)
+            if (result.charts.paga_distribution) {
+                const dataPaga = result.charts.paga_distribution;
+                renderChart('pagaChart', 'pie', 
+                    dataPaga.map(d => d.Faixa), 
+                    [{ data: dataPaga.map(d => d.Count) }], 
+                    'Permanência Paga', 
+                    { 
+                        formatterType: 'percent_only',
+                        onClick: (event, elements, chart) => {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                const label = chart.data.labels[index];
+                                // Filtra a tabela pela faixa clicada (Paga) - Limpa relevanceReal para evitar conflito
+                                fetchAndRenderRealPermanenceAnalysis(searchTerm, 1, label, startDate, endDate, '');
+                            }
+                        }
+                    }
+                );
+            }
+
+            if (result.charts.real_distribution) {
+                const dataReal = result.charts.real_distribution;
+                renderChart('realChart', 'pie', 
+                    dataReal.map(d => d.Faixa), 
+                    [{ data: dataReal.map(d => d.Count) }], 
+                    'Permanência Real', 
+                    { 
+                        formatterType: 'percent_only',
+                        onClick: (event, elements, chart) => {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                const label = chart.data.labels[index];
+                                // Filtra a tabela pela faixa clicada (Real) - Limpa relevance (paga) para evitar conflito
+                                fetchAndRenderRealPermanenceAnalysis(searchTerm, 1, '', startDate, endDate, label);
+                            }
+                        }
+                    }
+                );
+            }
+
+            if (result.charts.city_distribution && result.charts.city_distribution.length > 0) {
+                const cityData = result.charts.city_distribution;
+                const cities = [...new Set(cityData.map(d => d.Cidade))];
+                const faixas = ['0-6', '7-12', '13-18', '19-24', '25-36', '37+'];
+                
+                const datasets = faixas.map((faixa, index) => ({
+                    label: faixa,
+                    data: cities.map(city => {
+                        const entry = cityData.find(d => d.Cidade === city && d.Faixa === faixa);
+                        return entry ? entry.Count : 0;
+                    }),
+                    backgroundColor: ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6'][index]
+                }));
+
+                renderChart('cityChart', 'bar_horizontal', cities, datasets, 'Distribuição por Cidade', {
+                    scales: { x: { stacked: true }, y: { stacked: true } },
+                    onClick: (event, elements, chart) => {
+                        if (elements.length > 0) {
+                            const element = elements[0];
+                            const cityIndex = element.index;
+                            
+                            const clickedCity = chart.data.labels[cityIndex];
+                            
+                            if(dom.clientSearchInput) dom.clientSearchInput.value = clickedCity; // Atualiza visualmente
+                            // Filtra apenas pela cidade clicada, mantendo os outros filtros
+                            fetchAndRenderRealPermanenceAnalysis(clickedCity, 1, relevance, startDate, endDate, relevanceReal);
+                        }
+                    }
+                });
+            }
+        }
+
+        // --- 2. RENDERIZAÇÃO DA TABELA ---
         const columns = [
             { 
                 header: 'Cliente', 
@@ -307,7 +445,6 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                 } 
             },
             { header: 'ID Contrato', key: 'Contrato_ID' },
-            // --- NOVAS COLUNAS DE STATUS ---
             { 
                 header: 'Status Contrato', 
                 render: r => {
@@ -319,7 +456,6 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                 }
             },
             { header: 'Status Acesso', key: 'Status_acesso', render: r => `<span class="text-xs text-gray-600">${r.Status_acesso}</span>` },
-            // -------------------------------
             { 
                 header: 'Permanência Paga', 
                 render: r => `<span class="text-lg font-bold text-green-700 bg-green-50 px-3 py-1 rounded-lg shadow-sm border border-green-200" title="Meses efetivamente pagos">${r.Permanencia_Paga} meses</span>`,
@@ -355,7 +491,38 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
             { header: 'Bairro', key: 'Bairro' }
         ];
 
-        renderCustomTable(result, 'Análise de Permanência Real (Meses Pagos vs Calendário)', columns);
+        // Mensagem de filtro ativo para Real Permanence (já que o renderCustomTable não sabe sobre relevanceReal)
+        let extraFilterMsg = '';
+        if (relevanceReal) {
+            // Função global para limpar o filtro
+            window.clearRealFilter = () => {
+                fetchAndRenderRealPermanenceAnalysis(searchTerm, 1, relevance, startDate, endDate, '');
+            };
+
+            extraFilterMsg = `
+                <div class="bg-purple-50 border border-purple-200 text-purple-700 px-4 py-2 rounded-md mb-4 flex justify-between items-center">
+                    <span>Filtrado por <strong>Permanência Real: ${relevanceReal}</strong></span>
+                    <button onclick="clearRealFilter()" class="text-sm font-bold text-purple-800 hover:text-purple-900 underline">Limpar Filtro</button>
+                </div>
+            `;
+        }
+        
+        if (relevance) {
+             // Função global para limpar o filtro
+            window.clearPagaFilter = () => {
+                fetchAndRenderRealPermanenceAnalysis(searchTerm, 1, '', startDate, endDate, relevanceReal);
+            };
+
+            extraFilterMsg += `
+                <div class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-md mb-4 flex justify-between items-center">
+                    <span>Filtrado por <strong>Permanência Paga: ${relevance}</strong></span>
+                    <button onclick="clearPagaFilter()" class="text-sm font-bold text-blue-800 hover:text-blue-900 underline">Limpar Filtro</button>
+                </div>
+            `;
+        }
+
+        // Renderiza a tabela APÓS os gráficos
+        renderCustomTable(result, 'Análise de Permanência Real (Meses Pagos vs Calendário)', columns, extraFilterMsg);
 
         if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
         if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
@@ -398,7 +565,7 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
         
         if (state.getCustomAnalysisState().currentAnalysis !== 'cancellations') return;
 
-        if (dom.dashboardContentDiv) dom.dashboardContentDiv.innerHTML = '';
+        dom.dashboardContentDiv.innerHTML = ''; // Limpa dashboard
 
         // --- RENDERIZAÇÃO DOS GRÁFICOS (MOTIVO, OBS e FINANCEIRO) ---
         let chartsHtml = '';
@@ -577,6 +744,8 @@ export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 
 
         if (state.getCustomAnalysisState().currentAnalysis !== 'negativacao') return;
 
+        dom.dashboardContentDiv.innerHTML = ''; // Limpa dashboard
+
         // --- RENDERIZAÇÃO DOS GRÁFICOS ---
         let chartsHtml = '';
         const totalFinanceiro = result.charts?.financeiro ? result.charts.financeiro.reduce((acc, curr) => acc + (curr.Count || 0), 0) : 0;
@@ -690,6 +859,8 @@ export async function fetchAndRenderDailyComparison() {
         const info = result.info;
 
         if (!dom.dashboardContentDiv) return;
+
+        dom.dashboardContentDiv.innerHTML = ''; // Limpa dashboard
 
         const uploadHtml = `
             <div class="upload-pdf-container">

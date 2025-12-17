@@ -16,7 +16,9 @@ def parse_relevance_filter(relevance_str):
             min_months = int(parts[0].replace('+', ''))
             max_months = None
             return (min_months, max_months)
+        
         min_months = int(parts[0])
+        # Suporta ranges como '25-36' corretamente
         max_months = int(parts[1]) if len(parts) > 1 else None
         return (min_months, max_months)
     except ValueError:
