@@ -22,241 +22,265 @@ import { exportTableToCSV } from './utils.js';
 
 /**
  * Lida com a mudança no seletor de Análise Personalizada.
- * Mostra os filtros relevantes e inicia a busca dos dados.
- * @param {number} [page=1] - A página a ser buscada (para análises paginadas).
+ * Mostra os filtros relevantes e inicia a busca dos dados APENAS se solicitado.
+ * @param {number} [page=1] - A página a ser buscada.
+ * @param {boolean} [forceFetch=false] - Se deve forçar a busca de dados (usado pelos botões de filtro).
  */
-function handleCustomAnalysisChange(page = 1) {
+function handleCustomAnalysisChange(page = 1, forceFetch = false) {
     const selectedAnalysis = dom.customAnalysisSelector?.value;
     if (!selectedAnalysis) return;
 
     // Obtém o termo de busca atual, se aplicável
     const searchTerm = dom.clientSearchInput?.value || '';
     
-    // Obtém a preferência de ordenação do ESTADO (não mais do checkbox)
-    const currentSortOrder = state.getCustomAnalysisState().sortOrder; // 'asc' ou 'desc'
+    // Obtém a preferência de ordenação do ESTADO
+    const currentSortOrder = state.getCustomAnalysisState().sortOrder; 
     const sortAsc = currentSortOrder === 'asc';
 
     // Esconde todos os filtros personalizados antes de mostrar o correto
     utils.hideAllCustomFilters();
     
     // --- RESET DE VISIBILIDADE DOS BOTÕES ---
-    // Garante que os botões reapareçam se trocarmos para uma tela onde eles são necessários
     if (dom.filterActiveClientsBtn) dom.filterActiveClientsBtn.classList.remove('hidden');
     if (dom.applyClientSearchBtn) dom.applyClientSearchBtn.classList.remove('hidden');
     if (dom.btnFilterFaturamento) dom.btnFilterFaturamento.classList.remove('hidden');
-    // ----------------------------------------
     
-    // Garante que o botão "Ver Tabela" comece escondido ao trocar de análise
     if (dom.viewTableBtn) dom.viewTableBtn.classList.add('hidden');
 
-    // Garante que a área de conteúdo principal está visível e limpa
-    if (dom.dashboardContentDiv) {
-        dom.dashboardContentDiv.classList.remove('hidden');
-        dom.dashboardContentDiv.innerHTML = ''; // Limpa antes de carregar nova análise
+    // Lógica para determinar se deve buscar dados automaticamente ou esperar filtro
+    // O padrão é carregar (true), exceto para análises específicas que exigem filtro prévio
+    let shouldFetch = true;
+    if (selectedAnalysis === 'real_permanence' && !forceFetch) {
+        shouldFetch = false;
     }
-     // Esconde a área de gráficos padrão
-     if (dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
-     
-     // Limpa gráficos anteriores e grid
-     destroyAllMainCharts();
-     const gridStackInstance = state.getGridStack();
-     if(gridStackInstance) gridStackInstance.removeAll();
+
+    // Se NÃO for buscar dados (apenas mudou o dropdown para uma análise pesada), limpa a tela e mostra mensagem
+    if (!shouldFetch) {
+        if (dom.dashboardContentDiv) {
+            dom.dashboardContentDiv.classList.remove('hidden');
+            dom.dashboardContentDiv.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-64 text-gray-500">
+                    <svg class="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    <p class="text-xl font-medium">Selecione os filtros acima e clique em "Filtrar" para visualizar os dados.</p>
+                </div>
+            `;
+        }
+        if (dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
+        destroyAllMainCharts();
+        const gridStackInstance = state.getGridStack();
+        if(gridStackInstance) gridStackInstance.removeAll();
+    } else {
+        // Se for disparar fetch, a limpeza ocorre dentro das funções de renderização específicas
+        if (dom.dashboardContentDiv) {
+            dom.dashboardContentDiv.classList.remove('hidden');
+        }
+    }
 
 
-    // --- Mostra Filtros e Chama Função de Fetch ---
+    // --- Configuração de Filtros e Execução (se shouldFetch=true) ---
     switch (selectedAnalysis) {
         case 'comparativo_diario':
-            customTables.fetchAndRenderDailyComparison();
+            if (shouldFetch) customTables.fetchAndRenderDailyComparison();
             break;
 
         case 'analise_juros_atraso':
             if (dom.latePaymentFiltersDiv) dom.latePaymentFiltersDiv.classList.remove('hidden');
-            const lateStart = dom.latePaymentStartDate?.value || '';
-            const lateEnd = dom.latePaymentEndDate?.value || '';
-            customCharts.fetchAndRenderLateInterestAnalysis(lateStart, lateEnd);
+            if (shouldFetch) {
+                const lateStart = dom.latePaymentStartDate?.value || '';
+                const lateEnd = dom.latePaymentEndDate?.value || '';
+                customCharts.fetchAndRenderLateInterestAnalysis(lateStart, lateEnd);
+            }
             break;
             
         case 'faturamento_por_cidade':
             if (dom.faturamentoCidadeFiltersDiv) dom.faturamentoCidadeFiltersDiv.classList.remove('hidden');
             if(dom.faturamentoCityFilter) dom.faturamentoCityFilter.closest('.flex-col')?.classList.remove('hidden');
-            const fStartDate = dom.faturamentoStartDate?.value || '';
-            const fEndDate = dom.faturamentoEndDate?.value || '';
-            const fCity = dom.faturamentoCityFilter?.value || '';
-            customCharts.fetchAndRenderBillingByCityAnalysis(fStartDate, fEndDate, fCity);
+            if (shouldFetch) {
+                const fStartDate = dom.faturamentoStartDate?.value || '';
+                const fEndDate = dom.faturamentoEndDate?.value || '';
+                const fCity = dom.faturamentoCityFilter?.value || '';
+                customCharts.fetchAndRenderBillingByCityAnalysis(fStartDate, fEndDate, fCity);
+            }
             break;
 
         case 'active_clients_evolution':
-            // Mostra os containers de filtros necessários
             if (dom.faturamentoCidadeFiltersDiv) dom.faturamentoCidadeFiltersDiv.classList.remove('hidden');
             if(dom.faturamentoCityFilter) dom.faturamentoCityFilter.closest('.flex-col')?.classList.remove('hidden');
             if (dom.financialHealthFiltersDiv) dom.financialHealthFiltersDiv.classList.remove('hidden');
-            
-            // --- AJUSTE: Oculta o botão duplicado ---
-            // Mantemos o botão de baixo (no filtro de datas/cidade) e escondemos o do meio (status)
             if (dom.filterActiveClientsBtn) dom.filterActiveClientsBtn.classList.add('hidden');
             
-            // Popula os filtros (Select de Contrato e Checkboxes de Acesso)
             customTables.populateContractStatusFilters();
 
-            const acStartDate = dom.faturamentoStartDate?.value || '';
-            const acEndDate = dom.faturamentoEndDate?.value || '';
-            const acCity = dom.faturamentoCityFilter?.value || '';
-            
-            // Chama a função sem passar status explicitamente, pois ela busca direto do DOM
-            customCharts.fetchAndRenderActiveClientsEvolution(acStartDate, acEndDate, acCity);
+            if (shouldFetch) {
+                const acStartDate = dom.faturamentoStartDate?.value || '';
+                const acEndDate = dom.faturamentoEndDate?.value || '';
+                const acCity = dom.faturamentoCityFilter?.value || '';
+                customCharts.fetchAndRenderActiveClientsEvolution(acStartDate, acEndDate, acCity);
+            }
             break;
 
         case 'analise_comportamento':
             if (dom.behaviorAnalysisContainer) dom.behaviorAnalysisContainer.classList.remove('hidden');
-            behaviorAnalysis.initializeBehaviorAnalysis();
+            if (shouldFetch) behaviorAnalysis.initializeBehaviorAnalysis();
             break;
 
         case 'atrasos_e_nao_pagos':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
-            // Garante que o filtro de data esteja ESCONDIDO para atrasos
             if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.add('hidden');
-            customTables.fetchAndRenderLatePaymentsAnalysis(searchTerm, page);
+            if (shouldFetch) customTables.fetchAndRenderLatePaymentsAnalysis(searchTerm, page);
             break;
 
         case 'saude_financeira_contrato_atraso':
         case 'saude_financeira_contrato_bloqueio':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
-            if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.add('hidden'); // Esconde data
+            if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.add('hidden'); 
             if (dom.financialHealthFiltersDiv) dom.financialHealthFiltersDiv.classList.remove('hidden');
-            
-            // --- AJUSTE: Oculta o botão duplicado ---
-            // Mantemos o botão de baixo (nos filtros de status) e escondemos o de cima (na busca)
             if (dom.applyClientSearchBtn) dom.applyClientSearchBtn.classList.add('hidden');
 
             customTables.populateContractStatusFilters();
             
-            const analysisType = selectedAnalysis.endsWith('_bloqueio') ? 'bloqueio' : 'atraso';
-            const relevanceFinancial = dom.relevanceFilterSearch?.value || '';
-            
-            customTables.fetchAndRenderFinancialHealthAnalysis(searchTerm, analysisType, page, relevanceFinancial); 
-            
-            if (dom.viewTableBtn) {
-                dom.viewTableBtn.classList.remove('hidden');
-                dom.viewTableBtn.textContent = 'Ver Tabela Completa (Paginação)';
+            if (shouldFetch) {
+                const analysisType = selectedAnalysis.endsWith('_bloqueio') ? 'bloqueio' : 'atraso';
+                const relevanceFinancial = dom.relevanceFilterSearch?.value || '';
+                customTables.fetchAndRenderFinancialHealthAnalysis(searchTerm, analysisType, page, relevanceFinancial); 
+                
+                if (dom.viewTableBtn) {
+                    dom.viewTableBtn.classList.remove('hidden');
+                    dom.viewTableBtn.textContent = 'Ver Tabela Completa (Paginação)';
+                }
             }
             break;
 
         case 'cancellations':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
-            // Mostra o container de datas
             if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.remove('hidden');
             
-            const relevanceSearch = dom.relevanceFilterSearch?.value || '';
-            const cancelStart = dom.customStartDate?.value || '';
-            const cancelEnd = dom.customEndDate?.value || '';
-            
-            // Passa o parâmetro de ordenação (Lê do estado)
-            customTables.fetchAndRenderCancellationAnalysis(searchTerm, page, relevanceSearch, sortAsc, cancelStart, cancelEnd);
+            if (shouldFetch) {
+                const relevanceSearch = dom.relevanceFilterSearch?.value || '';
+                const cancelStart = dom.customStartDate?.value || '';
+                const cancelEnd = dom.customEndDate?.value || '';
+                customTables.fetchAndRenderCancellationAnalysis(searchTerm, page, relevanceSearch, sortAsc, cancelStart, cancelEnd);
+            }
             break;
 
         case 'negativacao':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
-            // Mostra o container de datas
             if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.remove('hidden');
             
-            const relevanceSearchNeg = dom.relevanceFilterSearch?.value || '';
-            const negStart = dom.customStartDate?.value || '';
-            const negEnd = dom.customEndDate?.value || '';
-            
-            // Passa o parâmetro de ordenação (Lê do estado)
-            customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, page, relevanceSearchNeg, sortAsc, negStart, negEnd);
+            if (shouldFetch) {
+                const relevanceSearchNeg = dom.relevanceFilterSearch?.value || '';
+                const negStart = dom.customStartDate?.value || '';
+                const negEnd = dom.customEndDate?.value || '';
+                customTables.fetchAndRenderNegativacaoAnalysis(searchTerm, page, relevanceSearchNeg, sortAsc, negStart, negEnd);
+            }
             break;
 
         case 'real_permanence':
-            // 1. Filtros de Busca e Data (Relevância, Data Inicial/Final)
+            // 1. Filtros de Busca e Data
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
             if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.remove('hidden');
-            
-            // 2. Filtros de Status (Contrato e Acesso)
+            // 2. Filtros de Status
             if (dom.financialHealthFiltersDiv) dom.financialHealthFiltersDiv.classList.remove('hidden');
-            
-            // IMPORTANTE: Oculta o botão "Filtrar" do container de status para evitar duplicação,
-            // pois usaremos o botão "Filtrar" principal (do topo) para aplicar tudo.
             if (dom.filterActiveClientsBtn) dom.filterActiveClientsBtn.classList.add('hidden');
             
-            // Popula os selects de status se estiverem vazios
             customTables.populateContractStatusFilters();
 
-            const relevancePermanence = dom.relevanceFilterSearch?.value || '';
-            const permStart = dom.customStartDate?.value || '';
-            const permEnd = dom.customEndDate?.value || '';
-            
-            customTables.fetchAndRenderRealPermanenceAnalysis(searchTerm, page, relevancePermanence, permStart, permEnd);
+            // SÓ EXECUTA SE shouldFetch FOR TRUE (Clicou em Filtrar ou forceFetch=true)
+            if (shouldFetch) {
+                const relevancePermanence = dom.relevanceFilterSearch?.value || '';
+                const permStart = dom.customStartDate?.value || '';
+                const permEnd = dom.customEndDate?.value || '';
+                
+                customTables.fetchAndRenderRealPermanenceAnalysis(searchTerm, page, relevancePermanence, permStart, permEnd);
+            }
             break;
 
         case 'vendedores':
             if (dom.sellerAnalysisFiltersDiv) dom.sellerAnalysisFiltersDiv.classList.remove('hidden');
-            const sellerStart = dom.sellerStartDate?.value || '';
-            const sellerEnd = dom.sellerEndDate?.value || '';
-            customCharts.fetchAndRenderSellerAnalysis(sellerStart, sellerEnd);
+            if (shouldFetch) {
+                const sellerStart = dom.sellerStartDate?.value || '';
+                const sellerEnd = dom.sellerEndDate?.value || '';
+                customCharts.fetchAndRenderSellerAnalysis(sellerStart, sellerEnd);
+            }
             break;
 
         case 'activations_by_seller':
             if (dom.activationSellerFiltersDiv) dom.activationSellerFiltersDiv.classList.remove('hidden');
-            const activationCity = dom.activationSellerCityFilter?.value || '';
-            const activationStart = dom.activationSellerStartDate?.value || '';
-            const activationEnd = dom.activationSellerEndDate?.value || '';
-            customCharts.fetchAndRenderActivationsBySeller(activationCity, activationStart, activationEnd);
+            if (shouldFetch) {
+                const activationCity = dom.activationSellerCityFilter?.value || '';
+                const activationStart = dom.activationSellerStartDate?.value || '';
+                const activationEnd = dom.activationSellerEndDate?.value || '';
+                customCharts.fetchAndRenderActivationsBySeller(activationCity, activationStart, activationEnd);
+            }
             break;
 
         case 'cancellations_by_city':
             if (dom.cityCancellationFiltersDiv) dom.cityCancellationFiltersDiv.classList.remove('hidden');
-            const cityStart = dom.cityCancellationStartDate?.value || '';
-            const cityEnd = dom.cityCancellationEndDate?.value || '';
-            const relevanceCity = dom.relevanceFilterCity?.value || '';
-            customCharts.fetchAndRenderCancellationsByCity(cityStart, cityEnd, relevanceCity);
+            if (shouldFetch) {
+                const cityStart = dom.cityCancellationStartDate?.value || '';
+                const cityEnd = dom.cityCancellationEndDate?.value || '';
+                const relevanceCity = dom.relevanceFilterCity?.value || '';
+                customCharts.fetchAndRenderCancellationsByCity(cityStart, cityEnd, relevanceCity);
+            }
             break;
 
         case 'cancellations_by_neighborhood':
             if (dom.neighborhoodAnalysisFiltersDiv) dom.neighborhoodAnalysisFiltersDiv.classList.remove('hidden');
-            const selectedCity = dom.neighborhoodAnalysisCityFilter?.value || '';
-            const neighborhoodStart = dom.neighborhoodAnalysisStartDate?.value || '';
-            const neighborhoodEnd = dom.neighborhoodAnalysisEndDate?.value || '';
-            const relevanceNeighborhood = dom.relevanceFilterNeighborhood?.value || '';
-            customCharts.fetchAndRenderCancellationsByNeighborhood(selectedCity, neighborhoodStart, neighborhoodEnd, relevanceNeighborhood);
+            if (shouldFetch) {
+                const selectedCity = dom.neighborhoodAnalysisCityFilter?.value || '';
+                const neighborhoodStart = dom.neighborhoodAnalysisStartDate?.value || '';
+                const neighborhoodEnd = dom.neighborhoodAnalysisEndDate?.value || '';
+                const relevanceNeighborhood = dom.relevanceFilterNeighborhood?.value || '';
+                customCharts.fetchAndRenderCancellationsByNeighborhood(selectedCity, neighborhoodStart, neighborhoodEnd, relevanceNeighborhood);
+            }
             break;
 
         case 'cancellations_by_equipment':
             if (dom.equipmentAnalysisFiltersDiv) dom.equipmentAnalysisFiltersDiv.classList.remove('hidden');
             if (dom.equipmentDateFilterContainer) dom.equipmentDateFilterContainer.classList.remove('hidden');
-            const equipmentStart = dom.equipmentAnalysisStartDate?.value || '';
-            const equipmentEnd = dom.equipmentAnalysisEndDate?.value || '';
-            const equipmentCity = dom.equipmentAnalysisCityFilter?.value || '';
-            const relevanceEquipment = dom.relevanceFilterEquipment?.value || '';
-            customCharts.fetchAndRenderCancellationsByEquipment(equipmentStart, equipmentEnd, equipmentCity, relevanceEquipment);
+            if (shouldFetch) {
+                const equipmentStart = dom.equipmentAnalysisStartDate?.value || '';
+                const equipmentEnd = dom.equipmentAnalysisEndDate?.value || '';
+                const equipmentCity = dom.equipmentAnalysisCityFilter?.value || '';
+                const relevanceEquipment = dom.relevanceFilterEquipment?.value || '';
+                customCharts.fetchAndRenderCancellationsByEquipment(equipmentStart, equipmentEnd, equipmentCity, relevanceEquipment);
+            }
             break;
 
         case 'equipment_by_olt':
             if (dom.equipmentAnalysisFiltersDiv) dom.equipmentAnalysisFiltersDiv.classList.remove('hidden');
             if (dom.equipmentDateFilterContainer) dom.equipmentDateFilterContainer.classList.add('hidden');
              if(dom.equipmentAnalysisCityFilter) dom.equipmentAnalysisCityFilter.closest('.flex-col')?.classList.remove('hidden');
-            const equipmentOltCity = dom.equipmentAnalysisCityFilter?.value || '';
-            customCharts.fetchAndRenderEquipmentByOlt(equipmentOltCity);
+            if (shouldFetch) {
+                const equipmentOltCity = dom.equipmentAnalysisCityFilter?.value || '';
+                customCharts.fetchAndRenderEquipmentByOlt(equipmentOltCity);
+            }
             break;
 
         case 'cohort_retention':
             if (dom.cohortAnalysisFiltersDiv) dom.cohortAnalysisFiltersDiv.classList.remove('hidden');
-            const cohortCity = dom.cohortCityFilter?.value || '';
-            const cohortStart = dom.cohortStartDate?.value || '';
-            const cohortEnd = dom.cohortEndDate?.value || '';
-            customCharts.fetchAndRenderCohortAnalysis(cohortCity, cohortStart, cohortEnd);
+            if (shouldFetch) {
+                const cohortCity = dom.cohortCityFilter?.value || '';
+                const cohortStart = dom.cohortStartDate?.value || '';
+                const cohortEnd = dom.cohortEndDate?.value || '';
+                customCharts.fetchAndRenderCohortAnalysis(cohortCity, cohortStart, cohortEnd);
+            }
             break;
 
         case 'daily_evolution_by_city':
             if (dom.dailyEvolutionFiltersDiv) dom.dailyEvolutionFiltersDiv.classList.remove('hidden');
-            const dailyStartDate = dom.dailyEvolutionStartDate?.value || '';
-            const dailyEndDate = dom.dailyEvolutionEndDate?.value || '';
-            customCharts.fetchAndRenderDailyEvolution(dailyStartDate, dailyEndDate);
+            if (shouldFetch) {
+                const dailyStartDate = dom.dailyEvolutionStartDate?.value || '';
+                const dailyEndDate = dom.dailyEvolutionEndDate?.value || '';
+                customCharts.fetchAndRenderDailyEvolution(dailyStartDate, dailyEndDate);
+            }
             break;
 
         default:
-            console.warn(`Análise personalizada não reconhecida: ${selectedAnalysis}`);
-            if (dom.dashboardContentDiv) dom.dashboardContentDiv.innerHTML = `<p class="text-red-500">Erro: Análise '${selectedAnalysis}' não implementada.</p>`;
+            if (shouldFetch) {
+                console.warn(`Análise personalizada não reconhecida: ${selectedAnalysis}`);
+                if (dom.dashboardContentDiv) dom.dashboardContentDiv.innerHTML = `<p class="text-red-500">Erro: Análise '${selectedAnalysis}' não implementada.</p>`;
+            }
     }
 }
 
@@ -311,7 +335,8 @@ export function initializeEventListeners() {
         utils.resetAllFilters();
         utils.setActiveControl(dom.customAnalysisSelector);
 
-        handleCustomAnalysisChange(1);
+        // Chama com forceFetch = false. A lógica interna decidirá se deve buscar ou não.
+        handleCustomAnalysisChange(1, false);
     });
 
     // --- Listener do Botão FILTRAR (Atualizado) ---
@@ -351,11 +376,12 @@ export function initializeEventListeners() {
     // --- NOVO LISTENER: Botão Limpar Filtros ---
     dom.clearFiltersBtn?.addEventListener('click', () => {
         utils.resetAllFilters(); // Reseta os valores dos inputs e estados
-        handleCustomAnalysisChange(1); // Recarrega a análise atual com os filtros vazios
+        // Recarrega a análise, mas com forceFetch=false para voltar ao estado inicial (sem dados se for real_permanence)
+        handleCustomAnalysisChange(1, false); 
     });
 
-    // --- LISTENERS DOS BOTÕES DE FILTRO PERSONALIZADOS (Novos) ---
-    // Todos chamam handleCustomAnalysisChange(1), que relê os inputs e dispara a busca
+    // --- LISTENERS DOS BOTÕES DE FILTRO PERSONALIZADOS ---
+    // Todos chamam handleCustomAnalysisChange(1, true) para forçar a busca
     const customFilterButtons = [
         dom.btnFilterFaturamento, 
         dom.btnFilterSeller, 
@@ -369,13 +395,15 @@ export function initializeEventListeners() {
     ];
 
     customFilterButtons.forEach(btn => {
-        btn?.addEventListener('click', () => handleCustomAnalysisChange(1));
+        btn?.addEventListener('click', () => handleCustomAnalysisChange(1, true));
     });
 
-    // Listener para o botão de filtro principal (usado em cancelamento/negativação)
-    dom.applyClientSearchBtn?.addEventListener('click', () => handleCustomAnalysisChange(1));
+    // Listener para o botão de filtro principal (usado em cancelamento/negativação/permanência)
+    dom.applyClientSearchBtn?.addEventListener('click', () => handleCustomAnalysisChange(1, true));
+    
+    // O Enter no input de busca também deve disparar
     dom.clientSearchInput?.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleCustomAnalysisChange(1);
+        if (e.key === 'Enter') handleCustomAnalysisChange(1, true);
     });
 
 
@@ -669,12 +697,12 @@ export function initializeEventListeners() {
          const currentState = state.getCustomAnalysisState();
          if (customPrevBtn && !customPrevBtn.disabled) {
              if (currentState.currentPage > 1) {
-                 handleCustomAnalysisChange(currentState.currentPage - 1);
+                 handleCustomAnalysisChange(currentState.currentPage - 1, true); // Paginação dispara fetch
              }
          } else if (customNextBtn && !customNextBtn.disabled) {
              const totalPages = Math.ceil(currentState.totalRows / currentState.rowsPerPage);
              if (currentState.currentPage < totalPages) {
-                 handleCustomAnalysisChange(currentState.currentPage + 1);
+                 handleCustomAnalysisChange(currentState.currentPage + 1, true); // Paginação dispara fetch
              }
          }
 

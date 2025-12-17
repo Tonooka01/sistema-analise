@@ -298,8 +298,8 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
         limit: currentState.rowsPerPage,
         offset: offset
     });
-    if (relevance) params.append('relevance', relevance); // Filtra por meses pagos
-    if (relevanceReal) params.append('relevance_real', relevanceReal); // Filtra por meses reais (NOVO)
+    if (relevance) params.append('relevance', relevance);
+    if (relevanceReal) params.append('relevance_real', relevanceReal);
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
     if (contractStatus) params.append('status_contrato', contractStatus);
@@ -316,123 +316,176 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
 
         // Limpa o dashboard para a renderização inicial
         if (dom.dashboardContentDiv && dom.dashboardContentDiv.innerHTML !== '') {
-             // Só limpamos se estivermos recarregando completamente (ex: mudou de análise)
-             // Se já temos a estrutura de gráficos, não limpamos para não piscar
              if (!document.getElementById('pagaChart')) {
                  dom.dashboardContentDiv.innerHTML = '';
              }
         }
 
         // --- 1. RENDERIZAÇÃO DOS GRÁFICOS ---
-        // Só renderiza/atualiza os gráficos se eles existirem na resposta
         if (dom.mainChartsArea && result.charts) {
-            // Garante que a área de gráficos está no DOM
             if (!dom.dashboardContentDiv.contains(dom.mainChartsArea)) {
                 dom.dashboardContentDiv.appendChild(dom.mainChartsArea);
             }
             dom.mainChartsArea.classList.remove('hidden');
             
-            // Verifica se o GridStack já foi inicializado com widgets. Se sim, apenas atualiza dados se necessário.
             const grid = getGridStack();
             
-            // Se o grid estiver vazio, cria os widgets
-            if (grid && grid.engine.nodes.length === 0) {
-                 // --- Gráfico de Pizza: Permanência Paga ---
-                if (result.charts.paga_distribution) {
-                    grid.addWidget({
-                        w: 4, h: 6, x: 0, y: 0,
-                        content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 id="pagaChartTitle" class="chart-title">Permanência Paga</h3></div><div class="chart-canvas-container"><canvas id="pagaChart"></canvas></div></div>`
-                    });
-                }
+            if (grid) grid.removeAll();
 
-                // --- Gráfico de Pizza: Permanência Real ---
-                if (result.charts.real_distribution) {
-                    grid.addWidget({
-                        w: 4, h: 6, x: 4, y: 0,
-                        content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 id="realChartTitle" class="chart-title">Permanência Real</h3></div><div class="chart-canvas-container"><canvas id="realChart"></canvas></div></div>`
-                    });
-                }
-
-                // --- Gráfico de Cidade: Barras Empilhadas ---
-                if (result.charts.city_distribution) {
-                    grid.addWidget({
-                        w: 12, h: 8, x: 0, y: 6,
-                        content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 id="cityChartTitle" class="chart-title">Distribuição por Cidade</h3></div><div class="chart-canvas-container"><canvas id="cityChart"></canvas></div></div>`
-                    });
-                }
-            }
-
-            // Atualiza os dados dos gráficos (mesmo se widgets já existirem)
+            // Adiciona Widgets Fixos (Paga e Real)
             if (result.charts.paga_distribution) {
-                const dataPaga = result.charts.paga_distribution;
-                renderChart('pagaChart', 'pie', 
-                    dataPaga.map(d => d.Faixa), 
-                    [{ data: dataPaga.map(d => d.Count) }], 
-                    'Permanência Paga', 
-                    { 
-                        formatterType: 'percent_only',
-                        onClick: (event, elements, chart) => {
-                            if (elements.length > 0) {
-                                const index = elements[0].index;
-                                const label = chart.data.labels[index];
-                                // Filtra a tabela pela faixa clicada (Paga) - Limpa relevanceReal para evitar conflito
-                                fetchAndRenderRealPermanenceAnalysis(searchTerm, 1, label, startDate, endDate, '');
-                            }
-                        }
-                    }
-                );
+                grid.addWidget({
+                    w: 4, h: 6, x: 0, y: 0,
+                    content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 id="pagaChartTitle" class="chart-title">Permanência Paga</h3></div><div class="chart-canvas-container"><canvas id="pagaChart"></canvas></div></div>`
+                });
             }
 
             if (result.charts.real_distribution) {
-                const dataReal = result.charts.real_distribution;
-                renderChart('realChart', 'pie', 
-                    dataReal.map(d => d.Faixa), 
-                    [{ data: dataReal.map(d => d.Count) }], 
-                    'Permanência Real', 
-                    { 
-                        formatterType: 'percent_only',
-                        onClick: (event, elements, chart) => {
-                            if (elements.length > 0) {
-                                const index = elements[0].index;
-                                const label = chart.data.labels[index];
-                                // Filtra a tabela pela faixa clicada (Real) - Limpa relevance (paga) para evitar conflito
-                                fetchAndRenderRealPermanenceAnalysis(searchTerm, 1, '', startDate, endDate, label);
-                            }
-                        }
-                    }
-                );
+                grid.addWidget({
+                    w: 4, h: 6, x: 4, y: 0,
+                    content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 id="realChartTitle" class="chart-title">Permanência Real</h3></div><div class="chart-canvas-container"><canvas id="realChart"></canvas></div></div>`
+                });
             }
 
+            // --- GERAÇÃO DINÂMICA DE WIDGETS POR CIDADE ---
+            // Aqui garantimos que cada cidade tenha seu próprio widget separado
             if (result.charts.city_distribution && result.charts.city_distribution.length > 0) {
                 const cityData = result.charts.city_distribution;
-                const cities = [...new Set(cityData.map(d => d.Cidade))];
-                const faixas = ['0-6', '7-12', '13-18', '19-24', '25-36', '37+'];
+                const cities = [...new Set(cityData.map(d => d.Cidade))].sort();
                 
-                const datasets = faixas.map((faixa, index) => ({
-                    label: faixa,
-                    data: cities.map(city => {
-                        const entry = cityData.find(d => d.Cidade === city && d.Faixa === faixa);
-                        return entry ? entry.Count : 0;
-                    }),
-                    backgroundColor: ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6'][index]
-                }));
+                let currentX = 0;
+                let currentY = 6; 
 
-                renderChart('cityChart', 'bar_horizontal', cities, datasets, 'Distribuição por Cidade', {
-                    scales: { x: { stacked: true }, y: { stacked: true } },
-                    onClick: (event, elements, chart) => {
-                        if (elements.length > 0) {
-                            const element = elements[0];
-                            const cityIndex = element.index;
-                            
-                            const clickedCity = chart.data.labels[cityIndex];
-                            
-                            if(dom.clientSearchInput) dom.clientSearchInput.value = clickedCity; // Atualiza visualmente
-                            // Filtra apenas pela cidade clicada, mantendo os outros filtros
-                            fetchAndRenderRealPermanenceAnalysis(clickedCity, 1, relevance, startDate, endDate, relevanceReal);
-                        }
+                cities.forEach((city, idx) => {
+                    const canvasId = `chart_city_${city.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                    
+                    // Criação do widget no GridStack
+                    grid.addWidget({
+                        w: 4, h: 6, x: currentX, y: currentY,
+                        content: `<div class="grid-stack-item-content">
+                                    <div class="chart-container-header"><h3 class="chart-title truncate" title="${city}">${city}</h3></div>
+                                    <div class="chart-canvas-container"><canvas id="${canvasId}"></canvas></div>
+                                  </div>`
+                    });
+
+                    // Lógica para organizar os widgets em 3 colunas (grid de 12 colunas)
+                    currentX += 4;
+                    if (currentX >= 12) {
+                        currentX = 0;
+                        currentY += 6;
                     }
                 });
             }
+
+            // --- RENDERIZAÇÃO DOS GRÁFICOS ---
+            setTimeout(() => {
+                if (result.charts.paga_distribution) {
+                    const dataPaga = result.charts.paga_distribution;
+                    renderChart('pagaChart', 'pie', 
+                        dataPaga.map(d => d.Faixa), 
+                        [{ data: dataPaga.map(d => d.Count) }], 
+                        'Permanência Paga', 
+                        { 
+                            formatterType: 'percent_only',
+                            onClick: (event, elements, chart) => {
+                                if (elements.length > 0) {
+                                    const index = elements[0].index;
+                                    const label = chart.data.labels[index];
+                                    fetchAndRenderRealPermanenceAnalysis(searchTerm, 1, label, startDate, endDate, '');
+                                }
+                            }
+                        }
+                    );
+                }
+
+                if (result.charts.real_distribution) {
+                    const dataReal = result.charts.real_distribution;
+                    renderChart('realChart', 'pie', 
+                        dataReal.map(d => d.Faixa), 
+                        [{ data: dataReal.map(d => d.Count) }], 
+                        'Permanência Real', 
+                        { 
+                            formatterType: 'percent_only',
+                            onClick: (event, elements, chart) => {
+                                if (elements.length > 0) {
+                                    const index = elements[0].index;
+                                    const label = chart.data.labels[index];
+                                    fetchAndRenderRealPermanenceAnalysis(searchTerm, 1, '', startDate, endDate, label);
+                                }
+                            }
+                        }
+                    );
+                }
+
+                if (result.charts.city_distribution) {
+                    const cityData = result.charts.city_distribution;
+                    const cities = [...new Set(cityData.map(d => d.Cidade))].sort();
+                    // Ordem fixa para garantir consistência visual
+                    const faixasOrder = ['0-6', '7-12', '13-18', '19-25', '25-30', '31+'];
+                    const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6'];
+
+                    cities.forEach(city => {
+                        // Filtra os dados específicos da cidade
+                        const dataForCity = cityData.filter(d => d.Cidade === city);
+                        // Mapeia os dados na ordem correta, preenchendo com 0 se não houver
+                        const counts = faixasOrder.map(faixa => {
+                            const entry = dataForCity.find(d => d.Faixa === faixa);
+                            return entry ? entry.Count : 0;
+                        });
+                        const totalCity = counts.reduce((a, b) => a + b, 0);
+                        const canvasId = `chart_city_${city.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+                        renderChart(canvasId, 'pie', 
+                            faixasOrder, 
+                            [{ 
+                                data: counts,
+                                backgroundColor: colors
+                            }], 
+                            `${city} (${totalCity})`, 
+                            {
+                                formatterType: 'value_only',
+                                // Configuração de plugins para garantir formatação numérica simples (sem moeda)
+                                plugins: {
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(context) {
+                                                let label = context.label || '';
+                                                if (label) {
+                                                    label += ': ';
+                                                }
+                                                if (context.parsed !== null) {
+                                                    label += context.parsed; // Apenas o número
+                                                }
+                                                return label;
+                                            }
+                                        }
+                                    },
+                                    datalabels: {
+                                        formatter: (value, ctx) => {
+                                            return value; // Apenas o número
+                                        },
+                                        color: '#fff',
+                                        font: {
+                                            weight: 'bold'
+                                        }
+                                    }
+                                },
+                                legendPosition: 'bottom',
+                                maintainAspectRatio: false,
+                                onClick: (event, elements, chart) => {
+                                    if (elements.length > 0) {
+                                        const index = elements[0].index;
+                                        const clickedFaixa = chart.data.labels[index];
+                                        
+                                        if(dom.clientSearchInput) dom.clientSearchInput.value = city; 
+                                        fetchAndRenderRealPermanenceAnalysis(city, 1, clickedFaixa, startDate, endDate, relevanceReal);
+                                    }
+                                }
+                            }
+                        );
+                    });
+                }
+            }, 100);
         }
 
         // --- 2. RENDERIZAÇÃO DA TABELA ---
@@ -466,13 +519,35 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                 render: r => `<span class="text-gray-600 font-medium" title="Tempo corrido desde a ativação">${r.Permanencia_Real_Calendario} meses</span>`,
                 cssClass: 'text-center'
             },
-            // --- NOVA COLUNA: Média de Pagamento ---
+            // --- NOVA COLUNA: Média Pagamento ---
             { 
                 header: 'Média Pagamento', 
-                render: r => getPaymentBehaviorBadge(r.media_pagamento !== undefined ? r.media_pagamento : r.Media_Pagamento),
-                cssClass: 'text-center' 
+                render: r => {
+                    if (r.Media_Atraso === null || r.Media_Atraso === undefined) {
+                        return '<span class="text-gray-400 text-xs italic">Sem Histórico</span>';
+                    }
+                    const days = Math.round(r.Media_Atraso);
+                    let badgeClass = '';
+                    let text = '';
+
+                    if (days < 0) {
+                        // Adiantado
+                        badgeClass = 'bg-green-100 text-green-800 border border-green-200';
+                        text = `${days} dias (Adiantado)`;
+                    } else if (days > 0) {
+                        // Atrasado
+                        badgeClass = 'bg-red-100 text-red-800 border border-red-200';
+                        text = `+${days} dias (Atraso)`;
+                    } else {
+                        // Em dia
+                        badgeClass = 'bg-gray-100 text-gray-800 border border-gray-200';
+                        text = 'Em Dia (0)';
+                    }
+
+                    return `<span class="inline-block px-2 py-1 rounded text-xs font-semibold ${badgeClass}" title="Média de dias entre vencimento e pagamento">${text}</span>`;
+                },
+                cssClass: 'text-center'
             },
-            // ----------------------------------------
             { 
                 header: 'Faturas (Resumo)', 
                 render: r => {
@@ -498,10 +573,8 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
             { header: 'Bairro', key: 'Bairro' }
         ];
 
-        // Mensagem de filtro ativo para Real Permanence (já que o renderCustomTable não sabe sobre relevanceReal)
         let extraFilterMsg = '';
         if (relevanceReal) {
-            // Função global para limpar o filtro
             window.clearRealFilter = () => {
                 fetchAndRenderRealPermanenceAnalysis(searchTerm, 1, relevance, startDate, endDate, '');
             };
@@ -515,7 +588,6 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
         }
         
         if (relevance) {
-             // Função global para limpar o filtro
             window.clearPagaFilter = () => {
                 fetchAndRenderRealPermanenceAnalysis(searchTerm, 1, '', startDate, endDate, relevanceReal);
             };
@@ -528,7 +600,6 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
             `;
         }
 
-        // Renderiza a tabela APÓS os gráficos
         renderCustomTable(result, 'Análise de Permanência Real (Meses Pagos vs Calendário)', columns, extraFilterMsg);
 
         if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
