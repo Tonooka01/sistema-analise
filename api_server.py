@@ -82,7 +82,13 @@ def load_user(user_id):
 # --- Funções de Banco de Dados ---
 def get_db_connection():
     """Conecta ao banco SQLite e retorna linhas como dicionários"""
-    conn = sqlite3.connect(DATABASE)
+    # FIX: Adicionado timeout=30.0 para esperar o banco liberar em vez de falhar imediatamente
+    conn = sqlite3.connect(DATABASE, timeout=30.0)
+    
+    # FIX: Ativa o modo WAL. Isso permite que LEITURA e ESCRITA ocorram simultaneamente.
+    # Resolve 99% dos problemas de 'database is locked' em dashboards.
+    conn.execute("PRAGMA journal_mode=WAL")
+    
     conn.row_factory = sqlite3.Row
     return conn
 

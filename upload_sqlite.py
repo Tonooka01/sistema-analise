@@ -2,6 +2,7 @@ import pandas as pd
 import sqlite3
 import os
 import re
+import datetime
 
 # AJUSTE AQUI: Aponta para a subpasta 'Tabelas' dentro do diretório do script
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Tabelas') 
@@ -21,37 +22,111 @@ def sanitize_column_name(col_name):
     sanitized = sanitized.replace('__', '_').strip('_') # Remove underscores duplos e no início/fim
     return sanitized
 
+# --- NOVAS FUNÇÕES DE CONTROLE DE ATUALIZAÇÃO ---
+
+def init_metadata_table(conn):
+    """Cria a tabela de controle de atualizações se não existir."""
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS _controle_atualizacao (
+                tabela TEXT PRIMARY KEY,
+                ultimo_arquivo_modificacao REAL,
+                data_importacao TEXT
+            )
+        """)
+        conn.commit()
+    except Exception as e:
+        print(f"Erro ao criar tabela de metadados: {e}")
+
+def check_needs_update(conn, table_name, file_path):
+    """
+    Verifica se o arquivo é mais recente que a última atualização gravada no banco.
+    Retorna (True, current_mtime) se precisar atualizar, ou (False, current_mtime) se não.
+    """
+    if not os.path.exists(file_path):
+        return False, 0
+    
+    current_mtime = os.path.getmtime(file_path)
+    
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT ultimo_arquivo_modificacao FROM _controle_atualizacao WHERE tabela = ?", (table_name,))
+        row = cursor.fetchone()
+        
+        if row is None:
+            return True, current_mtime # Nunca foi importado, precisa atualizar
+        
+        last_mtime = row['ultimo_arquivo_modificacao']
+        
+        # Se o arquivo atual for mais novo que o registro no banco, atualiza
+        if current_mtime > last_mtime:
+             return True, current_mtime
+             
+        return False, current_mtime
+    except Exception as e:
+        print(f"Erro ao verificar atualização (forçando atualização): {e}")
+        return True, current_mtime
+
+def update_metadata(conn, table_name, file_mtime):
+    """Atualiza o registro de controle após sucesso."""
+    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        conn.execute("""
+            INSERT OR REPLACE INTO _controle_atualizacao (tabela, ultimo_arquivo_modificacao, data_importacao)
+            VALUES (?, ?, ?)
+        """, (table_name, file_mtime, now))
+        conn.commit()
+    except Exception as e:
+        print(f"Erro ao salvar metadados: {e}")
+
+# ------------------------------------------------
+
 def upload_data_to_sqlite(file_path):
     """
     Processa um arquivo CSV/TXT e insere seus dados em uma tabela SQLite.
     Realiza saneamento e conversão de tipos para colunas específicas.
     """
     file_name = os.path.basename(file_path)
-    if file_name.endswith('.csv'):
-        delimiter = ';' 
-    elif file_name.endswith('.txt'):
-        delimiter = '\t' 
-    else:
-        print(f"Formato de arquivo não suportado: {file_name}. Use .csv ou .txt")
-        return
-
-    try:
-        df = pd.read_csv(file_path, delimiter=delimiter, encoding='utf-8', on_bad_lines='skip', low_memory=False)
-    except UnicodeDecodeError:
-        df = pd.read_csv(file_path, delimiter=delimiter, encoding='latin1', on_bad_lines='skip', low_memory=False)
-    except Exception as e:
-        print(f"Erro ao ler o arquivo {file_name}: {e}")
-        return
-
-    original_columns = list(df.columns) # Salva os nomes originais
-    df.columns = [sanitize_column_name(col) for col in original_columns]
-    sanitized_columns = list(df.columns) # Salva os nomes sanitizados
     
-    table_name = os.path.splitext(file_name)[0]
-    table_name = sanitize_column_name(table_name)
-    
+    # Define o nome da tabela ANTES de ler o arquivo para poder checar metadados
+    table_name_raw = os.path.splitext(file_name)[0]
+    table_name = sanitize_column_name(table_name_raw)
+
     conn = get_db_connection()
     try:
+        # 1. Garante que a tabela de controle existe
+        init_metadata_table(conn)
+        
+        # 2. Verifica se precisa atualizar
+        should_run, current_mtime = check_needs_update(conn, table_name, file_path)
+        
+        if not should_run:
+            print(f"[-] O arquivo '{file_name}' já está atualizado no banco (Tabela: {table_name}). Pulando...")
+            return
+
+        # Se chegou aqui, vai iniciar o processo
+        print(f"[+] Iniciando leitura e atualização para: {file_name}...")
+
+        if file_name.endswith('.csv'):
+            delimiter = ';' 
+        elif file_name.endswith('.txt'):
+            delimiter = '\t' 
+        else:
+            print(f"Formato de arquivo não suportado: {file_name}. Use .csv ou .txt")
+            return
+
+        try:
+            df = pd.read_csv(file_path, delimiter=delimiter, encoding='utf-8', on_bad_lines='skip', low_memory=False)
+        except UnicodeDecodeError:
+            df = pd.read_csv(file_path, delimiter=delimiter, encoding='latin1', on_bad_lines='skip', low_memory=False)
+        except Exception as e:
+            print(f"Erro ao ler o arquivo {file_name}: {e}")
+            return
+
+        original_columns = list(df.columns) # Salva os nomes originais
+        df.columns = [sanitize_column_name(col) for col in original_columns]
+        sanitized_columns = list(df.columns) # Salva os nomes sanitizados
+        
         print(f"Processando dados da tabela '{table_name}'...")
         
         # Super Diagnóstico para os nomes das colunas
@@ -65,13 +140,10 @@ def upload_data_to_sqlite(file_path):
         if table_name == 'Contas_a_Receber' and 'Emiss_o' in df.columns:
             df.rename(columns={'Emiss_o': 'Emissao'}, inplace=True)
             print("Coluna 'Emiss_o' renomeada para 'Emissao'.")
-            # Atualiza a lista de colunas sanitizadas se a renomeação ocorrer
             sanitized_columns = list(df.columns)
 
-        # --- CORREÇÃO NOVA: Renomeia coluna de Descrição do Equipamento ---
+        # --- CORREÇÃO: Renomeia coluna de Descrição do Equipamento ---
         if table_name == 'Equipamento':
-            # Procura por variações comuns da sanitização de "Descrição produto"
-            # O padrão costuma gerar 'Descri_o_produto' ou 'Descri__o_produto'
             for col in ['Descri_o_produto', 'Descri__o_produto', 'Descricao_produto']:
                 if col in df.columns and col != 'Descricao_produto':
                     df.rename(columns={col: 'Descricao_produto'}, inplace=True)
@@ -80,14 +152,13 @@ def upload_data_to_sqlite(file_path):
                     break
         # ------------------------------------------------------------------
 
-        # Mapeamento de chaves "limpas" (sem espaços, sem underscores, minúsculas)
-        # ATUALIZAÇÃO: Adicionado 'datacrdito' para capturar variações de 'Data_cr_dito'
+        # Mapeamento de chaves "limpas"
         DATE_COLUMNS_MAP_CLEANED = {
             'Contas_a_Receber': ['vencimento', 'emissao', 'datapagamento', 'datacredito', 'datacrdito', 'databaixa', 'datacancelamento', 'validadedescontocondicional'],
             'Atendimentos': ['criadoem', 'ultimaalteracao'],
             'OS': ['abertura', 'fechamento'],
             'Contratos': ['datacadastrosistema', 'datacancelamento', 'dataativao'], 
-            'Logins': ['dataehoradologin', 'ultimaconexãofinal', 'ultimaconexofinal'], # (ultimaconexãofinal não tem 'ç' ou 'ã')
+            'Logins': ['dataehoradologin', 'ultimaconexãofinal', 'ultimaconexofinal'],
             'Clientes': ['datacadastro'],
             'Contratos_Negativacao': ['datainclusao', 'datanegativao', 'dataativao'],
             'Clientes_Negativacao': ['datainclusao', 'dataexclusao'],
@@ -96,15 +167,14 @@ def upload_data_to_sqlite(file_path):
         
         VALUE_COLUMNS_MAP_CLEANED = {
             'Contas_a_Receber': ['valor', 'valorbaixado', 'valoraberto', 'valorrecebido', 'valorcancelado', 'descontocondicionalvalor'],
-            'Contratos_Negativacao': ['valordadívida', 'valordadivida'], # (valordadívida não tem 'í')
+            'Contratos_Negativacao': ['valordadívida', 'valordadivida'], 
         }
 
         date_cols_to_convert = DATE_COLUMNS_MAP_CLEANED.get(table_name, [])
         value_cols_to_convert = VALUE_COLUMNS_MAP_CLEANED.get(table_name, [])
 
-        # Itera sobre as colunas sanitizadas (ex: "Valor_recebido")
+        # Itera sobre as colunas sanitizadas
         for col_name_sanitized in sanitized_columns:
-            # Cria a chave de busca (ex: "valorrecebido")
             col_key = col_name_sanitized.lower().replace('_', '').replace(' ', '')
 
             # Verifica se é uma coluna de data
@@ -142,30 +212,19 @@ def upload_data_to_sqlite(file_path):
             elif col_key in value_cols_to_convert:
                 print(f"Convertendo coluna de valor: '{col_name_sanitized}' (chave: '{col_key}')")
                 
-                # --- INÍCIO DA CORREÇÃO ROBUSTA ---
-                # Clona a série original (como string) para aplicar lógicas diferentes
                 temp_series_str = df[col_name_sanitized].astype(str).str.replace('R$', '', regex=False).str.strip()
-                
                 series_brl = temp_series_str.copy()
                 series_us_numeric = temp_series_str.copy()
 
-                # Lógica BRL: ("1.234,56") -> Remove pontos, troca vírgula
                 series_brl = series_brl.str.replace('.', '', regex=False)
                 series_brl = series_brl.str.replace(',', '.', regex=False)
                 
-                # Lógica US/Numérica: ("1234.56") -> Não faz nada
-                
-                # Decide qual usar: se o original tinha vírgula, usa a lógica BRL.
-                # Se não tinha vírgula, usa a lógica US/Numérica.
                 original_has_comma = temp_series_str.str.contains(',', regex=False)
-                
                 final_series = series_brl.where(original_has_comma, series_us_numeric)
                 
-                # Trata strings vazias ou "None" como 0.0
                 final_series = final_series.replace({'': '0.0', 'None': '0.0', 'nan': '0.0', 'null': '0.0', 'NaT': '0.0'}, regex=False)
 
                 df[col_name_sanitized] = pd.to_numeric(final_series, errors='coerce').fillna(0.0)
-                # --- FIM DA CORREÇÃO ROBUSTA ---
 
         # --- Limpeza específica para colunas de status na tabela 'Contratos' ---
         if table_name == 'Contratos':
@@ -177,7 +236,10 @@ def upload_data_to_sqlite(file_path):
 
 
         df.to_sql(table_name, conn, if_exists='replace', index=False)
-        print(f"Dados do arquivo '{file_name}' inseridos/atualizados na tabela '{table_name}' com sucesso.")
+        
+        # 3. Atualiza os metadados de sucesso
+        update_metadata(conn, table_name, current_mtime)
+        print(f"SUCESSO: '{file_name}' inserido na tabela '{table_name}'.")
 
     except sqlite3.Error as e:
         print(f"Erro no banco de dados SQLite para '{file_name}': {e}")
@@ -188,16 +250,21 @@ def upload_data_to_sqlite(file_path):
             conn.close()
 
 if __name__ == '__main__':
-    all_files_in_folder = os.listdir(UPLOAD_FOLDER)
-    files_to_upload = []
-
-    for item in all_files_in_folder:
-        if os.path.isfile(os.path.join(UPLOAD_FOLDER, item)) and (item.endswith('.csv') or item.endswith('.txt')):
-            files_to_upload.append(os.path.join(UPLOAD_FOLDER, item))
-
-    if not files_to_upload:
-        print(f"Nenhum arquivo .csv ou .txt encontrado na pasta: {UPLOAD_FOLDER}")
+    if not os.path.exists(UPLOAD_FOLDER):
+        print(f"Pasta não encontrada: {UPLOAD_FOLDER}")
+        print("Crie a pasta 'Tabelas' e coloque seus arquivos CSV/TXT nela.")
     else:
-        for f_path in files_to_upload:
-            print(f"Iniciando upload para: {os.path.basename(f_path)}")
-            upload_data_to_sqlite(f_path)
+        all_files_in_folder = os.listdir(UPLOAD_FOLDER)
+        files_to_upload = []
+
+        for item in all_files_in_folder:
+            if os.path.isfile(os.path.join(UPLOAD_FOLDER, item)) and (item.endswith('.csv') or item.endswith('.txt')):
+                files_to_upload.append(os.path.join(UPLOAD_FOLDER, item))
+
+        if not files_to_upload:
+            print(f"Nenhum arquivo .csv ou .txt encontrado na pasta: {UPLOAD_FOLDER}")
+        else:
+            print(f"Encontrados {len(files_to_upload)} arquivos. Verificando atualizações...")
+            for f_path in files_to_upload:
+                upload_data_to_sqlite(f_path)
+            print("Processo finalizado.")

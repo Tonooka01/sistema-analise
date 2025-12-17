@@ -3,14 +3,20 @@ body {
     background-color: #f0f2f5;
     color: #333;
 }
-.container {
-    max-width: 1200px;
-    margin: 2rem auto;
-    padding: 1.5rem;
-    background-color: #ffffff;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+
+/* --- CORREÇÃO AQUI --- */
+/* Mudamos de .container para .custom-container para corresponder ao novo HTML */
+.custom-container {
+    max-width: 98% !important; /* Força a largura para ocupar quase toda a tela */
+    width: 98%;
+    margin: 2rem auto;         /* Centraliza na tela */
+    padding: 1.5rem;           /* Espaçamento interno */
+    background-color: #ffffff; /* Fundo Branco (Isso devolve o visual de cartão) */
+    border-radius: 12px;       /* Bordas Arredondadas */
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); /* Sombra suave */
 }
+
+/* Mantemos .card para compatibilidade com outros elementos internos se houver */
 .card {
     background-color: #ffffff;
     border-radius: 8px;
@@ -18,15 +24,18 @@ body {
     padding: 1.5rem;
     margin-bottom: 1.5rem;
 }
+
 h1, h2 {
     color: #2c3e50;
     margin-bottom: 1rem;
 }
+
 table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 0;
 }
+
 th, td {
     padding: 10px;
     border-bottom: 1px solid #e0e0e0;
@@ -61,6 +70,7 @@ th {
     transform: scale(1);
     border-color: #60a5fa;
 }
+
 #customAnalysisSelector {
     -webkit-appearance: none;
     -moz-appearance: none;
@@ -276,7 +286,12 @@ th {
 /* --- Media Queries --- */
 @media (max-width: 768px) {
     body { padding: 0.5rem; }
-    .container { margin: 0.5rem auto; padding: 1rem; }
+    /* ATUALIZADO AQUI TAMBÉM */
+    .custom-container { 
+        margin: 0.5rem auto; 
+        padding: 1rem; 
+        max-width: 100% !important; 
+    }
     h1 { font-size: 1.75rem; }
     .chart-title { font-size: 1rem; }
     .collection-selector, 
