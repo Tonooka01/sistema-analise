@@ -1,6 +1,5 @@
 import sqlite3
 import traceback
-from datetime import datetime
 from flask import Blueprint, jsonify, request
 from utils_api import get_db, parse_relevance_filter, add_date_range_filter
 
@@ -385,75 +384,6 @@ def api_faturamento_por_cidade():
         print(f"Erro inesperado ao buscar faturamento por cidade: {e}")
         traceback.print_exc()
         return jsonify({"error": f"Erro interno inesperado. Detalhe: {e}"}), 500
-    finally:
-        if conn: conn.close()
-
-
-@finance_bp.route('/permanence_real', methods=['GET'])
-def permanence_real():
-    """
-    Retorna análise de permanência real (apenas pagos), 
-    incluindo a média de dias de pagamento (adiantado ou atrasado).
-    """
-    conn = get_db()
-    try:
-        search_term = request.args.get('search_term', '').strip()
-        
-        # Query principal
-        # Calculamos a média da diferença entre Data Pagamento e Vencimento
-        query = """
-            SELECT
-                Identificacao_Contrato,
-                Cliente as nome_cliente,
-                COUNT(*) as qtd_faturas,
-                SUM(Valor_pago) as total_pago,
-                MIN(Data_pagamento) as primeiro_pagamento,
-                MAX(Data_pagamento) as ultimo_pagamento,
-                AVG(julianday(Data_pagamento) - julianday(Vencimento)) as media_pagamento
-            FROM Contas_a_Receber
-            WHERE Data_pagamento IS NOT NULL
-        """
-        
-        params = []
-        if search_term:
-            query += " AND Cliente LIKE ?"
-            params.append(f'%{search_term}%')
-            
-        query += " GROUP BY Identificacao_Contrato, Cliente"
-        
-        cursor = conn.execute(query, tuple(params))
-        rows = cursor.fetchall()
-        
-        results = []
-        for row in rows:
-            r_dict = dict(row)
-            
-            # Formata a média de pagamento (1 casa decimal)
-            if r_dict['media_pagamento'] is not None:
-                r_dict['media_pagamento'] = round(r_dict['media_pagamento'], 1)
-            else:
-                r_dict['media_pagamento'] = 0.0
-            
-            # Calcular permanência em meses
-            permanencia = 0
-            if r_dict['primeiro_pagamento'] and r_dict['ultimo_pagamento']:
-                try:
-                    # Tenta converter string para data para calcular diferença
-                    p1 = datetime.strptime(r_dict['primeiro_pagamento'], '%Y-%m-%d')
-                    p2 = datetime.strptime(r_dict['ultimo_pagamento'], '%Y-%m-%d')
-                    permanencia = round((p2 - p1).days / 30, 1)
-                except ValueError:
-                    permanencia = 0
-            
-            r_dict['permanencia_meses'] = permanencia
-            results.append(r_dict)
-
-        return jsonify(results)
-
-    except Exception as e:
-        print(f"Erro em permanence_real: {e}")
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
 
