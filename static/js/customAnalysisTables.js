@@ -466,6 +466,13 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                 render: r => `<span class="text-gray-600 font-medium" title="Tempo corrido desde a ativação">${r.Permanencia_Real_Calendario} meses</span>`,
                 cssClass: 'text-center'
             },
+            // --- NOVA COLUNA: Média de Pagamento ---
+            { 
+                header: 'Média Pagamento', 
+                render: r => getPaymentBehaviorBadge(r.media_pagamento !== undefined ? r.media_pagamento : r.Media_Pagamento),
+                cssClass: 'text-center' 
+            },
+            // ----------------------------------------
             { 
                 header: 'Faturas (Resumo)', 
                 render: r => {
