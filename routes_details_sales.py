@@ -12,13 +12,25 @@ def api_seller_clients():
     try:
         seller_id = request.args.get('seller_id', type=int)
         client_type = request.args.get('type')
-        year = request.args.get('year', '')
-        month = request.args.get('month', '')
+        year_param = request.args.get('year', '')
+        month_param = request.args.get('month', '')
         limit = request.args.get('limit', 25, type=int)
         offset = request.args.get('offset', 0, type=int)
 
         if not seller_id or not client_type:
             abort(400, "ID do vendedor e tipo de cliente são obrigatórios.")
+
+        # --- CORREÇÃO DE DATA ---
+        # Garante que usamos apenas o número do mês/ano, mesmo se vier data completa
+        year = year_param
+        month = month_param
+        try:
+            if month_param and '-' in str(month_param):
+                month = str(int(month_param.split('-')[1]))
+            if year_param and '-' in str(year_param):
+                year = str(int(year_param.split('-')[0]))
+        except:
+            pass # Se falhar, mantém o original (pode ser vazio)
 
         params = []
         base_query = ""
@@ -26,8 +38,13 @@ def api_seller_clients():
         if client_type == 'cancelado':
             where_sql = "WHERE Vendedor = ? AND Status_contrato = 'Inativo' AND Status_acesso = 'Desativado'"
             params.append(seller_id)
-            if year: where_sql += " AND STRFTIME('%Y', Data_cancelamento) = ?"; params.append(year)
-            if month: where_sql += " AND STRFTIME('%m', Data_cancelamento) = ?"; params.append(f'{int(month):02d}')
+            if year: 
+                where_sql += " AND STRFTIME('%Y', Data_cancelamento) = ?"
+                params.append(year)
+            if month: 
+                where_sql += " AND STRFTIME('%m', Data_cancelamento) = ?"
+                params.append(f'{int(month):02d}')
+            
             base_query = f"""
                 SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_cancelamento as end_date
                 FROM Contratos {where_sql}
@@ -35,13 +52,21 @@ def api_seller_clients():
         elif client_type == 'negativado':
             where_cn = "WHERE Vendedor = ? AND Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"
             params_cn = [seller_id]
-            if year: where_cn += " AND STRFTIME('%Y', Data_negativa_o) = ?"; params_cn.append(year)
-            if month: where_cn += " AND STRFTIME('%m', Data_negativa_o) = ?"; params_cn.append(f'{int(month):02d}')
+            if year: 
+                where_cn += " AND STRFTIME('%Y', Data_negativa_o) = ?"
+                params_cn.append(year)
+            if month: 
+                where_cn += " AND STRFTIME('%m', Data_negativa_o) = ?"
+                params_cn.append(f'{int(month):02d}')
 
             where_c = "WHERE Vendedor = ? AND Status_contrato = 'Negativado' AND Cidade NOT IN ('Caçapava', 'Jacareí', 'São José dos Campos')"
             params_c = [seller_id]
-            if year: where_c += " AND STRFTIME('%Y', Data_cancelamento) = ?"; params_c.append(year)
-            if month: where_c += " AND STRFTIME('%m', Data_cancelamento) = ?"; params_c.append(f'{int(month):02d}')
+            if year: 
+                where_c += " AND STRFTIME('%Y', Data_cancelamento) = ?"
+                params_c.append(year)
+            if month: 
+                where_c += " AND STRFTIME('%m', Data_cancelamento) = ?"
+                params_c.append(f'{int(month):02d}')
 
             base_query = f"""
                 SELECT Cliente, ID AS Contrato_ID, Data_ativa_o, Data_negativa_o as end_date FROM Contratos_Negativacao {where_cn}
@@ -85,60 +110,110 @@ def api_seller_activations():
         seller_id = request.args.get('seller_id', type=int)
         client_type = request.args.get('type')
         city = request.args.get('city', '')
-        year = request.args.get('year', '')
-        month = request.args.get('month', '')
+        year_param = request.args.get('year', '')
+        month_param = request.args.get('month', '')
         limit = request.args.get('limit', 25, type=int)
         offset = request.args.get('offset', 0, type=int)
 
         if not seller_id or not client_type:
             abort(400, "ID do vendedor e tipo de cliente são obrigatórios.")
 
-        where_contracts = ["C.Vendedor = ?"]
-        params_contracts = [seller_id]
-        if city: where_contracts.append("C.Cidade = ?"); params_contracts.append(city)
-        if year: where_contracts.append("STRFTIME('%Y', C.Data_ativa_o) = ?"); params_contracts.append(year)
-        if month: where_contracts.append("STRFTIME('%m', C.Data_ativa_o) = ?"); params_contracts.append(f'{int(month):02d}')
-        
-        where_contracts_sql_union = " AND ".join(where_contracts).replace("C.", "")
-
-        query_base = f"""
-            SELECT 
-                ID, Cliente, Data_ativa_o, Status_contrato, Data_cancelamento, 0 AS is_negativado_table, Cidade
-            FROM Contratos C
-            WHERE {" AND ".join(where_contracts)}
-            
-            UNION
-            
-            SELECT 
-                ID, Cliente, Data_ativa_o, 'Negativado' AS Status_contrato, Data_negativa_o AS Data_cancelamento, 1 AS is_negativado_table, Cidade
-            FROM Contratos_Negativacao C
-            WHERE {where_contracts_sql_union}
-        """
-
+        # --- CORREÇÃO DE DATA ---
+        year = year_param
+        month = month_param
         try:
-            df_contracts_all = pd.read_sql_query(query_base, conn, params=tuple(params_contracts * 2))
-            df_contracts_all.sort_values(by='is_negativado_table', ascending=True, inplace=True)
-            df_contracts = df_contracts_all.drop_duplicates(subset=['ID'], keep='first')
+            if month_param and '-' in str(month_param):
+                month = str(int(month_param.split('-')[1]))
+            if year_param and '-' in str(year_param):
+                year = str(int(year_param.split('-')[0]))
+        except:
+            pass
 
-        except pd.io.sql.DatabaseError as e:
-            if "no such table" in str(e).lower():
-                print("Aviso: Tabela Contratos_Negativacao não encontrada. Usando apenas Contratos.")
-                query_fallback = f"""
-                    SELECT ID, Cliente, Data_ativa_o, Status_contrato, Data_cancelamento, Cidade
-                    FROM Contratos C
-                    WHERE {" AND ".join(where_contracts)}
-                """
-                df_contracts = pd.read_sql_query(query_fallback, conn, params=tuple(params_contracts))
-            else:
-                raise e
+        # --- DETECÇÃO DE COLUNAS OPCIONAIS (Evita erro 'no such column') ---
+        cursor = conn.cursor()
         
-        if df_contracts.empty:
+        # Verifica colunas em Contratos
+        try:
+            cols_c = [row[1] for row in cursor.execute("PRAGMA table_info(Contratos)").fetchall()]
+            plano_c = "Plano" if "Plano" in cols_c else "NULL"
+            valor_c = "Valor" if "Valor" in cols_c else "NULL"
+        except:
+            plano_c = "NULL"; valor_c = "NULL"
+
+        # Verifica colunas em Contratos_Negativacao (se existir)
+        try:
+            cols_cn = [row[1] for row in cursor.execute("PRAGMA table_info(Contratos_Negativacao)").fetchall()]
+            plano_cn = "Plano" if "Plano" in cols_cn else "NULL"
+            valor_cn = "Valor" if "Valor" in cols_cn else "NULL"
+            # Negativacao tem Data_negativa_o
+            has_cn_table = True
+        except:
+            plano_cn = "NULL"; valor_cn = "NULL"
+            has_cn_table = False
+
+        # --- Construção dos Filtros ---
+        where_contracts = ["Vendedor = ?"]
+        params_contracts = [seller_id]
+        
+        if city: 
+            where_contracts.append("Cidade = ?")
+            params_contracts.append(city)
+        if year: 
+            where_contracts.append("STRFTIME('%Y', Data_ativa_o) = ?")
+            params_contracts.append(year)
+        if month: 
+            where_contracts.append("STRFTIME('%m', Data_ativa_o) = ?")
+            params_contracts.append(f'{int(month):02d}')
+        
+        where_clause_str = " AND ".join(where_contracts)
+
+        # --- Construção da Query UNION ---
+        # 1. Parte Contratos
+        query_parts = []
+        
+        query_parts.append(f"""
+            SELECT 
+                ID, Cliente, Data_ativa_o, Status_contrato, Data_cancelamento, 
+                0 AS is_negativado_table, Cidade, 
+                {plano_c} as Plano, {valor_c} as Valor
+            FROM Contratos
+            WHERE {where_clause_str}
+        """)
+
+        # 2. Parte Contratos_Negativacao (se existir)
+        if has_cn_table:
+            query_parts.append(f"""
+                SELECT 
+                    ID, Cliente, Data_ativa_o, 'Negativado' AS Status_contrato, Data_negativa_o AS Data_cancelamento, 
+                    1 AS is_negativado_table, Cidade, 
+                    {plano_cn} as Plano, {valor_cn} as Valor
+                FROM Contratos_Negativacao
+                WHERE {where_clause_str}
+            """)
+        
+        # Junta tudo
+        query_base = " UNION ".join(query_parts)
+        
+        # Parametros duplicados se houver UNION
+        final_params = params_contracts * len(query_parts)
+
+        # Executa no Pandas
+        df_contracts_all = pd.read_sql_query(query_base, conn, params=tuple(final_params))
+
+        if df_contracts_all.empty:
             return jsonify({"data": [], "total_rows": 0})
 
-        df_merged = df_contracts
+        # Remove duplicados (priorizando Negativado se existir nos dois)
+        df_contracts_all.sort_values(by='is_negativado_table', ascending=True, inplace=True)
+        df_contracts = df_contracts_all.drop_duplicates(subset=['ID'], keep='first')
         
+        # --- Lógica de Filtro por Tipo de Cliente ---
+        df_merged = df_contracts.copy()
+        
+        # Normaliza colunas booleanas
         df_merged['is_active'] = (df_merged['Status_contrato'] == 'Ativo')
-        df_merged['is_cancelado'] = (df_merged['Status_contrato'] == 'Inativo')
+        df_merged['is_cancelado'] = (df_merged['Status_contrato'].isin(['Inativo', 'Cancelado']))
+        # Negativado: status Negativado E cidade válida
         df_merged['is_negativado'] = (
             (df_merged['Status_contrato'] == 'Negativado') &
             (~df_merged['Cidade'].isin(['Caçapava', 'Jacareí', 'São José dos Campos']))
@@ -157,27 +232,32 @@ def api_seller_activations():
 
         total_rows = len(df_filtered)
 
+        # --- Cálculo de Permanência ---
         df_filtered = df_filtered.copy()
         
-        df_filtered.loc[:, 'end_date'] = pd.NaT
-        df_filtered.loc[:, 'permanencia_dias'] = pd.NA
-        df_filtered.loc[:, 'permanencia_meses'] = pd.NA
+        # Inicializa colunas
+        df_filtered['end_date'] = pd.NaT
+        df_filtered['permanencia_meses'] = pd.NA
         
-        df_filtered.loc[:, 'Data_ativa_o'] = pd.to_datetime(df_filtered['Data_ativa_o'], errors='coerce')
+        # Converte Data de Ativação
+        df_filtered['Data_ativa_o'] = pd.to_datetime(df_filtered['Data_ativa_o'], errors='coerce')
 
+        # Se for cancelado ou negativado, processa a data de saída
         if client_type in ['cancelado', 'negativado']:
+            # Na query UNION, mapeamos tanto Data_cancelamento quanto Data_negativa_o para a coluna 'Data_cancelamento'
             if 'Data_cancelamento' in df_filtered.columns:
-                 df_filtered.loc[:, 'end_date'] = df_filtered['Data_cancelamento']
+                 df_filtered['end_date'] = pd.to_datetime(df_filtered['Data_cancelamento'], errors='coerce')
             
-            df_filtered.loc[:, 'end_date'] = pd.to_datetime(df_filtered['end_date'], errors='coerce')
+            # Calcula permanência apenas onde temos as duas datas
+            mask_valid = df_filtered['end_date'].notna() & df_filtered['Data_ativa_o'].notna()
             
-            time_diff = (df_filtered['end_date'] - df_filtered['Data_ativa_o'])
-            permanencia_dias_series = time_diff / pd.to_timedelta(1, 'D')
-            permanencia_dias_numeric = pd.to_numeric(permanencia_dias_series, errors='coerce')
-            permanencia_meses_series = (permanencia_dias_numeric / 30.44).round().astype('Int64')
-            df_filtered.loc[:, 'permanencia_dias'] = permanencia_dias_numeric
-            df_filtered.loc[:, 'permanencia_meses'] = permanencia_meses_series
+            if mask_valid.any():
+                time_diff = (df_filtered.loc[mask_valid, 'end_date'] - df_filtered.loc[mask_valid, 'Data_ativa_o'])
+                # Converte para dias e depois meses
+                days = time_diff.dt.days
+                df_filtered.loc[mask_valid, 'permanencia_meses'] = (days / 30.44).round().astype('Int64')
         
+        # Paginação
         df_paginated = df_filtered.sort_values(by='Data_ativa_o', ascending=False).iloc[offset : offset + limit]
         
         data_list = []
@@ -188,7 +268,11 @@ def api_seller_activations():
                 "Data_ativa_o": row['Data_ativa_o'].strftime('%Y-%m-%d') if pd.notna(row['Data_ativa_o']) else None,
                 "Status_contrato": row['Status_contrato'],
                 "end_date": row['end_date'].strftime('%Y-%m-%d') if pd.notna(row['end_date']) else None,
-                "permanencia_meses": int(row['permanencia_meses']) if pd.notna(row['permanencia_meses']) else None
+                "permanencia_meses": int(row['permanencia_meses']) if pd.notna(row['permanencia_meses']) else None,
+                "Cidade": row['Cidade'] if 'Cidade' in row else None,
+                "Bairro": row['Bairro'] if 'Bairro' in row else None, # Bairro pode não vir na query simplificada, mas se precisar pode adicionar
+                "Plano": row['Plano'] if 'Plano' in row else None,
+                "Valor": row['Valor'] if 'Valor' in row else None
             })
 
         return jsonify({

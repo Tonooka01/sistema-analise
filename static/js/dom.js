@@ -31,14 +31,20 @@ export let clientSearchInput;
 export let applyClientSearchBtn;
 export let clearFiltersBtn; // <-- NOVO: Botão Limpar Filtros
 export let relevanceFilterSearch;
+export let relevanceFilterContainer; // Referência ao container do select para poder esconder
 export let sortPermanenceAsc;
-// NOVAS REFERÊNCIAS PARA DATAS EM CANCELAMENTO/NEGATIVAÇÃO
 export let customDateFilterContainer;
 export let customStartDate;
 export let customEndDate;
+// NOVAS REFERÊNCIAS PARA OS LABELS DE DATA
+export let customStartDateLabel;
+export let customEndDateLabel;
 
-// ... (Restante das exportações inalteradas) ...
+// Filtros Saúde Financeira
 export let financialHealthFiltersDiv;
+export let financialHealthDateContainer; // NOVO: Container das datas
+export let financialHealthStartDate;     // NOVO: Input data inicial
+export let financialHealthEndDate;       // NOVO: Input data final
 export let contractStatusFilter;
 export let accessStatusContainer;
 export let filterActiveClientsBtn;
@@ -256,92 +262,91 @@ export function initializeDom() {
     generalEndDate = document.getElementById('generalEndDate');
     cityFilterSelect = document.getElementById('cityFilter');
     cityFilterContainer = document.getElementById('city-filter-container');
-    btnFilterGeneral = document.getElementById('btnFilterGeneral'); // Inicializa botão
+    btnFilterGeneral = document.getElementById('btnFilterGeneral');
 
     // Filtros Busca Cliente e Datas Personalizadas
     customSearchFilterDiv = document.getElementById('custom-search-filter');
     clientSearchInput = document.getElementById('clientSearchInput');
     applyClientSearchBtn = document.getElementById('applyClientSearch');
-    clearFiltersBtn = document.getElementById('clearFiltersBtn'); // <-- Inicializa botão Limpar
+    clearFiltersBtn = document.getElementById('clearFiltersBtn');
     relevanceFilterSearch = document.getElementById('relevanceFilterSearch');
+    relevanceFilterContainer = document.getElementById('relevanceFilterContainer');
     sortPermanenceAsc = document.getElementById('sortPermanenceAsc');
     customDateFilterContainer = document.getElementById('custom-date-filters');
     customStartDate = document.getElementById('customStartDate');
     customEndDate = document.getElementById('customEndDate');
 
-    // ... (Restante da inicialização mantida) ...
+    // Captura os Labels das datas personalizadas
+    customStartDateLabel = document.querySelector('label[for="customStartDate"]');
+    customEndDateLabel = document.querySelector('label[for="customEndDate"]');
+
     // Filtros Saúde Financeira
     financialHealthFiltersDiv = document.getElementById('financial-health-filters');
+    financialHealthDateContainer = document.getElementById('financialHealthDateContainer');
+    financialHealthStartDate = document.getElementById('financialHealthStartDate');
+    financialHealthEndDate = document.getElementById('financialHealthEndDate');
     contractStatusFilter = document.getElementById('contractStatusFilter');
     accessStatusContainer = document.getElementById('accessStatusContainer');
     filterActiveClientsBtn = document.getElementById('filterActiveClientsBtn');
 
-    // Filtros Análise Vendedores
+    // ... (Restante da inicialização mantida) ...
     sellerAnalysisFiltersDiv = document.getElementById('seller-analysis-filters');
     sellerStartDate = document.getElementById('sellerStartDate');
     sellerEndDate = document.getElementById('sellerEndDate');
-    btnFilterSeller = document.getElementById('btnFilterSeller'); // Inicializa botão
+    btnFilterSeller = document.getElementById('btnFilterSeller');
 
-    // Filtros Cancelamento/Negativação por Cidade
     cityCancellationFiltersDiv = document.getElementById('city-cancellation-filters');
     cityCancellationStartDate = document.getElementById('cityCancellationStartDate');
     cityCancellationEndDate = document.getElementById('cityCancellationEndDate');
     relevanceFilterCity = document.getElementById('relevanceFilterCity');
-    btnFilterCityCancellation = document.getElementById('btnFilterCityCancellation'); // Inicializa botão
+    btnFilterCityCancellation = document.getElementById('btnFilterCityCancellation');
 
-    // Filtros Cancelamento/Negativação por Bairro
     neighborhoodAnalysisFiltersDiv = document.getElementById('neighborhood-analysis-filters');
     neighborhoodAnalysisCityFilter = document.getElementById('neighborhoodAnalysisCityFilter');
     neighborhoodAnalysisStartDate = document.getElementById('neighborhoodAnalysisStartDate');
     neighborhoodAnalysisEndDate = document.getElementById('neighborhoodAnalysisEndDate');
     relevanceFilterNeighborhood = document.getElementById('relevanceFilterNeighborhood');
-    btnFilterNeighborhood = document.getElementById('btnFilterNeighborhood'); // Inicializa botão
+    btnFilterNeighborhood = document.getElementById('btnFilterNeighborhood');
 
-    // Filtros Análise de Equipamento
     equipmentAnalysisFiltersDiv = document.getElementById('equipment-analysis-filters');
     equipmentAnalysisStartDate = document.getElementById('equipmentAnalysisStartDate');
     equipmentAnalysisEndDate = document.getElementById('equipmentAnalysisEndDate');
     equipmentAnalysisCityFilter = document.getElementById('equipmentAnalysisCityFilter');
     equipmentDateFilterContainer = document.getElementById('equipmentDateFilterContainer');
     relevanceFilterEquipment = document.getElementById('relevanceFilterEquipment');
-    btnFilterEquipment = document.getElementById('btnFilterEquipment'); // Inicializa botão
+    btnFilterEquipment = document.getElementById('btnFilterEquipment');
 
-    // Filtros Evolução Diária
     dailyEvolutionFiltersDiv = document.getElementById('daily-evolution-filters');
     dailyEvolutionStartDate = document.getElementById('dailyEvolutionStartDate');
     dailyEvolutionEndDate = document.getElementById('dailyEvolutionEndDate');
-    btnFilterDailyEvolution = document.getElementById('btnFilterDailyEvolution'); // Inicializa botão
+    btnFilterDailyEvolution = document.getElementById('btnFilterDailyEvolution');
 
     behaviorAnalysisContainer = document.getElementById('behavior-analysis-container');
     behaviorAnalysisTabs = document.getElementById('behavior-analysis-tabs');
     behaviorAnalysisTabContent = document.getElementById('behavior-analysis-tab-content');
 
-    // Filtros Faturamento
     faturamentoCidadeFiltersDiv = document.getElementById('faturamento-cidade-filters');
     faturamentoStartDate = document.getElementById('faturamentoStartDate');
     faturamentoEndDate = document.getElementById('faturamentoEndDate');
     faturamentoCityFilter = document.getElementById('faturamentoCityFilter');
-    btnFilterFaturamento = document.getElementById('btnFilterFaturamento'); // Inicializa botão
+    btnFilterFaturamento = document.getElementById('btnFilterFaturamento');
 
-    // Filtros Ativação Vendedor
     activationSellerFiltersDiv = document.getElementById('activation-seller-filters');
     activationSellerCityFilter = document.getElementById('activationSellerCityFilter');
     activationSellerStartDate = document.getElementById('activationSellerStartDate');
     activationSellerEndDate = document.getElementById('activationSellerEndDate');
-    btnFilterActivationSeller = document.getElementById('btnFilterActivationSeller'); // Inicializa botão
+    btnFilterActivationSeller = document.getElementById('btnFilterActivationSeller');
 
-    // Filtros Coorte
     cohortAnalysisFiltersDiv = document.getElementById('cohort-analysis-filters');
     cohortCityFilter = document.getElementById('cohortCityFilter');
     cohortStartDate = document.getElementById('cohortStartDate');
     cohortEndDate = document.getElementById('cohortEndDate');
-    btnFilterCohort = document.getElementById('btnFilterCohort'); // Inicializa botão
+    btnFilterCohort = document.getElementById('btnFilterCohort');
 
-    // Filtros Juros
     latePaymentFiltersDiv = document.getElementById('late-payment-filters');
     latePaymentStartDate = document.getElementById('latePaymentStartDate');
     latePaymentEndDate = document.getElementById('latePaymentEndDate');
-    btnFilterLatePayment = document.getElementById('btnFilterLatePayment'); // Inicializa botão
+    btnFilterLatePayment = document.getElementById('btnFilterLatePayment');
 
     // Modais (IDs mantidos)
     tableModal = document.getElementById('tableModal');

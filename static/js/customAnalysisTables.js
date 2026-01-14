@@ -224,7 +224,7 @@ export async function fetchAndRenderLatePaymentsAnalysis(searchTerm = '', page =
     }
 }
 
-export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', analysisType = 'atraso', page = 1, relevance = '') {
+export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', analysisType = 'atraso', page = 1, startDate = '', endDate = '') {
     utils.showLoading(true);
     state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'saude_financeira', currentSearchTerm: searchTerm, currentAnalysisType: analysisType }); 
     
@@ -244,7 +244,8 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
     
     if (contractStatus) params.append('status_contrato', contractStatus);
     if (accessStatus) params.append('status_acesso', accessStatus); 
-    if (relevance) params.append('relevance', relevance);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
 
     const url = `${state.API_BASE_URL}/api/custom_analysis/${endpoint}?${params.toString()}`;
     const title = analysisType === 'bloqueio' ? 'Análise de Saúde Financeira (Bloqueio Automático > 20 dias)' : 'Análise de Saúde Financeira (Atraso > 10 dias)';
@@ -262,6 +263,7 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
             { header: 'ID Contrato', key: 'Contrato_ID' },
             { header: 'Status Contrato', key: 'Status_contrato' },
             { header: 'Status Acesso', key: 'Status_acesso' },
+            { header: 'Data Ativação', render: r => r.Data_ativa_o ? utils.formatDate(r.Data_ativa_o) : 'N/A' },
             { header: '1ª Inadimplência', render: r => r.Primeira_Inadimplencia_Vencimento ? `<span class="detail-trigger cursor-pointer text-red-600 font-bold hover:underline" data-type="financial" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Razao_Social.replace(/"/g, '&quot;')}">${utils.formatDate(r.Primeira_Inadimplencia_Vencimento)}</span>` : 'N/A' },
             { header: 'Tem Reclamações?', render: r => r.Possui_Reclamacoes === 'Sim' ? `<span class="detail-trigger cursor-pointer text-orange-600 font-bold hover:underline" data-type="complaints" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Razao_Social.replace(/"/g, '&quot;')}">Sim</span>` : 'Não' },
             { header: 'Última Conexão', render: r => r.Ultima_Conexao ? `<span class="detail-trigger cursor-pointer text-blue-600 hover:underline" data-type="logins" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Razao_Social.replace(/"/g, '&quot;')}">${utils.formatDate(r.Ultima_Conexao)}</span>` : 'N/A' }
@@ -298,8 +300,8 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
         limit: currentState.rowsPerPage,
         offset: offset
     });
-    if (relevance) params.append('relevance', relevance);
-    if (relevanceReal) params.append('relevance_real', relevanceReal);
+    if (relevance) params.append('relevance', relevance); // Filtra por meses pagos
+    if (relevanceReal) params.append('relevance_real', relevanceReal); // Filtra por meses reais (NOVO)
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
     if (contractStatus) params.append('status_contrato', contractStatus);
@@ -347,8 +349,7 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                 });
             }
 
-            // --- GERAÇÃO DINÂMICA DE WIDGETS POR CIDADE ---
-            // Aqui garantimos que cada cidade tenha seu próprio widget separado
+            // --- GERAÇÃO DINÂMICA DE WIDGETS POR CIDADE (SEPARADOS) ---
             if (result.charts.city_distribution && result.charts.city_distribution.length > 0) {
                 const cityData = result.charts.city_distribution;
                 const cities = [...new Set(cityData.map(d => d.Cidade))].sort();
@@ -359,7 +360,7 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                 cities.forEach((city, idx) => {
                     const canvasId = `chart_city_${city.replace(/[^a-zA-Z0-9]/g, '_')}`;
                     
-                    // Criação do widget no GridStack
+                    // Adiciona um widget separado para cada cidade no GridStack
                     grid.addWidget({
                         w: 4, h: 6, x: currentX, y: currentY,
                         content: `<div class="grid-stack-item-content">
@@ -368,7 +369,7 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                                   </div>`
                     });
 
-                    // Lógica para organizar os widgets em 3 colunas (grid de 12 colunas)
+                    // Lógica para layout em 3 colunas (GridStack tem 12 colunas)
                     currentX += 4;
                     if (currentX >= 12) {
                         currentX = 0;
@@ -377,7 +378,7 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                 });
             }
 
-            // --- RENDERIZAÇÃO DOS GRÁFICOS ---
+            // --- RENDERIZAÇÃO DOS GRÁFICOS (APÓS DOM PRONTO) ---
             setTimeout(() => {
                 if (result.charts.paga_distribution) {
                     const dataPaga = result.charts.paga_distribution;
@@ -386,7 +387,10 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                         [{ data: dataPaga.map(d => d.Count) }], 
                         'Permanência Paga', 
                         { 
-                            formatterType: 'percent_only',
+                            formatterType: 'value_only',
+                            plugins: {
+                                tooltip: { callbacks: { label: function(context) { return `${context.label}: ${context.raw}`; } } }
+                            },
                             onClick: (event, elements, chart) => {
                                 if (elements.length > 0) {
                                     const index = elements[0].index;
@@ -405,7 +409,10 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                         [{ data: dataReal.map(d => d.Count) }], 
                         'Permanência Real', 
                         { 
-                            formatterType: 'percent_only',
+                            formatterType: 'value_only',
+                            plugins: {
+                                tooltip: { callbacks: { label: function(context) { return `${context.label}: ${context.raw}`; } } }
+                            },
                             onClick: (event, elements, chart) => {
                                 if (elements.length > 0) {
                                     const index = elements[0].index;
@@ -417,17 +424,15 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                     );
                 }
 
+                // Renderiza cada gráfico de cidade individualmente
                 if (result.charts.city_distribution) {
                     const cityData = result.charts.city_distribution;
                     const cities = [...new Set(cityData.map(d => d.Cidade))].sort();
-                    // Ordem fixa para garantir consistência visual
                     const faixasOrder = ['0-6', '7-12', '13-18', '19-25', '25-30', '31+'];
                     const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6'];
 
                     cities.forEach(city => {
-                        // Filtra os dados específicos da cidade
                         const dataForCity = cityData.filter(d => d.Cidade === city);
-                        // Mapeia os dados na ordem correta, preenchendo com 0 se não houver
                         const counts = faixasOrder.map(faixa => {
                             const entry = dataForCity.find(d => d.Faixa === faixa);
                             return entry ? entry.Count : 0;
@@ -443,26 +448,19 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                             }], 
                             `${city} (${totalCity})`, 
                             {
-                                formatterType: 'value_only',
-                                // Configuração de plugins para garantir formatação numérica simples (sem moeda)
+                                formatterType: 'value_only', // Força número simples
                                 plugins: {
                                     tooltip: {
                                         callbacks: {
                                             label: function(context) {
-                                                let label = context.label || '';
-                                                if (label) {
-                                                    label += ': ';
-                                                }
-                                                if (context.parsed !== null) {
-                                                    label += context.parsed; // Apenas o número
-                                                }
-                                                return label;
+                                                // Retorna apenas "Label: Valor" sem R$
+                                                return `${context.label}: ${context.raw}`;
                                             }
                                         }
                                     },
                                     datalabels: {
                                         formatter: (value, ctx) => {
-                                            return value; // Apenas o número
+                                            return value; // Retorna apenas o número
                                         },
                                         color: '#fff',
                                         font: {

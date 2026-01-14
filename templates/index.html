@@ -102,17 +102,17 @@
         <!-- NOVOS FILTROS DE DATA PARA CANCELAMENTO/NEGATIVAÇÃO/PERMANENCIA -->
         <div id="custom-date-filters" class="flex flex-col md:flex-row gap-4 items-center hidden">
             <div class="flex flex-col items-start w-full md:w-auto">
-                <label for="customStartDate" class="text-gray-700 font-medium mb-1">Data Inicial:</label>
+                <label for="customStartDate" class="text-gray-700 font-medium mb-1">Data Inicial (Ativação/Canc.):</label>
                 <input type="date" id="customStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
             </div>
             <div class="flex flex-col items-start w-full md:w-auto">
-                <label for="customEndDate" class="text-gray-700 font-medium mb-1">Data Final:</label>
+                <label for="customEndDate" class="text-gray-700 font-medium mb-1">Data Final (Ativação/Canc.):</label>
                 <input type="date" id="customEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
             </div>
         </div>
 
         <!-- FILTRO DE RELEVÂNCIA (PARA CANCELAMENTO/NEGATIVAÇÃO) -->
-        <div class="flex flex-col items-start w-full md:w-auto">
+        <div class="flex flex-col items-start w-full md:w-auto" id="relevanceFilterContainer">
             <label for="relevanceFilterSearch" class="text-gray-700 font-medium whitespace-nowrap text-sm mb-1">Relevância (Meses Pós-Ativação):</label>
             <select id="relevanceFilterSearch" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                 <option value="">Todos</option>
@@ -132,6 +132,18 @@
     
     <!-- FILTROS SAÚDE FINANCEIRA / EVOLUÇÃO ATIVOS -->
     <div id="financial-health-filters" class="flex flex-wrap justify-center items-end gap-6 my-4 hidden">
+        <!-- NOVO: Filtros de Data para Saúde Financeira -->
+        <div id="financialHealthDateContainer" class="flex flex-col md:flex-row gap-4 items-center hidden">
+             <div class="flex flex-col items-start w-full md:w-auto">
+                <label for="financialHealthStartDate" class="text-gray-700 font-medium mb-1">Data Inicial (Instalação):</label>
+                <input type="date" id="financialHealthStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+            <div class="flex flex-col items-start w-full md:w-auto">
+                <label for="financialHealthEndDate" class="text-gray-700 font-medium mb-1">Data Final (Instalação):</label>
+                <input type="date" id="financialHealthEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+            </div>
+        </div>
+
         <!-- Status do Contrato (Select) -->
         <div class="flex flex-col">
             <label for="contractStatusFilter" class="text-gray-700 font-medium mb-1 text-sm">Status do Contrato:</label>
@@ -157,11 +169,11 @@
     <!-- FILTROS FATURAMENTO CIDADE -->
     <div id="faturamento-cidade-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
-            <label for="faturamentoStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
+            <label for="faturamentoStartDate" class="text-gray-700 font-medium mb-2">Data Inicial (Pagamento):</label>
             <input type="date" id="faturamentoStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="faturamentoEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <label for="faturamentoEndDate" class="text-gray-700 font-medium mb-2">Data Final (Pagamento):</label>
             <input type="date" id="faturamentoEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
@@ -177,11 +189,11 @@
     <!-- FILTROS FINANCEIROS / PRINCIPAL -->
     <div id="financial-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
-            <label for="generalStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
+            <label for="generalStartDate" class="text-gray-700 font-medium mb-2">Data Inicial (Geral):</label>
             <input type="date" id="generalStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="generalEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <label for="generalEndDate" class="text-gray-700 font-medium mb-2">Data Final (Geral):</label>
             <input type="date" id="generalEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div id="city-filter-container" class="flex flex-col items-center hidden">
@@ -197,11 +209,11 @@
     <!-- FILTROS PARA ANÁLISE DE VENDEDORES (CHURN) -->
     <div id="seller-analysis-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
-            <label for="sellerStartDate" class="text-gray-700 font-medium mb-2">Data Inicial: Ativação</label>
+            <label for="sellerStartDate" class="text-gray-700 font-medium mb-2">Data Inicial (Canc./Negat.):</label>
             <input type="date" id="sellerStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="sellerEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <label for="sellerEndDate" class="text-gray-700 font-medium mb-2">Data Final (Canc./Negat.):</label>
             <input type="date" id="sellerEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <!-- BOTÃO FILTRAR -->
@@ -252,11 +264,11 @@
     <!-- FILTROS PARA CANCELAMENTO/NEGATIVAÇÃO POR CIDADE -->
     <div id="city-cancellation-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
-            <label for="cityCancellationStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
+            <label for="cityCancellationStartDate" class="text-gray-700 font-medium mb-2">Data Inicial (Canc./Negat.):</label>
             <input type="date" id="cityCancellationStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="cityCancellationEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <label for="cityCancellationEndDate" class="text-gray-700 font-medium mb-2">Data Final (Canc./Negat.):</label>
             <input type="date" id="cityCancellationEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <!-- FILTRO DE RELEVÂNCIA -->
@@ -284,11 +296,11 @@
             </select>
         </div>
         <div class="flex flex-col items-center">
-            <label for="neighborhoodAnalysisStartDate" class="text-gray-700 font-medium mb-2">Data Inicial: </label>
+            <label for="neighborhoodAnalysisStartDate" class="text-gray-700 font-medium mb-2">Data Inicial (Canc./Negat.):</label>
             <input type="date" id="neighborhoodAnalysisStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="neighborhoodAnalysisEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <label for="neighborhoodAnalysisEndDate" class="text-gray-700 font-medium mb-2">Data Final (Canc./Negat.):</label>
             <input type="date" id="neighborhoodAnalysisEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <!-- FILTRO DE RELEVÂNCIA -->
@@ -317,11 +329,11 @@
         </div>
         <div id="equipmentDateFilterContainer" class="flex gap-4">
             <div class="flex flex-col items-center">
-                <label for="equipmentAnalysisStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:</label>
+                <label for="equipmentAnalysisStartDate" class="text-gray-700 font-medium mb-2">Data Inicial (Canc./Negat.):</label>
                 <input type="date" id="equipmentAnalysisStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
             </div>
             <div class="flex flex-col items-center">
-                <label for="equipmentAnalysisEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+                <label for="equipmentAnalysisEndDate" class="text-gray-700 font-medium mb-2">Data Final (Canc./Negat.):</label>
                 <input type="date" id="equipmentAnalysisEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
             </div>
         </div>
@@ -344,11 +356,11 @@
     <!-- FILTROS EVOLUÇÃO DIÁRIA -->
     <div id="daily-evolution-filters" class="flex flex-wrap justify-center items-end gap-4 my-8 hidden">
         <div class="flex flex-col items-center">
-            <label for="dailyEvolutionStartDate" class="text-gray-700 font-medium mb-2">Data Inicial:Ativação</label>
+            <label for="dailyEvolutionStartDate" class="text-gray-700 font-medium mb-2">Data Inicial (Vencimento):</label>
             <input type="date" id="dailyEvolutionStartDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <div class="flex flex-col items-center">
-            <label for="dailyEvolutionEndDate" class="text-gray-700 font-medium mb-2">Data Final:</label>
+            <label for="dailyEvolutionEndDate" class="text-gray-700 font-medium mb-2">Data Final (Vencimento):</label>
             <input type="date" id="dailyEvolutionEndDate" class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
         </div>
         <!-- BOTÃO FILTRAR -->

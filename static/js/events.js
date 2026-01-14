@@ -24,9 +24,9 @@ import { exportTableToCSV } from './utils.js';
  * Lida com a mudança no seletor de Análise Personalizada.
  * Mostra os filtros relevantes e inicia a busca dos dados APENAS se solicitado.
  * @param {number} [page=1] - A página a ser buscada.
- * @param {boolean} [forceFetch=false] - Se deve forçar a busca de dados (usado pelos botões de filtro).
+ * @param {boolean} [triggerFetch=true] - Se deve executar a busca de dados imediatamente.
  */
-function handleCustomAnalysisChange(page = 1, forceFetch = false) {
+function handleCustomAnalysisChange(page = 1, triggerFetch = true) {
     const selectedAnalysis = dom.customAnalysisSelector?.value;
     if (!selectedAnalysis) return;
 
@@ -50,7 +50,7 @@ function handleCustomAnalysisChange(page = 1, forceFetch = false) {
     // Lógica para determinar se deve buscar dados automaticamente ou esperar filtro
     // O padrão é carregar (true), exceto para análises específicas que exigem filtro prévio
     let shouldFetch = true;
-    if (selectedAnalysis === 'real_permanence' && !forceFetch) {
+    if (selectedAnalysis === 'real_permanence' && !triggerFetch) {
         shouldFetch = false;
     }
 
@@ -127,22 +127,31 @@ function handleCustomAnalysisChange(page = 1, forceFetch = false) {
         case 'atrasos_e_nao_pagos':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
             if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.add('hidden');
+            if (dom.relevanceFilterContainer) dom.relevanceFilterContainer.classList.add('hidden');
             if (shouldFetch) customTables.fetchAndRenderLatePaymentsAnalysis(searchTerm, page);
             break;
 
         case 'saude_financeira_contrato_atraso':
         case 'saude_financeira_contrato_bloqueio':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
+            // Esconde data PADRÃO e relevância
             if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.add('hidden'); 
+            if (dom.relevanceFilterContainer) dom.relevanceFilterContainer.classList.add('hidden'); 
+            
             if (dom.financialHealthFiltersDiv) dom.financialHealthFiltersDiv.classList.remove('hidden');
+            if (dom.financialHealthDateContainer) dom.financialHealthDateContainer.classList.remove('hidden'); // Mostra NOVO filtro data
+            
             if (dom.applyClientSearchBtn) dom.applyClientSearchBtn.classList.add('hidden');
 
             customTables.populateContractStatusFilters();
             
-            if (shouldFetch) {
+            if (triggerFetch || shouldFetch) { // Usa shouldFetch que é true por padrão
                 const analysisType = selectedAnalysis.endsWith('_bloqueio') ? 'bloqueio' : 'atraso';
-                const relevanceFinancial = dom.relevanceFilterSearch?.value || '';
-                customTables.fetchAndRenderFinancialHealthAnalysis(searchTerm, analysisType, page, relevanceFinancial); 
+                // Pega as datas dos novos inputs
+                const startDate = dom.financialHealthStartDate?.value || '';
+                const endDate = dom.financialHealthEndDate?.value || '';
+                
+                customTables.fetchAndRenderFinancialHealthAnalysis(searchTerm, analysisType, page, startDate, endDate); 
                 
                 if (dom.viewTableBtn) {
                     dom.viewTableBtn.classList.remove('hidden');
@@ -154,7 +163,12 @@ function handleCustomAnalysisChange(page = 1, forceFetch = false) {
         case 'cancellations':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
             if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.remove('hidden');
+            if (dom.relevanceFilterContainer) dom.relevanceFilterContainer.classList.remove('hidden');
             
+            // --- ATUALIZA RÓTULOS PARA CANCELAMENTO ---
+            if (dom.customStartDateLabel) dom.customStartDateLabel.textContent = 'Data Inicial (Cancelamento):';
+            if (dom.customEndDateLabel) dom.customEndDateLabel.textContent = 'Data Final (Cancelamento):';
+
             if (shouldFetch) {
                 const relevanceSearch = dom.relevanceFilterSearch?.value || '';
                 const cancelStart = dom.customStartDate?.value || '';
@@ -166,7 +180,12 @@ function handleCustomAnalysisChange(page = 1, forceFetch = false) {
         case 'negativacao':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
             if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.remove('hidden');
+            if (dom.relevanceFilterContainer) dom.relevanceFilterContainer.classList.remove('hidden');
             
+            // --- ATUALIZA RÓTULOS PARA NEGATIVAÇÃO ---
+            if (dom.customStartDateLabel) dom.customStartDateLabel.textContent = 'Data Inicial (Negativação):';
+            if (dom.customEndDateLabel) dom.customEndDateLabel.textContent = 'Data Final (Negativação):';
+
             if (shouldFetch) {
                 const relevanceSearchNeg = dom.relevanceFilterSearch?.value || '';
                 const negStart = dom.customStartDate?.value || '';
@@ -179,13 +198,21 @@ function handleCustomAnalysisChange(page = 1, forceFetch = false) {
             // 1. Filtros de Busca e Data
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
             if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.remove('hidden');
+            if (dom.relevanceFilterContainer) dom.relevanceFilterContainer.classList.remove('hidden');
+
             // 2. Filtros de Status
             if (dom.financialHealthFiltersDiv) dom.financialHealthFiltersDiv.classList.remove('hidden');
             if (dom.filterActiveClientsBtn) dom.filterActiveClientsBtn.classList.add('hidden');
+            // Esconde filtro de data específico de saúde financeira se aparecer por engano
+            if (dom.financialHealthDateContainer) dom.financialHealthDateContainer.classList.add('hidden');
             
+            // --- ATUALIZA RÓTULOS PARA ATIVAÇÃO ---
+            if (dom.customStartDateLabel) dom.customStartDateLabel.textContent = 'Data Inicial (Ativação):';
+            if (dom.customEndDateLabel) dom.customEndDateLabel.textContent = 'Data Final (Ativação):';
+
             customTables.populateContractStatusFilters();
 
-            // SÓ EXECUTA SE shouldFetch FOR TRUE (Clicou em Filtrar ou forceFetch=true)
+            // SÓ EXECUTA SE shouldFetch FOR TRUE (Clicou em Filtrar ou triggerFetch=true)
             if (shouldFetch) {
                 const relevancePermanence = dom.relevanceFilterSearch?.value || '';
                 const permStart = dom.customStartDate?.value || '';
@@ -335,7 +362,7 @@ export function initializeEventListeners() {
         utils.resetAllFilters();
         utils.setActiveControl(dom.customAnalysisSelector);
 
-        // Chama com forceFetch = false. A lógica interna decidirá se deve buscar ou não.
+        // Chama com triggerFetch = false. A lógica interna decidirá se deve buscar ou não.
         handleCustomAnalysisChange(1, false);
     });
 
@@ -355,10 +382,12 @@ export function initializeEventListeners() {
          else if (currentAnalysis === 'saude_financeira') {
              const searchTerm = dom.clientSearchInput?.value || '';
              const analysisType = currentState.currentAnalysisType || 'atraso';
-             const relevance = dom.relevanceFilterSearch?.value || '';
+             // Pega as datas dos novos inputs
+             const startDate = dom.financialHealthStartDate?.value || '';
+             const endDate = dom.financialHealthEndDate?.value || '';
              
              // Dispara a busca manual ao clicar
-             customTables.fetchAndRenderFinancialHealthAnalysis(searchTerm, analysisType, 1, relevance);
+             customTables.fetchAndRenderFinancialHealthAnalysis(searchTerm, analysisType, 1, startDate, endDate);
          }
     });
 
@@ -376,7 +405,7 @@ export function initializeEventListeners() {
     // --- NOVO LISTENER: Botão Limpar Filtros ---
     dom.clearFiltersBtn?.addEventListener('click', () => {
         utils.resetAllFilters(); // Reseta os valores dos inputs e estados
-        // Recarrega a análise, mas com forceFetch=false para voltar ao estado inicial (sem dados se for real_permanence)
+        // Recarrega a análise, mas com triggerFetch=false para voltar ao estado inicial (sem dados se for real_permanence)
         handleCustomAnalysisChange(1, false); 
     });
 

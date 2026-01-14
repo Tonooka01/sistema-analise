@@ -3,7 +3,7 @@ import * as dom from '../dom.js';
 import * as utils from '../utils.js';
 import { renderChart, destroyAllMainCharts, populateChartTypeSelector } from '../charts.js';
 import { getGridStack } from '../state.js';
-import { API_BASE_URL } from '../state.js'; // Caso precise usar a constante diretamente, embora state.API_BASE_URL funcione
+import { API_BASE_URL } from '../state.js'; 
 
 // --- Helper para configurar área de gráficos ---
 function setupChartsArea() {
@@ -21,7 +21,7 @@ function setupChartsArea() {
         if(grid) {
             grid.removeAll(); 
         }
-        // FORÇA BRUTA: Garante que não sobrou nenhum HTML "órfão" (como tabelas antigas injetadas manualmente)
+        // FORÇA BRUTA: Garante que não sobrou nenhum HTML "órfão"
         dom.mainChartsArea.innerHTML = ''; 
     }
 }
@@ -96,7 +96,28 @@ export async function fetchAndRenderBillingByCityAnalysis(startDate = '', endDat
         };
 
         const statusColorsBilling = {'Recebido': '#48bb78', 'A receber': '#f59e0b', 'Cancelado': '#6b7280'};
-        const commonStackedOptions = { scales: { x: { stacked: true }, y: { stacked: true } } };
+        
+        // --- CONFIGURAÇÃO COM MOEDA (R$) ---
+        const commonStackedOptions = { 
+            scales: { x: { stacked: true }, y: { stacked: true } },
+            formatterType: 'currency', // FORÇA A FORMATAÇÃO DE MOEDA (R$)
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
+                            }
+                            return label;
+                        }
+                    }
+                }
+            }
+        };
 
         // 1. Gráfico Original (Por Data de Pagamento)
         if (result.faturamento_total?.length > 0) {
@@ -118,7 +139,7 @@ export async function fetchAndRenderBillingByCityAnalysis(startDate = '', endDat
              renderBillingChart('billingChart2', 'Contas a Receber (Ativos)', { labels: labels2, datasets: datasets2 }, [{value: 'bar_vertical', label: 'Barra V', checked: true}, {value: 'line', label: 'Linha'}], commonStackedOptions, { w: 6, h: 6, x: 6, y: 0 });
         }
 
-        // 3. NOVO GRÁFICO (Por Data de Crédito)
+        // 3. Gráfico (Por Data de Crédito)
         if (result.faturamento_credito?.length > 0) {
             const dataCredito = result.faturamento_credito;
             const labelsCredito = [...new Set(dataCredito.map(item => item.Month))].sort();
@@ -127,7 +148,6 @@ export async function fetchAndRenderBillingByCityAnalysis(startDate = '', endDat
                 data: labelsCredito.map(label => dataCredito.find(d => d.Month === label && d.Status === status)?.Total_Value || 0), 
                 backgroundColor: statusColorsBilling[status] || '#a0aec0'
             }));
-            // Posiciona na linha de baixo (y: 6), lado esquerdo (x: 0)
             renderBillingChart('billingChartCredito', 'Contas a Receber (Todos - Data Crédito)', { labels: labelsCredito, datasets: datasetsCredito }, 
                 [{value: 'bar_vertical', label: 'Barra V', checked: true}, {value: 'line', label: 'Linha'}], 
                 commonStackedOptions, 
@@ -142,8 +162,30 @@ export async function fetchAndRenderBillingByCityAnalysis(startDate = '', endDat
             const datasets3 = [...new Set(data3.map(item => item.Month))].sort().map((month, index) => ({
                 label: month, data: labels3.map(day => data3.find(d => d.Month === month && d.Due_Day === day)?.Total_Value || 0), backgroundColor: ['#3b82f6', '#10b981', '#f97316', '#8b5cf6', '#ec4899'][index % 5]
             }));
-            // Reposiciona para acomodar o novo gráfico: x: 6 (lado direito), y: 6 (mesma linha do crédito)
-            renderBillingChart('billingChart3', 'Comparativo por Dia de Vencimento', { labels: labels3, datasets: datasets3 }, [{value: 'bar_vertical', label: 'Barra V', checked: true}, {value: 'bar_horizontal', label: 'Barra H'}], { scales: { y: { beginAtZero: true } } }, { w: 6, h: 6, x: 6, y: 6 });
+            
+            // Adiciona formatterType: 'currency' também para este gráfico
+            const dayChartOptions = { 
+                scales: { y: { beginAtZero: true } },
+                formatterType: 'currency',
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            };
+
+            renderBillingChart('billingChart3', 'Comparativo por Dia de Vencimento', { labels: labels3, datasets: datasets3 }, [{value: 'bar_vertical', label: 'Barra V', checked: true}, {value: 'bar_horizontal', label: 'Barra H'}], dayChartOptions, { w: 6, h: 6, x: 6, y: 6 });
         }
 
     } catch (error) {
