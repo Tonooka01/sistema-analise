@@ -7,7 +7,6 @@ from utils_api import get_db, parse_relevance_filter, add_date_range_filter
 churn_bp = Blueprint('churn_bp', __name__)
 
 # --- CTE FINANCEIRA ESTÁTICA ---
-# Definida globalmente para evitar repetição de código em cada função
 financial_cte_static = """
     FinancialStats AS (
         SELECT
@@ -44,7 +43,7 @@ def apply_chart_filters(where_clauses, params, filter_col, filter_val):
         elif filter_val == 'Inadimplente (>30d)': where_clauses.append("Media_Atraso > 30")
         elif filter_val == 'Sem Histórico': where_clauses.append("Media_Atraso IS NULL")
 
-# --- 1. ROTA DE PERMANÊNCIA REAL (CORRIGIDA E ATUALIZADA) ---
+# --- 1. ROTA DE PERMANÊNCIA REAL ---
 @churn_bp.route('/real_permanence')
 def api_real_permanence():
     conn = get_db()
@@ -60,7 +59,6 @@ def api_real_permanence():
         status_contrato = request.args.get('status_contrato')
         status_acesso = request.args.get('status_acesso')
 
-        # --- DETECÇÃO DINÂMICA DE TABELAS E COLUNAS ---
         cursor = conn.cursor()
         existing_tables = [row[0] for row in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
         has_equipamento = 'Equipamento' in existing_tables
@@ -83,12 +81,10 @@ def api_real_permanence():
             for cand in ['Data', 'DATA', 'data', 'Data_movimento']:
                 if cand in equip_columns: col_data_equip = cand; break
 
-        # --- FILTROS DE CONTRATO (APLICADOS NA CTE) ---
         contract_where_clauses = []
         contract_params = []
 
         if search_term:
-            # Filtra por Nome do Cliente OU Cidade (para suportar o clique no gráfico de cidade)
             contract_where_clauses.append("(Cliente LIKE ? OR Cidade LIKE ?)")
             contract_params.extend([f'%{search_term}%', f'%{search_term}%'])
 
@@ -111,7 +107,6 @@ def api_real_permanence():
             contract_where_clauses.append(f"Status_acesso IN ({placeholders})")
             contract_params.extend(acesso_list)
 
-        # --- FILTRO DE EXCLUSÃO DE CIDADES ---
         cities_to_exclude = ['Caçapava', 'Jacareí', 'São José dos Campos']
         placeholders_excl = ','.join(['?'] * len(cities_to_exclude))
         contract_where_clauses.append(f"Cidade NOT IN ({placeholders_excl})")
@@ -120,8 +115,6 @@ def api_real_permanence():
         contract_where_sql = " WHERE " + " AND ".join(contract_where_clauses) if contract_where_clauses else ""
 
         # --- CONSTRUÇÃO DAS CTES ---
-        
-        # 1. AllContracts (Contratos Filtrados na Origem)
         cols_contratos = "ID, Cliente, Cidade, Bairro, Data_ativa_o, Data_cancelamento, Status_contrato, Status_acesso"
         if has_col_vendedor: cols_contratos += ", Vendedor"
         else: cols_contratos += ", NULL AS Vendedor"
@@ -148,7 +141,6 @@ def api_real_permanence():
             )
             """
 
-        # 2. FinancialStats (Calculado apenas para os contratos filtrados)
         cte_financial = """
             FinancialStats AS (
                 SELECT
@@ -165,7 +157,6 @@ def api_real_permanence():
             )
         """
 
-        # 3. Equipamento (Apenas para contratos filtrados)
         if has_equipamento:
             cte_equipment = f"""
             ActiveEquipments AS (
@@ -213,7 +204,7 @@ def api_real_permanence():
                     {seller_select}
                     C.Cidade,
                     C.Bairro,
-                    C.Data_ativa_o,
+                    C.Data_ativa_o AS data_ativacao,
                     C.Data_cancelamento,
                     C.Status_contrato,
                     C.Status_acesso,
@@ -242,7 +233,6 @@ def api_real_permanence():
             )
         """
         
-        # --- FILTROS PARA A TABELA (Inclui Relevância) ---
         final_where_clauses = []
         final_params = [] 
 
@@ -264,10 +254,6 @@ def api_real_permanence():
 
         final_where_sql = " WHERE " + " AND ".join(final_where_clauses) if final_where_clauses else ""
 
-        # --- PREPARAÇÃO DOS FILTROS E QUERIES DOS GRÁFICOS ---
-        
-        # Parâmetros para filtros externos (aplicados sobre JoinedData)
-        # Importante: search_term deve adicionar 2 parâmetros (Cliente e Cidade)
         params_charts = []
         if search_term: params_charts.extend([f'%{search_term}%', f'%{search_term}%'])
         if start_date: params_charts.append(start_date)
@@ -275,11 +261,10 @@ def api_real_permanence():
         if status_contrato: params_charts.extend(status_contrato.split(','))
         if status_acesso: params_charts.extend(status_acesso.split(','))
         
-        # WHERE para gráficos (Usando alias JD)
         where_clauses_charts = []
         if search_term: where_clauses_charts.append("(JD.Cliente LIKE ? OR JD.Cidade LIKE ?)")
-        if start_date: where_clauses_charts.append("DATE(JD.Data_ativa_o) >= ?")
-        if end_date: where_clauses_charts.append("DATE(JD.Data_ativa_o) <= ?")
+        if start_date: where_clauses_charts.append("DATE(JD.data_ativacao) >= ?")
+        if end_date: where_clauses_charts.append("DATE(JD.data_ativacao) <= ?")
         if status_contrato: 
             placeholders = ','.join(['?'] * len(status_contrato.split(',')))
             where_clauses_charts.append(f"JD.Status_contrato IN ({placeholders})")
@@ -289,83 +274,24 @@ def api_real_permanence():
             
         where_sql_charts = " WHERE " + " AND ".join(where_clauses_charts) if where_clauses_charts else ""
 
-        # Query Distribuição Paga (Bucket Atualizado)
-        # 0-6, 7-12, 13-18, 19-25, 25-30 (interpretei como 26-30 para não sobrepor), 31+
-        chart_paga_query = f"""
-            {base_query}
-            SELECT 
-                CASE 
-                    WHEN Permanencia_Paga <= 6 THEN '0-6'
-                    WHEN Permanencia_Paga BETWEEN 7 AND 12 THEN '7-12'
-                    WHEN Permanencia_Paga BETWEEN 13 AND 18 THEN '13-18'
-                    WHEN Permanencia_Paga BETWEEN 19 AND 25 THEN '19-25'
-                    WHEN Permanencia_Paga BETWEEN 26 AND 30 THEN '25-30'
-                    ELSE '31+'
-                END as Faixa,
-                COUNT(*) as Count
-            FROM JoinedData AS JD {where_sql_charts}
-            GROUP BY Faixa
-        """
-        
-        # Query Distribuição Real (Bucket Atualizado)
-        chart_real_query = f"""
-            {base_query}
-            SELECT 
-                CASE 
-                    WHEN Permanencia_Real_Calendario <= 6 THEN '0-6'
-                    WHEN Permanencia_Real_Calendario BETWEEN 7 AND 12 THEN '7-12'
-                    WHEN Permanencia_Real_Calendario BETWEEN 13 AND 18 THEN '13-18'
-                    WHEN Permanencia_Real_Calendario BETWEEN 19 AND 25 THEN '19-25'
-                    WHEN Permanencia_Real_Calendario BETWEEN 26 AND 30 THEN '25-30'
-                    ELSE '31+'
-                END as Faixa,
-                COUNT(*) as Count
-            FROM JoinedData AS JD {where_sql_charts}
-            GROUP BY Faixa
-        """
+        chart_paga_query = f"{base_query} SELECT CASE WHEN Permanencia_Paga <= 6 THEN '0-6' WHEN Permanencia_Paga BETWEEN 7 AND 12 THEN '7-12' WHEN Permanencia_Paga BETWEEN 13 AND 18 THEN '13-18' WHEN Permanencia_Paga BETWEEN 19 AND 25 THEN '19-25' WHEN Permanencia_Paga BETWEEN 26 AND 30 THEN '25-30' ELSE '31+' END as Faixa, COUNT(*) as Count FROM JoinedData AS JD {where_sql_charts} GROUP BY Faixa"
+        chart_real_query = f"{base_query} SELECT CASE WHEN Permanencia_Real_Calendario <= 6 THEN '0-6' WHEN Permanencia_Real_Calendario BETWEEN 7 AND 12 THEN '7-12' WHEN Permanencia_Real_Calendario BETWEEN 13 AND 18 THEN '13-18' WHEN Permanencia_Real_Calendario BETWEEN 19 AND 25 THEN '19-25' WHEN Permanencia_Real_Calendario BETWEEN 26 AND 30 THEN '25-30' ELSE '31+' END as Faixa, COUNT(*) as Count FROM JoinedData AS JD {where_sql_charts} GROUP BY Faixa"
 
-        # Query Por Cidade (Bucket Atualizado)
         city_clauses = list(where_clauses_charts)
         city_clauses.append("JD.Cidade IS NOT NULL AND TRIM(JD.Cidade) != ''")
         city_where_sql = " WHERE " + " AND ".join(city_clauses)
+        chart_city_query = f"{base_query} SELECT Cidade, CASE WHEN Permanencia_Paga <= 6 THEN '0-6' WHEN Permanencia_Paga BETWEEN 7 AND 12 THEN '7-12' WHEN Permanencia_Paga BETWEEN 13 AND 18 THEN '13-18' WHEN Permanencia_Paga BETWEEN 19 AND 25 THEN '19-25' WHEN Permanencia_Paga BETWEEN 26 AND 30 THEN '25-30' ELSE '31+' END as Faixa, COUNT(*) as Count FROM JoinedData AS JD {city_where_sql} GROUP BY Cidade, Faixa"
 
-        chart_city_query = f"""
-            {base_query}
-            SELECT 
-                Cidade,
-                CASE 
-                    WHEN Permanencia_Paga <= 6 THEN '0-6'
-                    WHEN Permanencia_Paga BETWEEN 7 AND 12 THEN '7-12'
-                    WHEN Permanencia_Paga BETWEEN 13 AND 18 THEN '13-18'
-                    WHEN Permanencia_Paga BETWEEN 19 AND 25 THEN '19-25'
-                    WHEN Permanencia_Paga BETWEEN 26 AND 30 THEN '25-30'
-                    ELSE '31+'
-                END as Faixa,
-                COUNT(*) as Count
-            FROM JoinedData AS JD {city_where_sql}
-            GROUP BY Cidade, Faixa
-        """
-
-        # Execução das queries de gráfico
         full_chart_params = contract_params + params_charts
-        
         chart_paga_data = conn.execute(chart_paga_query, tuple(full_chart_params)).fetchall()
         chart_real_data = conn.execute(chart_real_query, tuple(full_chart_params)).fetchall()
         chart_city_data = conn.execute(chart_city_query, tuple(full_chart_params)).fetchall()
 
-        # --- DADOS DA TABELA ---
         all_params_table = contract_params + final_params
-        
         count_query = f"{base_query} SELECT COUNT(*) FROM JoinedData {final_where_sql}"
         total_rows = conn.execute(count_query, tuple(all_params_table)).fetchone()[0]
 
-        data_query = f"""
-            {base_query} 
-            SELECT * FROM JoinedData {final_where_sql} 
-            ORDER BY Permanencia_Paga DESC, Cliente 
-            LIMIT ? OFFSET ?
-        """
-        
+        data_query = f"{base_query} SELECT * FROM JoinedData {final_where_sql} ORDER BY Permanencia_Paga DESC, Cliente LIMIT ? OFFSET ?"
         data_params = all_params_table + [limit, offset]
         data = conn.execute(data_query, tuple(data_params)).fetchall()
 
@@ -380,7 +306,6 @@ def api_real_permanence():
         })
 
     except sqlite3.Error as e:
-        print(f"Erro na análise de permanência real: {e}")
         traceback.print_exc()
         return jsonify({"error": f"Erro interno ao processar análise. Detalhe: {e}"}), 500
     finally:
@@ -724,7 +649,6 @@ def api_cohort_analysis():
         cast_as_int_cn = "CAST(TRIM(ID) AS INTEGER)"
         cast_as_int_car = "CAST(TRIM(ID_Contrato_Recorrente) AS INTEGER)"
 
-        
         if negativacao_table_exists:
             all_contracts_cte = f"""
                 WITH AllContracts AS (
@@ -1148,6 +1072,7 @@ def api_cancellations_by_neighborhood():
     finally:
         if conn: conn.close()
 
+# --- 8. ROTA DE CANCELAMENTO POR EQUIPAMENTO ---
 @churn_bp.route('/cancellations_by_equipment')
 def api_cancellations_by_equipment():
     conn = get_db()
@@ -1266,6 +1191,7 @@ def api_cancellations_by_equipment():
     finally:
         if conn: conn.close()
 
+# --- 9. ROTA DE EQUIPAMENTO POR OLT ---
 @churn_bp.route('/equipment_by_olt')
 def api_equipment_by_olt():
     conn = get_db()
