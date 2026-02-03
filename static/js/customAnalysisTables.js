@@ -4,6 +4,36 @@ import * as utils from './utils.js';
 import { renderChart, destroySpecificChart } from './charts.js';
 import { getGridStack } from './state.js'; // Importação necessária para o GridStack
 
+// --- Helper: Download CSV/Excel ---
+function downloadCSV(data, filename) {
+    if (!data || data.length === 0) {
+        utils.showError('Sem dados para exportar.');
+        return;
+    }
+    const separator = ';';
+    // Pega as chaves do primeiro objeto para o cabeçalho
+    const keys = Object.keys(data[0]);
+    const csvContent = [
+        keys.join(separator),
+        ...data.map(row => keys.map(k => {
+            let val = row[k] === null || row[k] === undefined ? '' : String(row[k]);
+            // Limpa quebras de linha e escapa aspas duplas
+            val = val.replace(/"/g, '""').replace(/\n/g, ' ');
+            return `"${val}"`;
+        }).join(separator))
+    ].join('\n');
+
+    // Adiciona BOM para o Excel reconhecer acentos
+    const blob = new Blob(["\ufeff", csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 // --- Helper: Badge de Comportamento de Pagamento ---
 function getPaymentBehaviorBadge(avgDays) {
     if (avgDays === null || avgDays === undefined) return '<span class="text-xs text-gray-400 mt-1 block">Sem histórico</span>';
@@ -89,6 +119,34 @@ export async function populateContractStatusFilters() {
     }
 }
 
+// --- FUNÇÃO NOVA: Busca TODOS os dados para exportação (limit alto) ---
+async function fetchAllRealPermanenceData(searchTerm, relevance, startDate, endDate, relevanceReal) {
+    const contractStatus = dom.contractStatusFilter?.value || '';
+    let accessStatus = '';
+    if (dom.accessStatusContainer) {
+        const checked = dom.accessStatusContainer.querySelectorAll('input[type="checkbox"]:checked');
+        accessStatus = Array.from(checked).map(cb => cb.value).join(',');
+    }
+
+    // Limit 100000 para garantir que pega tudo
+    const params = new URLSearchParams({
+        search_term: searchTerm,
+        limit: 100000, 
+        offset: 0
+    });
+    if (relevance) params.append('relevance', relevance);
+    if (relevanceReal) params.append('relevance_real', relevanceReal);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    if (contractStatus) params.append('status_contrato', contractStatus);
+    if (accessStatus) params.append('status_acesso', accessStatus);
+
+    const url = `${state.API_BASE_URL}/api/custom_analysis/real_permanence?${params.toString()}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Erro ao buscar dados para exportação.');
+    return await response.json();
+}
+
 function renderCustomTable(result, title, columns, extraContentHtml = '') {
     const { data, total_rows } = result;
     state.setCustomAnalysisState({ totalRows: total_rows });
@@ -112,7 +170,6 @@ function renderCustomTable(result, title, columns, extraContentHtml = '') {
         `;
     }
 
-    // Se extraContentHtml (mensagem de filtro de permanência) foi passado, use-o
     if (extraContentHtml) {
         activeFilterHtml += extraContentHtml;
     }
@@ -125,9 +182,11 @@ function renderCustomTable(result, title, columns, extraContentHtml = '') {
 
     let paginationHtml = '';
     const totalPages = Math.ceil(currentState.totalRows / currentState.rowsPerPage);
+    
+    // Controles de paginação
     if (totalPages > 1) {
         paginationHtml = `
-            <div id="custom-analysis-pagination-controls" class="pagination-controls flex justify-center items-center gap-4 mt-8">
+            <div id="custom-analysis-pagination-controls" class="pagination-controls flex flex-wrap justify-center items-center gap-4 mt-8">
                 <button id="customPrevPageBtn" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg shadow-sm hover:bg-gray-300 transition disabled:opacity-50 disabled:cursor-not-allowed">Página Anterior</button>
                 <span id="customPageInfo" class="text-gray-700 font-medium"></span>
                 <button id="customNextPageBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed">Próxima Página</button>
@@ -135,7 +194,6 @@ function renderCustomTable(result, title, columns, extraContentHtml = '') {
         `;
     }
 
-    // Estratégia de append seguro para a tabela, preservando gráficos acima
     let tableContainer = document.getElementById('custom-table-container');
     if (!tableContainer) {
         tableContainer = document.createElement('div');
@@ -149,23 +207,76 @@ function renderCustomTable(result, title, columns, extraContentHtml = '') {
         renderCustomAnalysisPagination();
     }
 
-    // Listener para limpar filtro de gráfico de cancelamento/negativação
+    // --- LÓGICA DE EVENTOS DA PAGINAÇÃO ---
+    const prevBtn = document.getElementById('customPrevPageBtn');
+    const nextBtn = document.getElementById('customNextPageBtn');
+
+    if (prevBtn && nextBtn) {
+        prevBtn.addEventListener('click', () => changePage(currentState.currentPage - 1));
+        nextBtn.addEventListener('click', () => changePage(currentState.currentPage + 1));
+    }
+
+    function changePage(newPage) {
+        if (newPage < 1) return;
+        
+        const s = state.getCustomAnalysisState();
+        const type = s.currentAnalysis;
+        
+        if (type === 'real_permanence') {
+            fetchAndRenderRealPermanenceAnalysis(
+                s.currentSearchTerm, 
+                newPage, 
+                s.currentRelevance, 
+                s.currentStartDate, 
+                s.currentEndDate, 
+                s.currentRelevanceReal
+            );
+        } else if (type === 'cancellations') {
+            fetchAndRenderCancellationAnalysis(
+                s.currentSearchTerm, 
+                newPage, 
+                s.currentRelevance, 
+                s.sortOrder === 'asc', 
+                s.currentStartDate, 
+                s.currentEndDate
+            );
+        } else if (type === 'negativacao') {
+            fetchAndRenderNegativacaoAnalysis(
+                s.currentSearchTerm, 
+                newPage, 
+                s.currentRelevance, 
+                s.sortOrder === 'asc', 
+                s.currentStartDate, 
+                s.currentEndDate
+            );
+        } else if (type === 'saude_financeira') {
+             fetchAndRenderFinancialHealthAnalysis(
+                 s.currentSearchTerm,
+                 s.currentAnalysisType,
+                 newPage,
+                 s.currentStartDate,
+                 s.currentEndDate
+             );
+        } else if (type === 'atrasos_e_nao_pagos') {
+            fetchAndRenderLatePaymentsAnalysis(
+                s.currentSearchTerm,
+                newPage
+            );
+        }
+    }
+
     const clearBtn = document.getElementById('clearChartFilterBtn');
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
             state.setCustomAnalysisState({ chartFilterColumn: null, chartFilterValue: null });
-            // Re-fetch baseado no tipo atual
-            const currentType = currentState.currentAnalysis;
-            const search = currentState.currentSearchTerm || '';
-            const relev = dom.relevanceFilterSearch?.value || '';
-            const start = dom.customStartDate?.value || '';
-            const end = dom.customEndDate?.value || '';
-            const sort = currentState.sortOrder === 'asc';
+            
+            const s = state.getCustomAnalysisState();
+            const currentType = s.currentAnalysis;
 
             if (currentType === 'cancellations') {
-                fetchAndRenderCancellationAnalysis(search, 1, relev, sort, start, end);
+                fetchAndRenderCancellationAnalysis(s.currentSearchTerm, 1, s.currentRelevance, s.sortOrder === 'asc', s.currentStartDate, s.currentEndDate);
             } else if (currentType === 'negativacao') {
-                fetchAndRenderNegativacaoAnalysis(search, 1, relev, sort, start, end);
+                fetchAndRenderNegativacaoAnalysis(s.currentSearchTerm, 1, s.currentRelevance, s.sortOrder === 'asc', s.currentStartDate, s.currentEndDate);
             }
         });
     }
@@ -186,8 +297,6 @@ function renderCustomAnalysisPagination() {
             if(prevBtn) prevBtn.disabled = currentState.currentPage <= 1;
             if(nextBtn) nextBtn.disabled = currentState.currentPage >= totalPages;
             paginationControls.classList.remove('hidden');
-        } else {
-            paginationControls.classList.add('hidden');
         }
     }
 }
@@ -284,7 +393,17 @@ export async function fetchAndRenderFinancialHealthAnalysis(searchTerm = '', ana
 // *** FUNÇÃO ATUALIZADA PARA RENDERIZAR A TABELA DE PERMANÊNCIA REAL COM GRÁFICOS INTERATIVOS ***
 export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page = 1, relevance = '', startDate = '', endDate = '', relevanceReal = '') {
     utils.showLoading(true);
-    state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'real_permanence', currentSearchTerm: searchTerm });
+    // Salva estado detalhado para paginação funcionar
+    state.setCustomAnalysisState({ 
+        currentPage: page, 
+        currentAnalysis: 'real_permanence', 
+        currentSearchTerm: searchTerm,
+        currentRelevance: relevance,
+        currentRelevanceReal: relevanceReal,
+        currentStartDate: startDate,
+        currentEndDate: endDate
+    });
+    
     const currentState = state.getCustomAnalysisState();
     const offset = (page - 1) * currentState.rowsPerPage;
 
@@ -360,7 +479,6 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                 cities.forEach((city, idx) => {
                     const canvasId = `chart_city_${city.replace(/[^a-zA-Z0-9]/g, '_')}`;
                     
-                    // Adiciona um widget separado para cada cidade no GridStack
                     grid.addWidget({
                         w: 4, h: 6, x: currentX, y: currentY,
                         content: `<div class="grid-stack-item-content">
@@ -369,7 +487,6 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                                   </div>`
                     });
 
-                    // Lógica para layout em 3 colunas (GridStack tem 12 colunas)
                     currentX += 4;
                     if (currentX >= 12) {
                         currentX = 0;
@@ -424,7 +541,6 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                     );
                 }
 
-                // Renderiza cada gráfico de cidade individualmente
                 if (result.charts.city_distribution) {
                     const cityData = result.charts.city_distribution;
                     const cities = [...new Set(cityData.map(d => d.Cidade))].sort();
@@ -448,24 +564,15 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                             }], 
                             `${city} (${totalCity})`, 
                             {
-                                formatterType: 'value_only', // Força número simples
+                                formatterType: 'value_only',
                                 plugins: {
                                     tooltip: {
-                                        callbacks: {
-                                            label: function(context) {
-                                                // Retorna apenas "Label: Valor" sem R$
-                                                return `${context.label}: ${context.raw}`;
-                                            }
-                                        }
+                                        callbacks: { label: function(context) { return `${context.label}: ${context.raw}`; } }
                                     },
                                     datalabels: {
-                                        formatter: (value, ctx) => {
-                                            return value; // Retorna apenas o número
-                                        },
+                                        formatter: (value, ctx) => { return value; },
                                         color: '#fff',
-                                        font: {
-                                            weight: 'bold'
-                                        }
+                                        font: { weight: 'bold' }
                                     }
                                 },
                                 legendPosition: 'bottom',
@@ -506,7 +613,7 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                     return `<span class="text-xs font-bold px-2 py-1 rounded-full ${color}">${r.Status_contrato}</span>`;
                 }
             },
-            // CORREÇÃO AQUI: Verifica todas as possibilidades de chave que o backend pode retornar
+            // Verifica variações da chave Data de Ativação
             { header: 'Data Ativação', render: r => (r.Data_ativa_o || r.data_ativa_o || r.data_ativacao) ? utils.formatDate(r.Data_ativa_o || r.data_ativa_o || r.data_ativacao) : 'N/A' },
             { header: 'Status Acesso', key: 'Status_acesso', render: r => `<span class="text-xs text-gray-600">${r.Status_acesso}</span>` },
             { 
@@ -543,7 +650,6 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                         badgeClass = 'bg-gray-100 text-gray-800 border border-gray-200';
                         text = 'Em Dia (0)';
                     }
-
                     return `<span class="inline-block px-2 py-1 rounded text-xs font-semibold ${badgeClass}" title="Média de dias entre vencimento e pagamento">${text}</span>`;
                 },
                 cssClass: 'text-center'
@@ -600,7 +706,44 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
             `;
         }
 
-        renderCustomTable(result, 'Análise de Permanência Real (Meses Pagos vs Calendário)', columns, extraFilterMsg);
+        // --- Botão de Exportar Excel no Topo (Agora com Busca de Todos os Dados) ---
+        const exportButtonTop = `
+            <button id="btnExportRealPermanenceTop" class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm font-medium mb-2 float-right flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Exportar Excel (Tudo)
+            </button>
+            <div class="clear-both"></div>
+        `;
+
+        const combinedExtraMsg = exportButtonTop + (extraFilterMsg || '');
+
+        renderCustomTable(result, 'Análise de Permanência Real (Meses Pagos vs Calendário)', columns, combinedExtraMsg);
+
+        // Listener para o botão do topo (BUSCA TODOS OS DADOS COM LIMIT ALTO)
+        setTimeout(() => {
+            const btnTop = document.getElementById('btnExportRealPermanenceTop');
+            if(btnTop) {
+                btnTop.addEventListener('click', async () => {
+                    utils.showLoading(true);
+                    try {
+                        // Chama a nova função com limit alto
+                        const fullData = await fetchAllRealPermanenceData(searchTerm, relevance, startDate, endDate, relevanceReal);
+                        downloadCSV(fullData.data, 'permanencia_real_completa.csv');
+                    } catch (e) {
+                        utils.showError('Erro ao exportar: ' + e.message);
+                    } finally {
+                        utils.showLoading(false);
+                    }
+                });
+            }
+        }, 100);
+
+        // --- ESCONDER BOTÃO DE TABELA COMPLETA (Para não gerar erro 404) ---
+        if (dom.viewTableBtn) {
+            dom.viewTableBtn.classList.add('hidden');
+        }
 
         if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
         if (dom.relevanceFilterSearch) dom.relevanceFilterSearch.value = relevance || '';
@@ -614,10 +757,11 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
     }
 }
 
+// ... (Rest of the file remains the same: fetchAndRenderCancellationAnalysis, fetchAndRenderNegativacaoAnalysis, fetchAndRenderDailyComparison) ...
 // *** FUNÇÃO ATUALIZADA COM CORREÇÃO DO FILTRO DE CLIQUE ***
-export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false, startDate = '', endDate = '') {
+export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false, startDate = '', endDate = '', relevanceReal = '') {
     utils.showLoading(true);
-    state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'cancellations', currentSearchTerm: searchTerm });
+    state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'cancellations', currentSearchTerm: searchTerm, currentRelevance: relevance, currentStartDate: startDate, currentEndDate: endDate, sortOrder: sortAsc ? 'asc' : 'desc' });
     const currentState = state.getCustomAnalysisState();
     const offset = (page - 1) * currentState.rowsPerPage;
 
@@ -796,7 +940,7 @@ export async function fetchAndRenderCancellationAnalysis(searchTerm = '', page =
 // *** FUNÇÃO ATUALIZADA: AGORA COM 3 GRÁFICOS INTERATIVOS ***
 export async function fetchAndRenderNegativacaoAnalysis(searchTerm = '', page = 1, relevance = '', sortAsc = false, startDate = '', endDate = '') {
     utils.showLoading(true);
-    state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'negativacao', currentSearchTerm: searchTerm });
+    state.setCustomAnalysisState({ currentPage: page, currentAnalysis: 'negativacao', currentSearchTerm: searchTerm, currentRelevance: relevance, currentStartDate: startDate, currentEndDate: endDate, sortOrder: sortAsc ? 'asc' : 'desc' });
     const currentState = state.getCustomAnalysisState();
     const offset = (page - 1) * currentState.rowsPerPage;
     
