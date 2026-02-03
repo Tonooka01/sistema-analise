@@ -379,10 +379,11 @@ def api_cancellation_analysis():
                     COALESCE(AC.Motivo_cancelamento, 'Não Informado') AS Motivo_cancelamento,
                     COALESCE(AC.Obs_cancelamento, 'Não Informado') AS Obs_cancelamento,
                     AC.Data_cancelamento, 
+                    AC.Data_ativa_o, -- ADICIONADO PARA EVITAR N/A NA TABELA
                     CASE WHEN RT.Cliente IS NOT NULL THEN 'Sim' ELSE 'Não' END AS Teve_Contato_Relevante,
                     CASE WHEN AC.Data_ativa_o IS NOT NULL AND AC.Data_cancelamento IS NOT NULL 
-                         THEN CAST(ROUND((JULIANDAY(AC.Data_cancelamento) - JULIANDAY(AC.Data_ativa_o)) / 30.44) AS INTEGER) 
-                         ELSE NULL 
+                          THEN CAST(ROUND((JULIANDAY(AC.Data_cancelamento) - JULIANDAY(AC.Data_ativa_o)) / 30.44) AS INTEGER) 
+                          ELSE NULL 
                     END AS permanencia_meses
                 FROM AllCancellations AC
                 LEFT JOIN RelevantTickets RT ON AC.Cliente = RT.Cliente
@@ -501,7 +502,8 @@ def api_negativacao_analysis():
                 SELECT
                     AN.Cliente,
                     AN.ID AS Contrato_ID,
-                    AN.end_date, 
+                    AN.end_date,
+                    AN.Data_ativa_o, -- ADICIONADO PARA EVITAR N/A NA TABELA
                     CASE WHEN RT.Cliente IS NOT NULL THEN 'Sim' ELSE 'Não' END AS Teve_Contato_Relevante,
                     CASE
                         WHEN AN.Data_ativa_o IS NOT NULL AND AN.end_date IS NOT NULL
@@ -858,7 +860,7 @@ def api_active_clients_evolution():
                 fallback_query = query.replace("UNION\n                SELECT ID, Data_ativa_o, Data_negativa_o AS End_Date, 'Negativado' AS Status_contrato, 'Desativado' AS Status_acesso, Cidade\n                FROM Contratos_Negativacao\n                WHERE Data_ativa_o IS NOT NULL", "")
                 data = conn.execute(fallback_query, tuple(params)).fetchall()
             else:
-                raise e
+                raise e 
 
         cities_query = """
             SELECT DISTINCT Cidade FROM Contratos 

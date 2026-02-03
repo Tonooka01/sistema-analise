@@ -506,6 +506,8 @@ export async function fetchAndRenderRealPermanenceAnalysis(searchTerm = '', page
                     return `<span class="text-xs font-bold px-2 py-1 rounded-full ${color}">${r.Status_contrato}</span>`;
                 }
             },
+            // CORREÇÃO AQUI: Verifica todas as possibilidades de chave que o backend pode retornar
+            { header: 'Data Ativação', render: r => (r.Data_ativa_o || r.data_ativa_o || r.data_ativacao) ? utils.formatDate(r.Data_ativa_o || r.data_ativa_o || r.data_ativacao) : 'N/A' },
             { header: 'Status Acesso', key: 'Status_acesso', render: r => `<span class="text-xs text-gray-600">${r.Status_acesso}</span>` },
             { 
                 header: 'Permanência Paga', 
