@@ -31,7 +31,7 @@ app = Flask(__name__)
 # --- Configurações de Segurança ---
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'sua_chave_secreta_super_segura_troque_isso_em_producao')
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SECURE'] = True 
+app.config['SESSION_COOKIE_SECURE'] = False 
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 CORS(app)

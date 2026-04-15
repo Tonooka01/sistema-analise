@@ -5,3 +5,4 @@ flask-limiter
 pandas
 pdfplumber
 werkzeug
+python-dotenv
