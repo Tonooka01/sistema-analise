@@ -1,0 +1,7 @@
+Flask==3.0.0
+flask-cors
+flask-login
+flask-limiter
+pandas
+pdfplumber
+werkzeug

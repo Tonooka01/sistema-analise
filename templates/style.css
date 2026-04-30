@@ -1,0 +1,236 @@
+ body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 1.5rem;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        h1, h2 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #e0e0e0;
+            text-align: left;
+            white-space: nowrap; 
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 200px; /* Limita a largura da coluna para evitar quebras excessivas */
+        }
+        /* Adiciona um tooltip simples */
+        td[title]:hover::after {
+            content: attr(title);
+            position: absolute;
+            background-color: #1f2937; /* Cor mais escura */
+            color: white;
+            padding: 8px 12px; /* Mais espaçamento */
+            border-radius: 6px;
+            font-size: 0.875rem;
+            white-space: pre-wrap; /* Permite que o texto quebre linha no tooltip */
+            z-index: 1010; /* Garante que fique sobre outros elementos do modal */
+            transform: translate(10px, -15px); /* Ajusta a posição */
+            
+            /* --- Novas regras para legibilidade --- */
+            max-width: 350px; /* Limita a largura máxima */
+            pointer-events: none; /* Evita que o tooltip pisque */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); /* Adiciona sombra */
+            word-wrap: break-word; /* Força quebra de palavras longas */
+            text-align: left; /* Alinha o texto à esquerda */
+        }
+        th {
+            background-color: #f8f8f8;
+            font-weight: 600;
+        }
+        .collection-selector button, .collection-selector select {
+            border: 2px solid transparent;
+            transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+        }
+        .collection-selector button:hover {
+            transform: scale(1.05);
+        }
+        .collection-selector button.active {
+            background-color: #1d4ed8; /* Cor mais escura para o botão ativo */
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1); /* Sombra interna para indicar ativo */
+            transform: scale(1); /* Sem escala para o ativo */
+            border-color: #60a5fa;
+        }
+         /* Estilo para o select se parecer com os botões */
+        #customAnalysisSelector {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22/%3E%3C/svg%3E');
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: .65em auto;
+            padding-right: 2.5rem; /* Espaço para a seta */
+        }
+        #customAnalysisSelector.active {
+            border-color: #a78bfa; /* Borda roxa para indicar seleção ativa */
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .table-wrapper {
+            max-height: 500px; /* Altura máxima para a tabela rolável */
+            overflow-y: auto; /* Habilita rolagem vertical */
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Estilos para o Modal (Pop-up) */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .modal.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: #ffffff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            max-width: 90%;
+            width: auto;
+            min-width: 50vw;
+            max-height: 90%;
+            overflow: visible; /* MUDANÇA CRÍTICA: Permite que o tooltip apareça fora do modal */
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .modal-close-button {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #718096;
+            transition: color 0.2s ease;
+        }
+        .modal-close-button:hover {
+            color: #4a5568;
+        }
+        .modal-body {
+            flex-grow: 1; /* Permite que o corpo ocupe o espaço disponível */
+            overflow-y: auto; /* Adiciona rolagem se o conteúdo for grande */
+        }
+        .modal .table-wrapper {
+            margin-top: 0; /* Remove margem superior extra dentro do modal */
+            border: none; /* Remove borda extra dentro do modal */
+        }
+        .modal .pagination-controls { 
+            padding-top: 1rem;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .chart-type-options {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tab-link {
+            border-color: transparent;
+            color: #6b7280; 
+            cursor: pointer;
+        }
+        .tab-link:hover {
+            border-color: #d1d5db;
+            color: #4b5563;
+        }
+        .tab-link.active {
+            border-color: #3b82f6;
+            color: #3b82f6;
+        }
+        .tab-pane {
+            display: none;
+        }
+        .tab-pane.active {
+            display: block;
+        }
+
+        /* NOVOS ESTILOS: GridStack */
+        .grid-stack {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .grid-stack-item-content {
+            color: #2c3e50;
+            text-align: center;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            overflow: hidden !important;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-container-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            padding: 0 0.5rem;
+        }
+        .chart-title {
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 1.1rem;
+        }
+        .chart-canvas-container {
+            flex-grow: 1;
+            position: relative;
+        }
