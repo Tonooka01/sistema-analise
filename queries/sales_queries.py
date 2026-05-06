@@ -151,11 +151,8 @@ def build_seller_clients_query(
 
     Uso:
         sql, params = build_seller_clients_query(seller_id, 'cancelado', year, month)
-        count_sql   = f"SELECT COUNT(*) FROM ({sql})"
-        paged_sql   = f"""
-            SELECT sub.*, ... FROM ({sql}) AS sub ORDER BY sub.end_date DESC
-            LIMIT ? OFFSET ?
-        """
+        count_sql = "SELECT COUNT(*) FROM ({sql})"
+        paged_sql = "SELECT sub.* FROM ({sql}) AS sub ORDER BY sub.end_date DESC LIMIT ? OFFSET ?"
     """
     _safe_month = f"{int(month):02d}" if month else ""
 
