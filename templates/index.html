@@ -5,37 +5,33 @@
 {% endblock %}
 
 {% block content %}
-<h1 class="text-4xl font-bold text-center mb-6">Dashboard Financeiro SQLite</h1>
-        
-<div class="absolute top-4 right-4 flex gap-2">
-    
-    {% if current_user.is_authenticated and current_user.username == 'admin' %}
-        
-        <button id="openAdminSettingsModalBtn" class="text-sm bg-blue-600 hover:bg-blue-700 text-white py-1 px-3 rounded transition shadow-lg flex items-center gap-1">
-            ⚙️ Configurações
-        </button>
-        
-        <a href="/admin/logs" class="text-sm bg-gray-800 hover:bg-gray-900 text-white py-1 px-3 rounded transition shadow-lg flex items-center gap-1">
-            👁️ Ver Logs
-        </a>
 
-    {% endif %}
-
-    <a href="/logout" class="text-sm bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded transition shadow-lg">
-        Sair
-    </a>
+<!-- Top Bar -->
+<div class="nv-topbar">
+    <h1>Dashboard Analítico · NetVale</h1>
+    <div class="nv-topbar-actions">
+        {% if current_user.is_authenticated and current_user.username == 'admin' %}
+            <button id="openAdminSettingsModalBtn" class="btn btn-ghost">⚙️ Configurações</button>
+            <a href="/admin/logs" class="btn btn-ghost">👁️ Logs</a>
+        {% endif %}
+        <a href="/logout" class="btn btn-danger">Sair</a>
+    </div>
 </div>
-<div class="collection-selector flex flex-wrap justify-center items-center gap-4 mb-8">
-    <button id="btnClientes" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Clientes</button>
-    <button id="btnContasAReceber" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Contas a Receber</button>
-    <button id="btnAtendimentos" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Atendimentos</button>
-    <button id="btnOS" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">OS</button>
-    <button id="btnLogins" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Logins</button>
-    <button id="btnContratos" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Contratos</button>
-    <button id="btnCidade" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Cidade</button>
-    <button id="btnVendedor" class="px-5 py-3 rounded-xl shadow-md active:scale-95 bg-blue-600 text-white font-semibold">Vendedor</button>
-    <div class="relative">
-        <select id="customAnalysisSelector" class="px-5 py-3 rounded-xl shadow-md bg-purple-600 text-white font-semibold cursor-pointer">
+
+<!-- Collection Selector Bar -->
+<div class="collection-bar">
+    <div class="collection-selector flex flex-wrap gap-2 justify-center items-center">
+        <button id="btnClientes">Clientes</button>
+        <button id="btnContasAReceber">Contas a Receber</button>
+        <button id="btnAtendimentos">Atendimentos</button>
+        <button id="btnOS">OS</button>
+        <button id="btnLogins">Logins</button>
+        <button id="btnContratos">Contratos</button>
+        <button id="btnCidade">Cidade</button>
+        <button id="btnVendedor">Vendedor</button>
+    </div>
+    <div class="flex gap-2 items-center flex-wrap justify-center">
+        <select id="customAnalysisSelector">
             <option value="" disabled selected>Análise Personalizada</option>
             <option value="real_permanence" class="text-black bg-white">Análise de Permanência Real (Paga)</option>
             <option value="analise_juros_atraso" class="text-black bg-white">Análise de Juros por Atraso</option>
@@ -57,10 +53,8 @@
             <option value="daily_evolution_by_city" class="text-black bg-white">Evolução Diária por Cidade</option>
             <option value="comparativo_diario" class="text-black bg-white">Comparativo Diário</option>
         </select>
+        <button id="saveLayoutBtn">💾 Salvar Layout</button>
     </div>
-        <button id="saveLayoutBtn" class="px-5 py-3 rounded-xl shadow-md bg-green-600 text-white font-semibold hover:bg-green-700 active:scale-95 transition">
-        Salvar Layout
-    </button>
 </div>
 
 <div id="dashboard-content-wrapper" class="card p-6">

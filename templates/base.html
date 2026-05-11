@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Dashboard Financeiro{% endblock %}</title>
 
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+
     <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Chart.js and Datalabels Plugin (CDN) -->
@@ -20,8 +23,38 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
     <style>
-        /* Adiciona um estilo básico para o body enquanto o Tailwind carrega */
-        body { font-family: 'Inter', sans-serif; background-color: #f0f2f5; }
+        body { font-family: 'Inter', sans-serif; background-color: #f0f4f8 !important; }
+        .nv-topbar {
+            background: linear-gradient(135deg, #091f42 0%, #0f2d5e 60%, #163a75 100%) !important;
+            border-radius: 14px !important; padding: 1rem 1.5rem !important;
+            margin-bottom: 1.25rem !important; display: flex !important;
+            align-items: center !important; justify-content: space-between !important;
+            box-shadow: 0 4px 20px rgba(15,45,94,0.15) !important;
+        }
+        .nv-topbar h1 { font-size: 1.3rem !important; font-weight: 700 !important; color: #ffffff !important; margin: 0 !important; display: flex !important; align-items: center !important; gap: 0.5rem !important; }
+        .nv-topbar h1::before { content: '' !important; display: inline-block !important; width: 4px !important; height: 1.3rem !important; background: #00aaff !important; border-radius: 4px !important; }
+        .nv-topbar-actions { display: flex !important; gap: 0.5rem !important; flex-wrap: wrap !important; align-items: center !important; }
+        .btn { display: inline-flex !important; align-items: center !important; gap: 0.35rem !important; font-size: 0.82rem !important; font-weight: 600 !important; padding: 0.4rem 0.9rem !important; border-radius: 7px !important; border: none !important; cursor: pointer !important; text-decoration: none !important; }
+        .btn-ghost { background: rgba(255,255,255,0.15) !important; color: #fff !important; border: 1px solid rgba(255,255,255,0.25) !important; }
+        .btn-ghost:hover { background: rgba(255,255,255,0.25) !important; }
+        .btn-danger { background: #ef4444 !important; color: #fff !important; }
+        .btn-danger:hover { background: #dc2626 !important; }
+        .collection-bar { background: #ffffff !important; border-radius: 14px !important; padding: 0.875rem 1.25rem !important; margin-bottom: 1.25rem !important; box-shadow: 0 2px 8px rgba(15,45,94,0.08) !important; border: 1px solid #dde3ec !important; display: flex !important; flex-wrap: wrap !important; gap: 0.5rem !important; align-items: center !important; justify-content: center !important; }
+        .collection-selector button { font-size: 0.82rem !important; font-weight: 600 !important; padding: 0.42rem 1rem !important; border-radius: 7px !important; border: 1.5px solid transparent !important; background: #0f2d5e !important; color: #ffffff !important; cursor: pointer !important; white-space: nowrap !important; }
+        .collection-selector button:hover { background: #163a75 !important; }
+        .collection-selector button.active { background: #00aaff !important; border-color: #0090d6 !important; }
+        #customAnalysisSelector { font-size: 0.82rem !important; font-weight: 600 !important; padding: 0.42rem 2rem 0.42rem 1rem !important; border-radius: 7px !important; background-color: #6d28d9 !important; color: #ffffff !important; border: none !important; cursor: pointer !important; appearance: none !important; -webkit-appearance: none !important; }
+        #saveLayoutBtn { font-size: 0.82rem !important; font-weight: 600 !important; padding: 0.42rem 1rem !important; border-radius: 7px !important; background: #10b981 !important; color: #fff !important; border: none !important; cursor: pointer !important; }
+        .card { background: #ffffff !important; border-radius: 14px !important; box-shadow: 0 2px 8px rgba(15,45,94,0.08) !important; border: 1px solid #dde3ec !important; }
+        .grid-stack-item-content { background: #ffffff !important; border-radius: 10px !important; box-shadow: 0 2px 8px rgba(15,45,94,0.08) !important; border: 1px solid #dde3ec !important; }
+        .chart-container-header { border-bottom: 2px solid #00aaff !important; padding-bottom: 0.5rem !important; margin-bottom: 0.5rem !important; display: flex !important; justify-content: space-between !important; align-items: center !important; }
+        .chart-title { font-weight: 700 !important; color: #0f2d5e !important; font-size: 0.875rem !important; }
+        table th { background: #0f2d5e !important; color: #ffffff !important; font-size: 0.72rem !important; padding: 9px 12px !important; }
+        table td { padding: 8px 12px !important; border-bottom: 1px solid #eef0f4 !important; font-size: 0.83rem !important; }
+        table tr:hover td { background: #f5f8ff !important; }
+        #viewTableBtn { background: #6d28d9 !important; color: #fff !important; padding: 0.55rem 1.4rem !important; border-radius: 10px !important; border: none !important; cursor: pointer !important; font-weight: 600 !important; }
+        .modal-content { border-top: 4px solid #00aaff !important; border-radius: 14px !important; }
+        .tab-link.active { color: #1d6dcc !important; border-bottom: 2px solid #1d6dcc !important; }
     </style>
 </head>
 <body class="p-2 md:p-4">

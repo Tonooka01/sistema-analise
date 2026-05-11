@@ -3,36 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Dashboard Financeiro</title>
+    <title>Login · NetVale Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #091f42 0%, #0f2d5e 55%, #163a75 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .login-card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 25px 60px rgba(9,31,66,0.4);
+            padding: 2.5rem 2rem;
+            width: 100%;
+            max-width: 400px;
+            border-top: 4px solid #00aaff;
+        }
+        .logo-area {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .logo-area .brand {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: #0f2d5e;
+            letter-spacing: -0.5px;
+        }
+        .logo-area .brand span { color: #00aaff; }
+        .logo-area .subtitle {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        label {
+            display: block;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.4rem;
+        }
+        input {
+            width: 100%;
+            padding: 0.6rem 0.875rem;
+            border: 1.5px solid #dde3ec;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: #1e293b;
+            background: #f8fafc;
+            transition: border-color 0.18s, box-shadow 0.18s;
+            outline: none;
+        }
+        input:focus {
+            border-color: #00aaff;
+            box-shadow: 0 0 0 3px rgba(0,170,255,0.15);
+            background: #fff;
+        }
+        .form-group { margin-bottom: 1.1rem; }
+        .btn-login {
+            width: 100%;
+            padding: 0.7rem;
+            background: linear-gradient(135deg, #0f2d5e, #1d6dcc);
+            color: #fff;
+            font-size: 0.95rem;
+            font-weight: 700;
+            border: none;
+            border-radius: 9px;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            transition: opacity 0.18s, transform 0.14s;
+            letter-spacing: 0.02em;
+        }
+        .btn-login:hover { opacity: 0.92; transform: translateY(-1px); }
+        .btn-login:active { transform: translateY(0); }
+        .alert {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #b91c1c;
+            border-radius: 8px;
+            padding: 0.65rem 0.875rem;
+            font-size: 0.85rem;
+            margin-bottom: 1.25rem;
+            border-left: 3px solid #ef4444;
+        }
+        .footer-text {
+            text-align: center;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-top: 1.5rem;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 h-screen flex justify-center items-center">
-    <div class="bg-white p-8 rounded-lg shadow-lg w-96">
-        <h1 class="text-2xl font-bold text-center mb-6 text-gray-800">Acesso Restrito</h1>
-        
+<body>
+    <div class="login-card">
+        <div class="logo-area">
+            <div class="brand">Net<span>Vale</span></div>
+            <div class="subtitle">Dashboard Analítico</div>
+        </div>
+
         {% with messages = get_flashed_messages() %}
             {% if messages %}
-                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-sm">
-                    {{ messages[0] }}
-                </div>
+                <div class="alert">{{ messages[0] }}</div>
             {% endif %}
         {% endwith %}
 
         <form action="/login" method="POST">
-            <div class="mb-4">
-                <label class="block text-gray-700 text-sm font-bold mb-2" for="username">Usuário</label>
-                <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="username" name="username" type="text" placeholder="admin" required>
+            <div class="form-group">
+                <label for="username">Usuário</label>
+                <input id="username" name="username" type="text" placeholder="Digite seu usuário" required autofocus>
             </div>
-            <div class="mb-6">
-                <label class="block text-gray-700 text-sm font-bold mb-2" for="password">Senha</label>
-                <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline" id="password" name="password" type="password" placeholder="******************" required>
+            <div class="form-group">
+                <label for="password">Senha</label>
+                <input id="password" name="password" type="password" placeholder="••••••••••••" required>
             </div>
-            <div class="flex items-center justify-between">
-                <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full transition duration-300" type="submit">
-                    Entrar
-                </button>
-            </div>
+            <button class="btn-login" type="submit">Entrar</button>
         </form>
+
+        <p class="footer-text">Acesso restrito · NetVale Telecom</p>
     </div>
 </body>
 </html>
