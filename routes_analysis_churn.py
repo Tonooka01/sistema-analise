@@ -594,3 +594,168 @@ def api_active_clients_evolution():
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
+
+
+@churn_bp.route("/cancellations_by_city")
+def api_cancellations_by_city():
+    conn = get_db()
+    try:
+        import pandas as pd
+        start_date = request.args.get('start_date', '')
+        end_date   = request.args.get('end_date', '')
+        relevance  = request.args.get('relevance', '')
+
+        def _build(table, date_col, extra_where):
+            w = list(extra_where)
+            p = []
+            if start_date: w.append(f"DATE({date_col}) >= ?"); p.append(start_date)
+            if end_date:   w.append(f"DATE({date_col}) <= ?"); p.append(end_date)
+            return f"SELECT Cidade, Data_ativa_o, {date_col} AS end_date FROM {table} WHERE {' AND '.join(w)}", p
+
+        q_c,  p_c  = _build("Contratos", "Data_cancelamento",
+                             ["Status_contrato='Inativo'", "Status_acesso='Desativado'",
+                              "Cidade IS NOT NULL", "TRIM(Cidade)!=''"])
+        q_nc, p_nc = _build("Contratos", "Data_cancelamento",
+                             ["Status_contrato='Negativado'", "Cidade IS NOT NULL", "TRIM(Cidade)!=''",
+                              f"Cidade NOT IN {_EX}"])
+
+        df = pd.concat([
+            pd.read_sql_query(q_c,  conn, params=tuple(p_c)).assign(Status='Cancelado'),
+            pd.read_sql_query(q_nc, conn, params=tuple(p_nc)).assign(Status='Negativado'),
+        ], ignore_index=True)
+
+        try:
+            q_cn, p_cn = _build("Contratos_Negativacao", "Data_negativa_o",
+                                 ["Cidade IS NOT NULL", "TRIM(Cidade)!=''", f"Cidade NOT IN {_EX}"])
+            df = pd.concat([df, pd.read_sql_query(q_cn, conn, params=tuple(p_cn)).assign(Status='Negativado')], ignore_index=True)
+        except Exception:
+            pass
+
+        if not df.empty:
+            df['Data_ativa_o'] = pd.to_datetime(df['Data_ativa_o'], errors='coerce')
+            df['end_date']     = pd.to_datetime(df['end_date'], errors='coerce')
+            df['permanencia_meses'] = ((df['end_date'] - df['Data_ativa_o']).dt.days / 30.44).round().astype('Int64')
+            min_m, max_m = parse_relevance(relevance)
+            if min_m is not None: df = df[df['permanencia_meses'] >= min_m]
+            if max_m is not None: df = df[df['permanencia_meses'] <= max_m]
+
+        if df.empty:
+            grouped = pd.DataFrame(columns=['Cidade', 'Cancelados', 'Negativados', 'Total'])
+        else:
+            grouped = df.groupby('Cidade').agg(
+                Cancelados=('Status', lambda x: (x == 'Cancelado').sum()),
+                Negativados=('Status', lambda x: (x == 'Negativado').sum())
+            ).reset_index()
+            grouped['Total'] = grouped['Cancelados'] + grouped['Negativados']
+            grouped = grouped[grouped['Total'] > 0].sort_values('Total', ascending=False)
+
+        years = conn.execute(
+            "SELECT DISTINCT Year FROM ("
+            "SELECT STRFTIME('%Y', Data_cancelamento) AS Year FROM Contratos WHERE Data_cancelamento IS NOT NULL "
+            "UNION SELECT STRFTIME('%Y', Data_negativa_o) AS Year FROM Contratos_Negativacao WHERE Data_negativa_o IS NOT NULL"
+            ") WHERE Year IS NOT NULL ORDER BY Year DESC"
+        ).fetchall()
+
+        total_c = int(grouped['Cancelados'].sum()) if not grouped.empty else 0
+        total_n = int(grouped['Negativados'].sum()) if not grouped.empty else 0
+
+        return jsonify({
+            "data": grouped[['Cidade', 'Cancelados', 'Negativados', 'Total']].to_dict('records') if not grouped.empty else [],
+            "years": [r[0] for r in years],
+            "total_cancelados": total_c,
+            "total_negativados": total_n,
+            "grand_total": total_c + total_n
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
+@churn_bp.route("/cancellations_by_neighborhood")
+def api_cancellations_by_neighborhood():
+    conn = get_db()
+    try:
+        import pandas as pd
+        selected_city = request.args.get('city', '')
+        start_date    = request.args.get('start_date', '')
+        end_date      = request.args.get('end_date', '')
+        relevance     = request.args.get('relevance', '')
+
+        cities = conn.execute(
+            "SELECT DISTINCT Cidade FROM ("
+            "SELECT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade)!='' "
+            "UNION SELECT Cidade FROM Contratos_Negativacao WHERE Cidade IS NOT NULL AND TRIM(Cidade)!=''"
+            ") ORDER BY Cidade"
+        ).fetchall()
+        years = conn.execute(
+            "SELECT DISTINCT Year FROM ("
+            "SELECT STRFTIME('%Y', Data_cancelamento) AS Year FROM Contratos WHERE Data_cancelamento IS NOT NULL "
+            "UNION SELECT STRFTIME('%Y', Data_negativa_o) AS Year FROM Contratos_Negativacao WHERE Data_negativa_o IS NOT NULL"
+            ") WHERE Year IS NOT NULL ORDER BY Year DESC"
+        ).fetchall()
+
+        if not selected_city:
+            return jsonify({"data": [], "cities": [r[0] for r in cities if r[0]],
+                            "years": [r[0] for r in years if r[0]],
+                            "total_cancelados": 0, "total_negativados": 0, "grand_total": 0})
+
+        def _build(table, date_col, extra_where, params_base):
+            w = list(extra_where); p = list(params_base)
+            if start_date: w.append(f"DATE({date_col}) >= ?"); p.append(start_date)
+            if end_date:   w.append(f"DATE({date_col}) <= ?"); p.append(end_date)
+            return f"SELECT Bairro, Data_ativa_o, {date_col} AS end_date FROM {table} WHERE {' AND '.join(w)}", p
+
+        q_c,  p_c  = _build("Contratos", "Data_cancelamento",
+                             ["TRIM(Cidade)=?", "Status_contrato='Inativo'", "Status_acesso='Desativado'",
+                              "Bairro IS NOT NULL", "TRIM(Bairro)!=''"], [selected_city])
+        q_nc, p_nc = _build("Contratos", "Data_cancelamento",
+                             ["TRIM(Cidade)=?", "Status_contrato='Negativado'", "Bairro IS NOT NULL", "TRIM(Bairro)!=''",
+                              f"Cidade NOT IN {_EX}"], [selected_city])
+
+        df = pd.concat([
+            pd.read_sql_query(q_c,  conn, params=tuple(p_c)).assign(Status='Cancelado'),
+            pd.read_sql_query(q_nc, conn, params=tuple(p_nc)).assign(Status='Negativado'),
+        ], ignore_index=True)
+
+        try:
+            q_cn, p_cn = _build("Contratos_Negativacao", "Data_negativa_o",
+                                 ["TRIM(Cidade)=?", "Bairro IS NOT NULL", "TRIM(Bairro)!=''", f"Cidade NOT IN {_EX}"],
+                                 [selected_city])
+            df = pd.concat([df, pd.read_sql_query(q_cn, conn, params=tuple(p_cn)).assign(Status='Negativado')], ignore_index=True)
+        except Exception:
+            pass
+
+        if not df.empty:
+            df['Data_ativa_o'] = pd.to_datetime(df['Data_ativa_o'], errors='coerce')
+            df['end_date']     = pd.to_datetime(df['end_date'], errors='coerce')
+            df['permanencia_meses'] = ((df['end_date'] - df['Data_ativa_o']).dt.days / 30.44).round().astype('Int64')
+            min_m, max_m = parse_relevance(relevance)
+            if min_m is not None: df = df[df['permanencia_meses'] >= min_m]
+            if max_m is not None: df = df[df['permanencia_meses'] <= max_m]
+
+        if df.empty:
+            grouped = pd.DataFrame(columns=['Bairro', 'Cancelados', 'Negativados', 'Total'])
+        else:
+            grouped = df.groupby('Bairro').agg(
+                Cancelados=('Status', lambda x: (x == 'Cancelado').sum()),
+                Negativados=('Status', lambda x: (x == 'Negativado').sum())
+            ).reset_index()
+            grouped['Total'] = grouped['Cancelados'] + grouped['Negativados']
+            grouped = grouped[grouped['Total'] > 0].sort_values('Total', ascending=False)
+
+        total_c = int(grouped['Cancelados'].sum()) if not grouped.empty else 0
+        total_n = int(grouped['Negativados'].sum()) if not grouped.empty else 0
+
+        return jsonify({
+            "data": grouped[['Bairro', 'Cancelados', 'Negativados', 'Total']].to_dict('records') if not grouped.empty else [],
+            "cities": [r[0] for r in cities if r[0]],
+            "years":  [r[0] for r in years if r[0]],
+            "total_cancelados": total_c,
+            "total_negativados": total_n,
+            "grand_total": total_c + total_n
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
