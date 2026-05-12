@@ -2,6 +2,10 @@ Flask==3.0.0
 flask-cors
 flask-login
 flask-limiter
+werkzeug
+gunicorn
 pandas
 pdfplumber
-werkzeug
+python-dotenv
+chardet
+ 
