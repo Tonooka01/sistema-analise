@@ -12,6 +12,13 @@ from flask_login import LoginManager, login_required, current_user
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
+# Carrega variáveis de ambiente do .env (se existir)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # --- Módulos locais ---
 from database import get_db_connection, init_db_users
 from models import User, load_user
@@ -35,6 +42,9 @@ from routes_details_finance import details_finance_bp
 from routes_details_tech import details_tech_bp
 from routes_details_sales import details_sales_bp
 from routes_details_churn import details_churn_bp
+
+# --- Blueprint Fluxo de Caixa ---
+from routes_cashflow import cashflow_bp
 
 # ---------------------------------------------------------------------------
 # App
@@ -143,6 +153,7 @@ app.register_blueprint(details_finance_bp,  url_prefix='/api/details')
 app.register_blueprint(details_tech_bp,     url_prefix='/api/details')
 app.register_blueprint(details_sales_bp,    url_prefix='/api/details')
 app.register_blueprint(details_churn_bp,    url_prefix='/api/details')
+app.register_blueprint(cashflow_bp,         url_prefix='/api/cashflow')
 
 
 # ---------------------------------------------------------------------------
@@ -155,5 +166,5 @@ if __name__ == '__main__':
 
     init_db_users()
 
-    print("Servidor Seguro iniciado na porta 5000...")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print("Servidor iniciado na porta 5000...")
+    app.run(host='0.0.0.0', port=5000, debug=False)

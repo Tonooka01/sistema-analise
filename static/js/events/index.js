@@ -24,15 +24,29 @@ import * as customCharts from '../customAnalysisCharts.js';
 import { setupCustomAnalysisListeners } from './customAnalysis.js';
 import { setupPaginationListeners } from './pagination.js';
 import { setupDelegationListeners } from './delegation.js';
+import { renderCashflowDashboard } from '../cashflow.js';
 
 export function initializeEventListeners() {
 
     // --- Salvar Layout ---
     dom.saveLayoutBtn?.addEventListener('click', grid.saveLayout);
 
+    // --- Botão Cashflow ---
+    document.getElementById('btnCashflow')?.addEventListener('click', e => {
+        utils.resetAllFilters();
+        utils.setActiveControl(e.target);
+        if (dom.customAnalysisSelector) dom.customAnalysisSelector.value = '';
+        utils.hideAllCustomFilters();
+        if (dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
+        if (dom.dashboardContentDiv) {
+            dom.dashboardContentDiv.classList.remove('hidden');
+            renderCashflowDashboard(dom.dashboardContentDiv);
+        }
+    });
+
     // --- Seletores de Coleção Principal (botões azuis) ---
     document.querySelector('.collection-selector')?.addEventListener('click', e => {
-        if (e.target.tagName === 'BUTTON' && e.target.id && e.target.id !== 'saveLayoutBtn') {
+        if (e.target.tagName === 'BUTTON' && e.target.id && e.target.id !== 'saveLayoutBtn' && e.target.id !== 'btnCashflow') {
             const buttonText = e.target.textContent;
             if (buttonText) {
                 utils.resetAllFilters();
