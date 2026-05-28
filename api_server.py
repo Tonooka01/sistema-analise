@@ -46,6 +46,9 @@ from routes_details_churn import details_churn_bp
 # --- Blueprint Fluxo de Caixa ---
 from routes_cashflow import cashflow_bp
 
+# --- Blueprint Sync IXC ---
+from routes_ixc_sync import ixc_sync_bp
+
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
@@ -154,6 +157,11 @@ app.register_blueprint(details_tech_bp,     url_prefix='/api/details')
 app.register_blueprint(details_sales_bp,    url_prefix='/api/details')
 app.register_blueprint(details_churn_bp,    url_prefix='/api/details')
 app.register_blueprint(cashflow_bp,         url_prefix='/api/cashflow')
+app.register_blueprint(ixc_sync_bp,         url_prefix='/api/ixc')
+
+# Agendamento semanal
+from routes_ixc_sync import start_weekly_scheduler
+start_weekly_scheduler(app)
 
 
 # ---------------------------------------------------------------------------

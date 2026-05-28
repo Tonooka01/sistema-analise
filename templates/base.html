@@ -53,7 +53,11 @@
         table td { padding: 8px 12px !important; border-bottom: 1px solid #eef0f4 !important; font-size: 0.83rem !important; }
         table tr:hover td { background: #f5f8ff !important; }
         #viewTableBtn { background: #6d28d9 !important; color: #fff !important; padding: 0.55rem 1.4rem !important; border-radius: 10px !important; border: none !important; cursor: pointer !important; font-weight: 600 !important; }
-        .modal-content { border-top: 4px solid #00aaff !important; border-radius: 14px !important; }
+        .modal { position:fixed !important; inset:0 !important; background:rgba(9,31,66,0.6) !important; display:flex !important; justify-content:center !important; align-items:center !important; z-index:1000 !important; opacity:0 !important; visibility:hidden !important; transition:opacity 0.25s ease,visibility 0.25s ease !important; }
+        .modal.show { opacity:1 !important; visibility:visible !important; }
+        .modal-content { border-top: 4px solid #00aaff !important; border-radius: 14px !important; background:#fff !important; padding:2rem !important; max-width:90% !important; min-width:50vw !important; max-height:90vh !important; overflow:visible !important; display:flex !important; flex-direction:column !important; position:relative !important; box-shadow:0 20px 50px rgba(9,31,66,0.3) !important; }
+        .modal-header { display:flex !important; justify-content:space-between !important; align-items:center !important; margin-bottom:1.25rem !important; padding-bottom:0.875rem !important; border-bottom:1px solid #dde3ec !important; }
+        .modal-body { flex-grow:1 !important; overflow-y:auto !important; }
         .tab-link.active { color: #1d6dcc !important; border-bottom: 2px solid #1d6dcc !important; }
     </style>
 </head>
@@ -178,11 +182,101 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Adiciona carregamento ao abrir o modal
-    openBtn?.addEventListener('click', () => {
-        openModal(); // Sua função existente
-        loadUsers(); // Nova chamada
+    // --- IXC Sync ---
+    async function loadIxcStatus() {
+        try {
+            const res = await fetch('/api/ixc/status');
+            const data = await res.json();
+            const statusEl = document.getElementById('ixcStatusText');
+            const lastEl   = document.getElementById('ixcLastSync');
+            const logEl    = document.getElementById('ixcLogText');
+            const logCont  = document.getElementById('ixcLogContainer');
+            const btn      = document.getElementById('btnStartSync');
+
+            // Progresso
+            let progressBar = document.getElementById('ixcProgressBar');
+            if (!progressBar && data.is_syncing) {
+                const container = document.getElementById('ixcSyncStatus');
+                progressBar = document.createElement('div');
+                progressBar.id = 'ixcProgressBar';
+                progressBar.style.cssText = 'margin-top:8px;background:#e2e8f0;border-radius:6px;overflow:hidden;height:10px;';
+                progressBar.innerHTML = '<div id="ixcProgressFill" style="height:100%;background:#1d6dcc;transition:width 0.3s;width:0%"></div>';
+                container.appendChild(progressBar);
+            }
+
+            if (data.is_syncing) {
+                const [pct, msg] = (data.progress || '0|Sincronizando...').split('|');
+                statusEl.innerHTML = `<span class="text-yellow-600 font-bold">⏳ ${msg} — <span style="font-size:1.1rem">${pct}%</span></span>`;
+                const fill = document.getElementById('ixcProgressFill');
+                if (fill) fill.style.width = pct + '%';
+                if (btn) { btn.disabled = true; btn.innerHTML = `⏳ Sincronizando ${pct}%`; }
+                const fullBtn = document.getElementById('btnFullSync');
+                if (fullBtn) fullBtn.disabled = true;
+                const cancelBtn = document.getElementById('btnCancelSync');
+                if (cancelBtn) cancelBtn.classList.remove('hidden');
+                setTimeout(loadIxcStatus, 2000);
+            } else {
+                const statusIcon = data.status === 'success' ? '✅' : data.status === 'error' ? '❌' : '⚪';
+                statusEl.innerHTML = `${statusIcon} Status: <strong>${data.status || 'Nunca sincronizado'}</strong>`;
+                if (progressBar) { progressBar.remove(); }
+                if (btn) { btn.disabled = false; btn.innerHTML = '🔄 Sync Rápida'; }
+                const fullBtn = document.getElementById('btnFullSync');
+                if (fullBtn) fullBtn.disabled = false;
+                const cancelBtn = document.getElementById('btnCancelSync');
+                if (cancelBtn) cancelBtn.classList.add('hidden');
+            }
+
+            if (data.last_sync) lastEl.textContent = `Última sync: ${data.last_sync}`;
+            if (data.last_log) {
+                logEl.textContent = data.last_log;
+                logCont.classList.remove('hidden');
+            }
+        } catch(e) { console.error('IXC status error:', e); }
+    }
+
+    document.getElementById('btnSaveToken')?.addEventListener('click', async () => {
+        const token = document.getElementById('ixcTokenInput').value.trim();
+        if (!token) { alert('Digite o token'); return; }
+        const res = await fetch('/api/ixc/save_token', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({token})
+        });
+        const data = await res.json();
+        alert(data.success ? '✅ Token salvo!' : '❌ ' + data.error);
     });
+
+    document.getElementById('btnCancelSync')?.addEventListener('click', async () => {
+        if (!confirm('Cancelar a sincronização em andamento?')) return;
+        const res = await fetch('/api/ixc/cancel', {method: 'POST'});
+        const data = await res.json();
+        if (data.success) setTimeout(loadIxcStatus, 1000);
+    });
+
+    document.getElementById('btnStartSync')?.addEventListener('click', () => _startSync('incremental'));
+    document.getElementById('btnFullSync')?.addEventListener('click',  () => _startSync('full'));
+
+    async function _startSync(mode) {
+        const label = mode === 'full' ? 'Sync Completa (pode demorar vários minutos)' : 'Sync Rápida';
+        const checks = document.querySelectorAll('.ixc-table-check:checked');
+        const tables = Array.from(checks).map(c => c.value);
+        if (tables.length === 0) { alert('Selecione pelo menos uma tabela.'); return; }
+        if (!confirm(`Iniciar ${label} para ${tables.length} tabela(s)?`)) return;
+        const res = await fetch('/api/ixc/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mode, tables})
+        });
+        const data = await res.json();
+        if (data.success) {
+            setTimeout(loadIxcStatus, 2000);
+        } else {
+            alert('❌ ' + data.error);
+        }
+    }
+
+    // Carrega status ao abrir o modal admin
+    openBtn?.addEventListener('click', () => { loadIxcStatus(); });
     
     refreshUsersBtn?.addEventListener('click', loadUsers);
 

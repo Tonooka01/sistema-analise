@@ -1,0 +1,27 @@
+"""
+serve.py
+Servidor de produção para Windows usando Waitress.
+Use este arquivo em vez de rodar api_server.py diretamente.
+"""
+
+import os
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+from waitress import serve
+from api_server import app, init_db_users
+
+# Inicializa banco
+init_db_users()
+
+host = '0.0.0.0'
+port = 5000
+
+print(f"NetVale Dashboard iniciado em http://{host}:{port}")
+print("Pressione Ctrl+C para parar.")
+
+serve(app, host=host, port=port, threads=6)

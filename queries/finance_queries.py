@@ -1,18 +1,10 @@
 """
 queries/finance_queries.py
-
-Construtores de SQL para analises financeiras (saude financeira,
-faturamento por cidade, juros por atraso, contas a receber).
-
-Nenhuma dependencia de Flask — so strings SQL e listas de parametros.
+Construtores de SQL para analises financeiras.
 """
 
 from utils_api import add_date_range_filter
 
-
-# ---------------------------------------------------------------------------
-# CTEs estaticas reutilizaveis
-# ---------------------------------------------------------------------------
 
 LAST_CONNECTION_CTE = """
     LastConnection AS (
@@ -38,20 +30,7 @@ CUSTOMER_COMPLAINTS_CTE = """
 """
 
 
-# ---------------------------------------------------------------------------
-# CTE: primeiro pagamento com atraso por contrato
-# ---------------------------------------------------------------------------
-
 def build_first_late_payment_cte(delay_days=10):
-    """
-    Retorna a CTE FirstLatePayment como string.
-
-    delay_days: minimo de dias de atraso para qualificar (10 = financeiro, 20 = bloqueio)
-
-    Uso:
-        flp = build_first_late_payment_cte(10)
-        sql = f"WITH {flp}, {CUSTOMER_COMPLAINTS_CTE} SELECT ..."
-    """
     return f"""
         FirstLatePayment AS (
             SELECT
@@ -61,6 +40,7 @@ def build_first_late_payment_cte(delay_days=10):
             JOIN Contratos c ON p.ID_Contrato_Recorrente = c.ID
             WHERE
                 p.Data_pagamento IS NOT NULL
+                AND p.Data_pagamento != ''
                 AND JULIANDAY(p.Data_pagamento) - JULIANDAY(p.Vencimento) > {delay_days}
                 AND p.Vencimento >= c.Data_ativa_o
             GROUP BY p.ID_Contrato_Recorrente
@@ -68,27 +48,7 @@ def build_first_late_payment_cte(delay_days=10):
     """
 
 
-# ---------------------------------------------------------------------------
-# WHERE: saude financeira
-# ---------------------------------------------------------------------------
-
-def build_financial_health_where(
-    search_term="",
-    status_contrato="",
-    status_acesso="",
-    relevance="",
-):
-    """
-    Monta clausula WHERE + params para a analise de saude financeira.
-    Retorna (where_sql, params).
-
-    Referencia FLP (FirstLatePayment) e C (Contratos) — precisa dessas aliases.
-
-    Uso:
-        where, params = build_financial_health_where(search_term, status, acesso, relevance)
-        sql = f"... JOIN FirstLatePayment FLP ... {where} ORDER BY ..."
-        conn.execute(sql, tuple(params + [limit, offset]))
-    """
+def build_financial_health_where(search_term="", status_contrato="", status_acesso="", relevance=""):
     params     = []
     conditions = []
 
@@ -125,74 +85,49 @@ def build_financial_health_where(
     return where_sql, params
 
 
-# ---------------------------------------------------------------------------
-# Queries: faturamento por periodo e cidade
-# ---------------------------------------------------------------------------
-
 def build_billing_queries(start_date, end_date, city=""):
     """
-    Retorna dict com 4 queries de faturamento. Todas usam named placeholders
-    (:start_date, :end_date, :city) para passar como params = dict.
-
-    Chaves retornadas:
-        'total'   — todos os clientes, agrupado por Data_pagamento
-        'credito' — todos os clientes, agrupado por Data_cr_dito
-        'ativos'  — apenas clientes ativos nao-negativados
-        'due_day' — por dia fixo de vencimento
-
-    Uso:
-        queries = build_billing_queries(start, end, city)
-        params  = {'start_date': start, 'end_date': end}
-        if city: params['city'] = city
-        data = conn.execute(queries['total'], params).fetchall()
+    Retorna dict com 4 queries de faturamento.
+    
+    IMPORTANTE: 
+    - Recebido: filtra por Data_pagamento, soma Valor_recebido, exclui datas vazias
+    - A receber: filtra por Vencimento, soma Valor
+    - Cancelado: filtra por Vencimento, soma Valor_cancelado
+    - Cidade: join com Contratos para obter cidade correta
     """
-    # Clausulas de cidade
-    c1 = " AND CR.Cidade = :city " if city else ""
-    c2 = " AND C.Cidade  = :city " if city else ""
+    # Cidade: usa Contratos como fonte pois CR.Cidade pode estar NULL
+    c_car  = " AND C2.Cidade = :city " if city else ""
+    c_join = " AND C.Cidade  = :city " if city else ""
 
-    car  = 'FROM "Contas_a_Receber" CR'
-    join = ('FROM "Contas_a_Receber" CR '
-            'JOIN "Contratos" AS C ON CR.ID_Contrato_Recorrente = C.ID')
+    # JOIN de Contas_a_Receber com Contratos para filtro de cidade
+    car_join = (
+        'FROM "Contas_a_Receber" CR '
+        'JOIN "Contratos" C2 ON CR.ID_contrato_recorrente = C2.ID'
+        if city else
+        'FROM "Contas_a_Receber" CR'
+    )
 
-    def _stacked(frm, cit):
-        """Monta o UNION ALL de Recebido / A receber / Cancelado."""
-        return f"""
-            SELECT STRFTIME('%Y-%m', CR.Data_pagamento) AS Month,
-                   'Recebido' AS Status,
-                   SUM(CR.Valor_recebido) AS Total_Value
-            {frm}
-            WHERE CR.Data_pagamento BETWEEN :start_date AND :end_date {cit}
-            GROUP BY Month
+    join = (
+        'FROM "Contas_a_Receber" CR '
+        'JOIN "Contratos" AS C ON CR.ID_contrato_recorrente = C.ID'
+    )
 
-            UNION ALL
+    # Sem filtro de cidade — usa CR diretamente (mais performático)
+    car_simple = 'FROM "Contas_a_Receber" CR'
+    c_simple   = c_car if city else ""
 
-            SELECT STRFTIME('%Y-%m', CR.Vencimento) AS Month,
-                   'A receber' AS Status,
-                   SUM(CR.Valor) AS Total_Value
-            {frm}
-            WHERE CR.Status = 'A receber'
-              AND CR.Vencimento BETWEEN :start_date AND :end_date {cit}
-            GROUP BY Month
+    frm  = car_join if city else car_simple
+    cit  = c_car    if city else ""
 
-            UNION ALL
-
-            SELECT STRFTIME('%Y-%m', CR.Vencimento) AS Month,
-                   'Cancelado' AS Status,
-                   SUM(CR.Valor_cancelado) AS Total_Value
-            {frm}
-            WHERE CR.Status = 'Cancelado'
-              AND CR.Vencimento BETWEEN :start_date AND :end_date {cit}
-            GROUP BY Month
-        """
-
-    total_query = _stacked(car, c1)
-
-    credito_query = f"""
-        SELECT STRFTIME('%Y-%m', CR.Data_cr_dito) AS Month,
+    total_query = f"""
+        SELECT STRFTIME('%Y-%m', CR.Data_pagamento) AS Month,
                'Recebido' AS Status,
                SUM(CR.Valor_recebido) AS Total_Value
-        {car}
-        WHERE CR.Data_cr_dito BETWEEN :start_date AND :end_date {c1}
+        {frm}
+        WHERE CR.Data_pagamento IS NOT NULL
+          AND CR.Data_pagamento != ''
+          AND CR.Status = 'Recebido'
+          AND CR.Data_pagamento BETWEEN :start_date AND :end_date {cit}
         GROUP BY Month
 
         UNION ALL
@@ -200,9 +135,9 @@ def build_billing_queries(start_date, end_date, city=""):
         SELECT STRFTIME('%Y-%m', CR.Vencimento) AS Month,
                'A receber' AS Status,
                SUM(CR.Valor) AS Total_Value
-        {car}
+        {frm}
         WHERE CR.Status = 'A receber'
-          AND CR.Vencimento BETWEEN :start_date AND :end_date {c1}
+          AND CR.Vencimento BETWEEN :start_date AND :end_date {cit}
         GROUP BY Month
 
         UNION ALL
@@ -210,9 +145,41 @@ def build_billing_queries(start_date, end_date, city=""):
         SELECT STRFTIME('%Y-%m', CR.Vencimento) AS Month,
                'Cancelado' AS Status,
                SUM(CR.Valor_cancelado) AS Total_Value
-        {car}
+        {frm}
         WHERE CR.Status = 'Cancelado'
-          AND CR.Vencimento BETWEEN :start_date AND :end_date {c1}
+          AND CR.Vencimento BETWEEN :start_date AND :end_date {cit}
+        GROUP BY Month
+    """
+
+    credito_query = f"""
+        SELECT STRFTIME('%Y-%m', CR.Data_cr_dito) AS Month,
+               'Recebido' AS Status,
+               SUM(CR.Valor_recebido) AS Total_Value
+        {frm}
+        WHERE CR.Data_cr_dito IS NOT NULL
+          AND CR.Data_cr_dito != ''
+          AND CR.Status = 'Recebido'
+          AND CR.Data_cr_dito BETWEEN :start_date AND :end_date {cit}
+        GROUP BY Month
+
+        UNION ALL
+
+        SELECT STRFTIME('%Y-%m', CR.Vencimento) AS Month,
+               'A receber' AS Status,
+               SUM(CR.Valor) AS Total_Value
+        {frm}
+        WHERE CR.Status = 'A receber'
+          AND CR.Vencimento BETWEEN :start_date AND :end_date {cit}
+        GROUP BY Month
+
+        UNION ALL
+
+        SELECT STRFTIME('%Y-%m', CR.Vencimento) AS Month,
+               'Cancelado' AS Status,
+               SUM(CR.Valor_cancelado) AS Total_Value
+        {frm}
+        WHERE CR.Status = 'Cancelado'
+          AND CR.Vencimento BETWEEN :start_date AND :end_date {cit}
         GROUP BY Month
     """
 
@@ -221,16 +188,21 @@ def build_billing_queries(start_date, end_date, city=""):
             SELECT DISTINCT C.Cliente
             FROM Contratos C
             WHERE C.Status_contrato = 'Ativo'
-              AND C.Status_acesso  != 'Desativado'
+              AND C.Status_acesso = 'Ativo'
               AND C.Cliente NOT IN (
                   SELECT DISTINCT Cliente FROM Contratos_Negativacao
+                  WHERE Cliente IS NOT NULL
               )
+              AND C.Cliente IS NOT NULL
         )
         SELECT STRFTIME('%Y-%m', CR.Data_pagamento) AS Month,
                'Recebido' AS Status,
                SUM(CR.Valor_recebido) AS Total_Value
         {join}
-        WHERE CR.Data_pagamento BETWEEN :start_date AND :end_date {c2}
+        WHERE CR.Data_pagamento IS NOT NULL
+          AND CR.Data_pagamento != ''
+          AND CR.Status = 'Recebido'
+          AND CR.Data_pagamento BETWEEN :start_date AND :end_date {c_join}
           AND C.Cliente IN (SELECT Cliente FROM ActiveClients)
         GROUP BY Month
 
@@ -241,7 +213,7 @@ def build_billing_queries(start_date, end_date, city=""):
                SUM(CR.Valor) AS Total_Value
         {join}
         WHERE CR.Status = 'A receber'
-          AND CR.Vencimento BETWEEN :start_date AND :end_date {c2}
+          AND CR.Vencimento BETWEEN :start_date AND :end_date {c_join}
           AND C.Cliente IN (SELECT Cliente FROM ActiveClients)
         GROUP BY Month
 
@@ -252,19 +224,29 @@ def build_billing_queries(start_date, end_date, city=""):
                SUM(CR.Valor_cancelado) AS Total_Value
         {join}
         WHERE CR.Status = 'Cancelado'
-          AND CR.Vencimento BETWEEN :start_date AND :end_date {c2}
+          AND CR.Vencimento BETWEEN :start_date AND :end_date {c_join}
           AND C.Cliente IN (SELECT Cliente FROM ActiveClients)
         GROUP BY Month
     """
 
     due_day_query = f"""
-        SELECT C.Dia_fixo_do_vencimento AS Due_Day,
-               STRFTIME('%Y-%m', CR.Vencimento) AS Month,
-               SUM(CR.Valor) AS Total_Value
-        {join}
-        WHERE CR.Vencimento BETWEEN :start_date AND :end_date {c2}
-          AND C.Dia_fixo_do_vencimento IS NOT NULL
+        SELECT
+            CASE
+                WHEN CAST(STRFTIME('%d', CR.Vencimento) AS INTEGER) BETWEEN 1  AND 7  THEN 5
+                WHEN CAST(STRFTIME('%d', CR.Vencimento) AS INTEGER) BETWEEN 8  AND 12 THEN 10
+                WHEN CAST(STRFTIME('%d', CR.Vencimento) AS INTEGER) BETWEEN 13 AND 17 THEN 15
+                WHEN CAST(STRFTIME('%d', CR.Vencimento) AS INTEGER) BETWEEN 18 AND 22 THEN 20
+                WHEN CAST(STRFTIME('%d', CR.Vencimento) AS INTEGER) BETWEEN 23 AND 24 THEN 23
+                WHEN CAST(STRFTIME('%d', CR.Vencimento) AS INTEGER) BETWEEN 25 AND 31 THEN 25
+            END AS Due_Day,
+            STRFTIME('%Y-%m', CR.Vencimento) AS Month,
+            SUM(CR.Valor) AS Total_Value
+        FROM "Contas_a_Receber" CR
+        WHERE CR.Vencimento BETWEEN :start_date AND :end_date
+          AND CR.Vencimento IS NOT NULL
+          AND CR.Vencimento != '' {cit}
         GROUP BY Due_Day, Month
+        HAVING Due_Day IS NOT NULL
     """
 
     return {
@@ -275,23 +257,11 @@ def build_billing_queries(start_date, end_date, city=""):
     }
 
 
-# ---------------------------------------------------------------------------
-# Query: juros por atraso
-# ---------------------------------------------------------------------------
-
 def build_late_interest_query(start_date="", end_date=""):
-    """
-    Retorna (base_cte_sql, params) para a analise de juros/multas por atraso.
-
-    O base_cte define LatePayments. Voce concatena as queries de totals e buckets:
-
-        base, params = build_late_interest_query(start, end)
-        totals  = conn.execute(base + " SELECT SUM(Interest_Amount)... FROM LatePayments", params)
-        buckets = conn.execute(base + " SELECT Delay_Bucket... FROM LatePayments GROUP BY ...", params)
-    """
     params     = []
     conditions = [
         "CR.Data_pagamento IS NOT NULL",
+        "CR.Data_pagamento != ''",
         "CR.Vencimento IS NOT NULL",
         "CR.Data_pagamento > CR.Vencimento",
         "(CR.Valor_recebido - CR.Valor) > 0.01",
@@ -346,10 +316,6 @@ def build_late_interest_query(start_date="", end_date=""):
 
     return totals_sql, buckets_sql, params
 
-
-# ---------------------------------------------------------------------------
-# Helper interno
-# ---------------------------------------------------------------------------
 
 def _parse_relevance(s):
     if not s:
