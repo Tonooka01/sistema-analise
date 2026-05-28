@@ -455,6 +455,46 @@ def _sync_contas_receber(conn, token, log, full=True):
     log.append(f"  ✅ {total_inseridos} contas a receber no total")
 
 
+# Mapeamento de assuntos OS (ID -> Nome)
+OS_ASSUNTOS = {
+    '1': 'INSTALAÇÃO DE FIBRA', '2': 'MANUTENÇÃO DE FIBRA', '3': 'VISITA TECNICA',
+    '4': 'MUDANÇA DE ENDEREÇO', '5': 'MUDANÇA DE PONTO', '6': 'RETIRADA DE EQUIPAMENTO',
+    '7': 'INSTALAÇÃO NÃO REALIZADA', '8': 'O.S NÃO REALIZADO', '9': 'EQUIPAMENTO NÃO RETIRADO',
+    '10': 'LIMPEZA DE REDE', '11': 'PENDÊNCIA FINANCEIRA', '13': 'CANCELAMENTO',
+    '14': 'MUDANÇA DE TITULARIDADE', '15': 'MIGRAÇÃO DE PLANO UPGRADE', '16': 'FALHA NA REDE',
+    '17': 'IMPLANTAÇÃO DE ESTRUTURA', '18': 'INFORMAÇÃO', '19': 'OSCILAÇÃO',
+    '20': 'MIGRAÇÃO DE VENCIMENTO', '21': 'VISTORIA DE REDE', '22': 'COBRANÇA EFETIVA',
+    '23': 'SEM CONEXÃO', '24': 'READEQUAÇÃO DE REDE', '25': 'LIBERAÇÃO DE SINAL',
+    '26': 'MASSIVA', '27': 'CONFIRMAÇÃO CADASTRAL VENDAS', '28': 'RETENÇÃO CLIENTE',
+    '29': 'COBRANÇA NÃO ATENDIDAS', '30': 'CANCELAMENTO INSATISFAÇÃO', '31': '2° VIA BOLETO',
+    '32': 'MANUTENÇÃO DE REDE', '33': 'RECLAMAÇÃO DE ALCANCE', '34': 'TROCA DE SENHA',
+    '35': 'ALCANCE DE SINAL', '36': 'OFERTA EFETIVA', '37': 'OFERTA NÃO EFETIVA',
+    '38': 'INDICAÇÃO', '39': 'REATIVAÇÃO CLIENTE', '40': 'CANCELAMENTO POS MASSIVA',
+    '41': 'EQUIPAMENTO RENEGOCIADO', '42': 'CONFIRMAÇÃO DE PAGAMENTO', '43': 'ACÃO DE COBRANÇA',
+    '44': 'CLIENTE DIVIDA CADUCADA', '45': 'POS - VENDA CLIENTE', '46': 'APLICATIVOS',
+    '47': 'ATENDIMENTO ENCERRADO POR FALTA DE CONTATO', '48': 'COBRANÇA RECADO',
+    '49': 'MIGRAÇÃO DE PLANO DOWNGRADE', '50': 'COBRANÇA EFETIVA RECEPTIVA',
+    '52': 'ACÃO DE COBRANÇA ACORDO REALIZADO', '53': 'CONFIRMAÇÃO CADASTRAL',
+    '54': 'AGENDAMENTO', '55': 'VISTORIA INSTALAÇÃO', '56': 'COBRANÇA TELEIN',
+    '57': 'DESCONEXÃO EFETIVA', '58': 'DESCONEXÃO NÃO EFETIVA', '59': 'ACÃO DESCONEXÃO',
+    '60': 'CLIENTE CONECTADO', '61': 'URA REVERSA SEM IP', '62': 'URA REVERSA POS-ATENDIMENTO',
+    '63': 'URA REVERSA UPGRADE', '64': 'COBRANÇA TELEIN ACORDO', '65': 'COBRANÇA TELEIN RECADO',
+    '66': 'RETORNO CLIENTE INSTALAÇÃO', '67': 'ACÃO CANCELAMENTO', '68': 'RENOVAÇÃO',
+    '69': 'PONTO ADICIONAL', '70': 'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
+    '71': 'CANCELAMENTO RETIRADA', '72': 'INADIMPLENCIA RETIRADA', '73': 'COBRANÇA TELEIN DESCONHECE',
+    '74': 'CARNÊ IMPRESSO', '75': 'CONFIGURAÇÃO APP´S', '76': 'ENTREGA DE CARNÊ',
+    '77': 'INSTALAÇÃO EVENTOS', '78': 'RETORNO MANUTENÇÃO'
+}
+
+OS_STATUS = {
+    'A': 'Aberta', 'AN': 'Análise', 'EN': 'Encaminhada', 'AS': 'Assumida',
+    'AG': 'Agendada', 'DS': 'Deslocamento', 'EX': 'Execução', 'F': 'Finalizada',
+    'RAG': 'Aguardando agendamento'
+}
+
+CIDADE_IDS_MAP = {'515': 'Dom Pedro', '599': 'Presidente Dutra', '656': 'Tuntum', '624': 'São Domingos do Maranhão'}
+
+
 def _sync_os(conn, token, log, since=None):
     if since:
         log.append("→ OS (últimos 30 dias)...")
@@ -462,6 +502,18 @@ def _sync_os(conn, token, log, since=None):
     else:
         log.append("→ OS (completo)...")
         data_inicio = '2020-01-01'
+
+    # Cache de clientes para lookup
+    cliente_cache = {}
+    for table in ['Clientes', 'Clientes_Negativacao']:
+        try:
+            rows = conn.execute(f"SELECT ID, Raz_o_social FROM {table}").fetchall()
+            for r in rows:
+                id_int = int(float(r[0])) if r[0] else None
+                if id_int:
+                    cliente_cache[str(id_int)] = r[1]
+        except Exception:
+            pass
 
     records = _ixc_get('su_oss_chamado', {
         'qtype':     'su_oss_chamado.data_abertura',
@@ -476,21 +528,70 @@ def _sync_os(conn, token, log, since=None):
 
     for r in records:
         try:
+            assunto_id = str(r.get('id_assunto', '') or '')
+            assunto    = OS_ASSUNTOS.get(assunto_id, assunto_id)
+            status     = OS_STATUS.get(r.get('status', ''), r.get('status', ''))
+            cidade_id  = str(r.get('id_cidade', '') or '')
+            cidade     = CIDADE_IDS_MAP.get(cidade_id, cidade_id)
+
+            id_cli = str(int(float(r.get('id_cliente') or 0))) if r.get('id_cliente') else ''
+            nome_cliente = cliente_cache.get(id_cli, id_cli)
+
             conn.execute("""
                 INSERT OR REPLACE INTO OS
-                (ID, Cliente, Abertura, Fechamento, SLA, Assunto, Mensagem,
-                 Status, Filial, Cidade, Bairro, Setor, Prioridade, Tipo)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                (ID, Tipo, Filial, SLA, Abertura, Melhor_hor_rio, Liberado,
+                 Status, Cliente, Assunto, Setor, Cidade, Status_conex_o,
+                 Prioridade, Mensagem, Protocolo, Endere_o, Complemento,
+                 Condom_nio, Bloco, Apartamento, Bairro, Refer_ncia,
+                 Impresso, In_cio, Agendamento, Final, Fechamento,
+                 IDX, Diagn_stico, Login, Prazo_limite, Data_reservada,
+                 Contrato, ID_Atendimento, Colaborador, Gerada_por,
+                 Valor_comiss_o, Valor_faturamento, Estrutura)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
-                r.get('id'), r.get('cliente_razao'),
-                r.get('data_abertura'), r.get('data_fechamento'),
-                r.get('status_sla'), r.get('assunto_descricao'),
-                r.get('mensagem'), r.get('status'),
-                r.get('id_filial'), r.get('cidade'), r.get('bairro'),
-                r.get('setor'), r.get('prioridade'), r.get('tipo')
+                r.get('id'),
+                r.get('tipo'),
+                r.get('id_filial'),
+                r.get('status_sla'),
+                r.get('data_abertura'),
+                r.get('melhor_horario_agenda'),
+                r.get('liberado'),
+                status,
+                nome_cliente,
+                assunto,
+                r.get('setor'),
+                cidade,
+                r.get('status_conexao'),
+                r.get('prioridade'),
+                r.get('mensagem'),
+                r.get('protocolo'),
+                r.get('endereco'),
+                r.get('complemento'),
+                r.get('id_condominio'),
+                r.get('bloco'),
+                r.get('apartamento'),
+                r.get('bairro'),
+                r.get('referencia'),
+                r.get('impresso'),
+                r.get('data_inicio'),
+                r.get('data_agenda'),
+                r.get('data_final'),
+                r.get('data_fechamento'),
+                r.get('idx'),
+                r.get('id_su_diagnostico'),
+                r.get('id_login'),
+                r.get('data_prazo_limite'),
+                r.get('data_reservada'),
+                r.get('id_contrato_kit'),
+                r.get('id_atendente'),
+                r.get('id_tecnico'),
+                r.get('origem_cadastro'),
+                r.get('valor_total_comissao'),
+                r.get('valor_total'),
+                r.get('id_estrutura'),
             ))
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  ⚠️ Erro OS id={r.get('id')}: {e}", flush=True)
 
     log.append(f"  ✅ {len(records)} OS")
 

@@ -1,10 +1,8 @@
-
 import sqlite3
 c = sqlite3.connect('analise_dados.db')
-for col, tipo in [('Colaborador','TEXT'),('Gerada_por','TEXT'),('Valor_comiss_o','REAL'),('Valor_faturamento','REAL'),('Estrutura','TEXT')]:
-    try:
-        c.execute(f'ALTER TABLE OS ADD COLUMN {col} {tipo}')
-        print(f'Adicionada: {col}')
-    except Exception as e:
-        print(f'Já existe ou erro: {col} - {e}')
-c.commit()
+
+r = c.execute("SELECT ID, Cliente, Assunto FROM OS WHERE Cliente = 'ABMAEL DA SILVA SOUSA' LIMIT 3").fetchall()
+print('Por nome:', r)
+
+r2 = c.execute("SELECT ID, Cliente, Assunto FROM OS LIMIT 3").fetchall()
+print('Amostra:', r2)
