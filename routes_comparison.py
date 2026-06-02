@@ -8,6 +8,9 @@ import pdfplumber # Biblioteca para ler PDF real
 
 comparison_bp = Blueprint('comparison_bp', __name__)
 
+from logger import get_logger
+logger = get_logger(__name__)
+
 def get_db():
     return current_app.config['GET_DB_CONNECTION']()
 
@@ -136,7 +139,7 @@ def api_daily_comparison():
         return jsonify(result)
 
     except Exception as e:
-        print(f"Erro no comparativo diário: {e}")
+        logger.error(f"Erro no comparativo diário: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
@@ -236,7 +239,7 @@ def api_upload_pdf():
         # 1. Limpa dados APENAS dos meses encontrados no PDF para evitar duplicidade
         # (Isso permite fazer upload de Outubro e depois de Novembro sem apagar um ao outro, se forem arquivos separados)
         for m, y in months_found:
-            print(f"Limpando dados existentes para {m:02d}/{y}...")
+            logger.info(f"Limpando dados existentes para {m:02d}/{y}...")
             conn.execute("DELETE FROM Recebimentos_Diarios WHERE STRFTIME('%m', Data) = ? AND STRFTIME('%Y', Data) = ?", 
                          (f'{m:02d}', str(y)))
 
@@ -255,7 +258,7 @@ def api_upload_pdf():
         })
         
     except Exception as e:
-        print(f"Erro no upload: {e}")
+        logger.error(f"Erro no upload: {e}", exc_info=True)
         return jsonify({"error": f"Erro ao processar PDF: {e}"}), 500
     finally:
         if conn: conn.close()

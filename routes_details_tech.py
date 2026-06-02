@@ -4,11 +4,13 @@ Detalhes técnicos: logins, comodato, equipamentos.
 """
 
 import sqlite3
-import traceback
 import pandas as pd
 from flask import Blueprint, jsonify, request, abort, current_app
 
 details_tech_bp = Blueprint('details_tech_bp', __name__)
+
+from logger import get_logger
+logger = get_logger(__name__)
 
 
 def get_db():
@@ -56,7 +58,7 @@ def api_logins_details(contract_id):
         return jsonify({"data": [dict(r) for r in data], "total_rows": total_rows})
 
     except sqlite3.Error as e:
-        print(f"Erro ao buscar detalhes de logins: {e}")
+        logger.error(f"Erro ao buscar detalhes de logins: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()
@@ -72,7 +74,7 @@ def api_comodato_details(contract_id):
         ).fetchall()
         return jsonify({"data": [dict(r) for r in data], "total_rows": len(data)})
     except sqlite3.Error as e:
-        print(f"Erro ao buscar detalhes de comodato: {e}")
+        logger.error(f"Erro ao buscar detalhes de comodato: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()
@@ -161,10 +163,10 @@ def api_equipment_clients():
         return jsonify({"data": data_list, "total_rows": total_rows})
 
     except sqlite3.Error as e:
-        print(f"Erro SQLite ao buscar clientes por equipamento: {e}")
+        logger.error(f"Erro SQLite ao buscar clientes por equipamento: {e}", exc_info=True)
         return jsonify({"error": "Erro interno no banco de dados."}), 500
     except Exception as e:
-        traceback.print_exc()
+        logger.error(f"Erro inesperado ao buscar clientes por equipamento: {e}", exc_info=True)
         return jsonify({"error": "Erro interno inesperado."}), 500
     finally:
         if conn: conn.close()
@@ -209,7 +211,7 @@ def api_active_equipment_clients():
         return jsonify({"data": [dict(r) for r in data], "total_rows": total_rows})
 
     except sqlite3.Error as e:
-        print(f"Erro ao buscar clientes por equipamento ativo: {e}")
+        logger.error(f"Erro ao buscar clientes por equipamento ativo: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()

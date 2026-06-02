@@ -6,6 +6,9 @@ from flask import Blueprint, jsonify, request, abort, current_app
 # O prefixo '/api/behavior' será definido no api_server.py
 behavior_bp = Blueprint('behavior_bp', __name__)
 
+from logger import get_logger
+logger = get_logger(__name__)
+
 def get_db():
     """Função auxiliar para obter a conexão do banco de dados a partir do app_context."""
     return current_app.config['GET_DB_CONNECTION']()
@@ -62,7 +65,7 @@ def api_behavior_complaint_patterns():
         })
 
     except sqlite3.Error as e:
-        print(f"Erro na análise de padrão de reclamações: {e}")
+        logger.error(f"Erro na análise de padrão de reclamações: {e}", exc_info=True)
         return jsonify({"error": f"Erro interno ao processar a análise. Detalhe: {e}"}), 500
     finally:
         if conn: conn.close()
@@ -152,7 +155,7 @@ def api_behavior_predictive_churn():
         return jsonify({"data": [dict(row) for row in data], "total_rows": total_rows})
 
     except sqlite3.Error as e:
-        print(f"Erro na análise preditiva de churn: {e}")
+        logger.error(f"Erro na análise preditiva de churn: {e}", exc_info=True)
         return jsonify({"error": f"Erro interno ao processar a análise preditiva. Detalhe: {e}"}), 500
     finally:
         if conn: conn.close()

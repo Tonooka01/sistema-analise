@@ -4,6 +4,9 @@ from flask import Blueprint, jsonify, request, abort, current_app
 # Define o Blueprint
 filters_bp = Blueprint('filters_bp', __name__)
 
+from logger import get_logger
+logger = get_logger(__name__)
+
 def get_db():
     """Função auxiliar para obter a conexão do banco de dados a partir do app_context."""
     return current_app.config['GET_DB_CONNECTION']()
@@ -28,7 +31,7 @@ def api_contract_statuses():
             "status_acesso": sorted(status_acesso)
         })
     except sqlite3.Error as e:
-        print(f"Erro ao buscar status de contrato: {e}")
+        logger.error(f"Erro ao buscar status de contrato: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao buscar filtros de status."}), 500
     finally:
         if conn: conn.close()

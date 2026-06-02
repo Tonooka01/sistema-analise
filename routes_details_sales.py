@@ -4,11 +4,13 @@ Detalhes de vendas: clientes do vendedor, ativações por vendedor.
 """
 
 import sqlite3
-import traceback
 import pandas as pd
 from flask import Blueprint, jsonify, request, abort, current_app
 
 details_sales_bp = Blueprint('details_sales_bp', __name__)
+
+from logger import get_logger
+logger = get_logger(__name__)
 
 
 def get_db():
@@ -74,7 +76,7 @@ def api_seller_clients():
         return jsonify({"data": [dict(r) for r in data], "total_rows": total_rows})
 
     except sqlite3.Error as e:
-        print(f"Erro ao buscar clientes do vendedor: {e}")
+        logger.error(f"Erro ao buscar clientes do vendedor: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()
@@ -166,10 +168,10 @@ def api_seller_activations():
         return jsonify({"data": data_list, "total_rows": total_rows})
 
     except sqlite3.Error as e:
-        traceback.print_exc()
+        logger.error(f"Erro SQLite ao buscar ativações do vendedor: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     except Exception as e:
-        traceback.print_exc()
+        logger.error(f"Erro inesperado ao buscar ativações do vendedor: {e}", exc_info=True)
         return jsonify({"error": "Erro interno inesperado."}), 500
     finally:
         if conn: conn.close()

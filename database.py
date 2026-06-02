@@ -6,6 +6,9 @@ Conexão com SQLite e inicialização das tabelas de sistema.
 import sqlite3
 import os
 from werkzeug.security import generate_password_hash
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'analise_dados.db')
 
@@ -52,11 +55,11 @@ def init_db_users():
         columns = [info[1] for info in cursor.fetchall()]
 
         if 'is_active' not in columns:
-            print("Atualizando tabela Users: Adicionando 'is_active'...")
+            logger.info("Atualizando tabela Users: Adicionando 'is_active'...")
             conn.execute("ALTER TABLE Users ADD COLUMN is_active INTEGER DEFAULT 1")
 
         if 'last_seen' not in columns:
-            print("Atualizando tabela Users: Adicionando 'last_seen'...")
+            logger.info("Atualizando tabela Users: Adicionando 'last_seen'...")
             conn.execute("ALTER TABLE Users ADD COLUMN last_seen DATETIME")
 
         # Dados padrão
@@ -69,10 +72,10 @@ def init_db_users():
                 "INSERT INTO Users (username, password_hash, is_active) VALUES (?, ?, 1)",
                 ('admin', hashed_pw)
             )
-            print("--- Usuário padrão 'admin' criado com sucesso. ---")
+            logger.info("Usuário 'admin' criado com sucesso.")
 
         conn.commit()
     except Exception as e:
-        print(f"Erro ao inicializar banco de sistema: {e}")
+        logger.error("Erro ao inicializar banco de sistema: %s", e, exc_info=True)
     finally:
         conn.close()

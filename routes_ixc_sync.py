@@ -4,7 +4,6 @@ Sincronização incremental e completa com a API do IXCsoft.
 """
 
 import sqlite3
-import traceback
 import threading
 import base64
 import time
@@ -16,6 +15,9 @@ from flask import Blueprint, jsonify, request, current_app
 from flask_login import login_required, current_user
 
 ixc_sync_bp = Blueprint('ixc_sync_bp', __name__)
+
+from logger import get_logger
+logger = get_logger(__name__)
 
 IXC_BASE_URL  = 'https://sistema.netvaletelecom.com/webservice/v1'
 ROWS_PER_PAGE = 500
@@ -80,7 +82,7 @@ def _ixc_get(endpoint, params, token):
 
         all_records.extend(records)
         total = int(data.get('total', 0))
-        print(f"  [{endpoint}] página {page} — {len(all_records)}/{total}", flush=True)
+        logger.info(f"  [{endpoint}] página {page} — {len(all_records)}/{total}")
         if len(all_records) >= total:
             break
         page += 1
@@ -114,7 +116,7 @@ def _update_progress(conn, current, total, msg):
         (f'{pct}|{msg}',)
     )
     conn.commit()
-    print(f"[IXC {pct:3d}%] {msg}", flush=True)
+    logger.info(f"[IXC {pct:3d}%] {msg}")
 
 
 # ── Mapeamentos ────────────────────────────────────────────────────────────────
@@ -169,7 +171,7 @@ def _sync_clientes(conn, token, log, since=None):
             params['oper2']  = '>='
 
         records = _ixc_get('cliente', params, token)
-        print(f"  [filial {filial}] {len(records)} clientes", flush=True)
+        logger.info(f"  [filial {filial}] {len(records)} clientes")
 
         table = 'Clientes' if filial == '2' else 'Clientes_Negativacao'
         for r in records:
@@ -236,7 +238,7 @@ def _sync_contratos(conn, token, log, since=None):
             params['oper2']  = '>='
 
         records = _ixc_get('cliente_contrato', params, token)
-        print(f"  [filial {filial}] {len(records)} contratos", flush=True)
+        logger.info(f"  [filial {filial}] {len(records)} contratos")
 
         for r in records:
             id_cli = str(int(float(r.get('id_cliente', 0) or 0)))
@@ -397,7 +399,7 @@ def _sync_contas_receber(conn, token, log, full=True):
                     cliente_cache[str(id_int)] = (r[1], r[2])
         except Exception:
             pass
-    print(f"  Cache: {len(cliente_cache)} clientes carregados", flush=True)
+    logger.info(f"  Cache: {len(cliente_cache)} clientes carregados")
 
     if full:
         conn.execute("DELETE FROM Contas_a_Receber")
@@ -406,7 +408,7 @@ def _sync_contas_receber(conn, token, log, full=True):
 
     # Filial 1 — a partir de 2025, busca única sem loop de ano
     log.append("  → Filial 1 (a partir de 2025)...")
-    print("  → Buscando filial 1...", flush=True)
+    logger.info("  → Buscando filial 1...")
     try:
         records = _ixc_get('fn_areceber', {
             'qtype':     'fn_areceber.filial_id',
@@ -417,7 +419,7 @@ def _sync_contas_receber(conn, token, log, full=True):
         }, token)
         # Filtra localmente por data de pagamento >= 2025
         records = [r for r in records if str(r.get('pagamento_data', '') or '')[:4] >= '2025']
-        print(f"    [filial 1] {len(records)} registros a partir de 2025", flush=True)
+        logger.info(f"    [filial 1] {len(records)} registros a partir de 2025")
         # Limpa filial 1 antes de reinserir para evitar duplicatas
         if full:
             conn.execute("DELETE FROM Contas_a_Receber WHERE Filial = 1")
@@ -427,12 +429,12 @@ def _sync_contas_receber(conn, token, log, full=True):
         log.append(f"    ✅ {len(records)} registros filial 1")
     except Exception as e:
         log.append(f"    ⚠️ Erro filial 1: {e}")
-        print(f"    ⚠️ Erro filial 1: {e}", flush=True)
+        logger.warning(f"    Erro filial 1: {e}", exc_info=True)
 
     # Filiais 2 e 4 — completo
     for filial in ['2', '4']:
         log.append(f"  → Filial {filial}...")
-        print(f"  → Buscando filial {filial}...", flush=True)
+        logger.info(f"  → Buscando filial {filial}...")
         try:
             records = _ixc_get('fn_areceber', {
                 'qtype':     'fn_areceber.filial_id',
@@ -441,15 +443,15 @@ def _sync_contas_receber(conn, token, log, full=True):
                 'sortname':  'fn_areceber.id',
                 'sortorder': 'asc'
             }, token)
-            print(f"  → Inserindo {len(records)} registros da filial {filial}...", flush=True)
+            logger.info(f"  → Inserindo {len(records)} registros da filial {filial}...")
             _insert_car_records(conn, records, cliente_cache)
             total_inseridos += len(records)
             conn.commit()
             log.append(f"    ✅ {len(records)} registros filial {filial}")
-            print(f"    ✅ {len(records)} registros filial {filial} inseridos", flush=True)
+            logger.info(f"    {len(records)} registros filial {filial} inseridos")
         except Exception as e:
             log.append(f"    ⚠️ Erro filial {filial}: {e}")
-            print(f"    ⚠️ Erro filial {filial}: {e}", flush=True)
+            logger.warning(f"    Erro filial {filial}: {e}", exc_info=True)
             continue
 
     log.append(f"  ✅ {total_inseridos} contas a receber no total")
@@ -591,7 +593,7 @@ def _sync_os(conn, token, log, since=None):
                 r.get('id_estrutura'),
             ))
         except Exception as e:
-            print(f"  ⚠️ Erro OS id={r.get('id')}: {e}", flush=True)
+            logger.warning(f"  Erro OS id={r.get('id')}: {e}", exc_info=True)
 
     log.append(f"  ✅ {len(records)} OS")
 
@@ -701,10 +703,10 @@ def _sync_clientes_fibra(conn, token, log):
                     r.get('mac'), r.get('login'), r.get('ultima_atualizacao')
                 ))
             total += len(records)
-            print(f"  [{olt_nome}] {len(records)} registros", flush=True)
+            logger.info(f"  [{olt_nome}] {len(records)} registros")
         except Exception as e:
             log.append(f"  ⚠️ Erro OLT {olt_nome}: {e}")
-            print(f"  ⚠️ Erro OLT {olt_nome}: {e}", flush=True)
+            logger.warning(f"  Erro OLT {olt_nome}: {e}", exc_info=True)
 
     log.append(f"  ✅ {total} clientes fibra")
 
@@ -812,11 +814,11 @@ def _run_sync(app, token, mode='incremental', tables=None):
             tipo = '🔄 Incremental' if mode == 'incremental' else '🔁 Completa'
             msg = f"{tipo} — iniciada em {start.strftime('%d/%m/%Y %H:%M:%S')}"
             log.append(msg)
-            print(f"\n{'='*50}\n{msg}", flush=True)
+            logger.info(f"\n{'='*50}\n{msg}")
             if since:
                 msg2 = f"  Buscando mudanças desde: {since}"
                 log.append(msg2)
-                print(msg2, flush=True)
+                logger.info(msg2)
 
             for i, (key, name, fn) in enumerate(TASKS):
                 # Verifica se foi cancelado
@@ -826,19 +828,19 @@ def _run_sync(app, token, mode='incremental', tables=None):
                 if cancel and cancel['value'] == '1':
                     msg = "⏹ Sincronização cancelada pelo usuário."
                     log.append(msg)
-                    print(msg, flush=True)
+                    logger.info(msg)
                     conn.execute("REPLACE INTO Settings (key, value) VALUES ('ixc_sync_cancel', '0')")
                     break
 
                 _update_progress(conn, i, len(TASKS), f'Sincronizando {name}...')
                 fn()
-                print(f"  ✔ {name} concluído", flush=True)
+                logger.info(f"  {name} concluído")
 
             conn.commit()
             elapsed = (datetime.now() - start).seconds
             msg = f"✅ Concluída em {elapsed}s"
             log.append(msg)
-            print(f"\n{msg}\n{'='*50}", flush=True)
+            logger.info(f"\n{msg}\n{'='*50}")
             _update_progress(conn, len(TASKS), len(TASKS), 'Concluído!')
 
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -850,7 +852,7 @@ def _run_sync(app, token, mode='incremental', tables=None):
             conn.commit()
 
         except Exception as e:
-            traceback.print_exc()
+            logger.error(f"Erro na sincronização: {e}", exc_info=True)
             log.append(f"❌ Erro: {str(e)}")
             conn.execute("REPLACE INTO Settings (key, value) VALUES ('ixc_last_sync_log', ?)", ('\n'.join(log),))
             conn.execute("REPLACE INTO Settings (key, value) VALUES ('ixc_sync_status', 'error')")
@@ -968,7 +970,7 @@ def start_weekly_scheduler(app):
                     token = _get_token(conn)
                     conn.close()
                 if token:
-                    print(f"[{now}] Sync semanal completa iniciada...")
+                    logger.info(f"[{now}] Sync semanal completa iniciada...")
                     _run_sync(app, token, 'full')
                 time.sleep(61)
             time.sleep(30)

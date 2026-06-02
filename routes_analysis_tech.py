@@ -1,12 +1,14 @@
 import pandas as pd
 import sqlite3
-import traceback
 from flask import Blueprint, jsonify, request
 from utils_api import get_db, parse_relevance_filter, add_date_range_filter
 
 # Define the Blueprint for technical analysis (GRAPHS)
 # The name 'tech_bp' MUST be defined here to be imported in api_server.py
 tech_bp = Blueprint('tech_bp', __name__)
+
+from logger import get_logger
+logger = get_logger(__name__)
 
 @tech_bp.route('/cancellations_by_equipment')
 def api_cancellations_by_equipment():
@@ -118,10 +120,10 @@ def api_cancellations_by_equipment():
     except sqlite3.Error as e:
         if "no such table" in str(e).lower():
             return jsonify({"error": "A tabela 'Equipamento' ou 'Contratos_Negativacao' não foi encontrada. Esta análise requer ambas as tabelas."}), 500
-        print(f"Erro na base de dados na análise por equipamento: {e}")
+        logger.error(f"Erro na base de dados na análise por equipamento: {e}", exc_info=True)
         return jsonify({"error": f"Erro interno ao processar a análise por equipamento. Detalhe: {e}"}), 500
     except Exception as e:
-        print(f"Erro inesperado na análise por equipamento: {e}")
+        logger.error(f"Erro inesperado na análise por equipamento: {e}", exc_info=True)
         return jsonify({"error": f"Erro interno inesperado ao processar a análise por equipamento. Detalhe: {e}"}), 500
     finally:
         if conn: conn.close()
@@ -176,7 +178,7 @@ def api_equipment_by_olt():
     except sqlite3.Error as e:
         if "no such table" in str(e).lower():
             return jsonify({"error": "As tabelas 'Logins', 'Contratos' e/ou 'Equipamento' não foram encontradas. Esta análise requer as três tabelas."}), 500
-        print(f"Erro na base de dados na análise por OLT: {e}")
+        logger.error(f"Erro na base de dados na análise por OLT: {e}", exc_info=True)
         return jsonify({"error": f"Erro interno ao processar a análise por OLT. Detalhe: {e}"}), 500
     finally:
         if conn: conn.close()
@@ -295,7 +297,7 @@ def api_daily_evolution_by_city():
                      data_by_city[city]['totals'] = {'total_ativacoes': row['total_ativacoes'], 'total_churn': row['total_churn']}
              return jsonify({"data": data_by_city})
 
-        print(f"Erro na base de dados na análise de evolução diária: {e}")
+        logger.error(f"Erro na base de dados na análise de evolução diária: {e}", exc_info=True)
         return jsonify({"error": f"Erro interno ao processar a análise. Detalhe: {e}"}), 500
     finally:
         if conn: conn.close()

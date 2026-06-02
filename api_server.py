@@ -22,6 +22,9 @@ except ImportError:
 # --- Módulos locais ---
 from database import get_db_connection, init_db_users
 from models import User, load_user
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 # --- Blueprints originais ---
 from routes_auth import auth_bp
@@ -114,7 +117,7 @@ def log_request(response):
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"Erro ao gravar log: {e}")
+        logger.error(f"Erro ao gravar log: {e}", exc_info=True)
 
     return response
 
@@ -174,5 +177,5 @@ if __name__ == '__main__':
 
     init_db_users()
 
-    print("Servidor iniciado na porta 5000...")
+    logger.info("Servidor iniciado na porta 5000...")
     app.run(host='0.0.0.0', port=5000, debug=False)

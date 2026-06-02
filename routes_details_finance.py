@@ -8,6 +8,9 @@ from flask import Blueprint, jsonify, request, abort, current_app
 
 details_finance_bp = Blueprint('details_finance_bp', __name__)
 
+from logger import get_logger
+logger = get_logger(__name__)
+
 
 def get_db():
     return current_app.config['GET_DB_CONNECTION']()
@@ -49,7 +52,7 @@ def api_invoice_details():
         return jsonify({"data": [dict(r) for r in data], "total_rows": total_rows, "limit": limit, "offset": offset})
 
     except sqlite3.Error as e:
-        print(f"Erro ao buscar detalhes da fatura: {e}")
+        logger.error(f"Erro ao buscar detalhes da fatura: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao buscar detalhes da fatura."}), 500
     finally:
         if conn: conn.close()
@@ -76,7 +79,7 @@ def api_financial_details(contract_id):
         return jsonify({"data": [dict(r) for r in data], "total_rows": total_rows})
 
     except sqlite3.Error as e:
-        print(f"Erro ao buscar detalhes financeiros: {e}")
+        logger.error(f"Erro ao buscar detalhes financeiros: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()

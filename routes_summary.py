@@ -5,6 +5,9 @@ from flask import Blueprint, jsonify, request, abort, current_app
 # Define o Blueprint
 summary_bp = Blueprint('summary_bp', __name__)
 
+from logger import get_logger
+logger = get_logger(__name__)
+
 # Mapeamento centralizado de colunas de data (movido do api_server.py)
 DATE_COLUMN_MAP = {
     'Clientes': 'Data_Cadastro',
@@ -31,7 +34,7 @@ def api_tables():
         tables = [row[0] for row in cursor.fetchall()]
         return jsonify(tables)
     except sqlite3.Error as e:
-        print(f"Erro na base de dados ao listar tabelas: {e}")
+        logger.error(f"Erro na base de dados ao listar tabelas: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao procurar tabelas"}), 500
     finally:
         if conn: conn.close()
@@ -56,7 +59,7 @@ def api_data_full(table_name):
 
         return jsonify(data_list)
     except sqlite3.Error as e:
-        print(f"Erro na base de dados ao procurar dados completos da tabela '{table_name}': {e}")
+        logger.error(f"Erro na base de dados ao procurar dados completos da tabela '{table_name}': {e}", exc_info=True)
         return jsonify({"error": f"Erro interno ao procurar dados completos da tabela '{table_name}'"}), 500
     finally:
         if conn: conn.close()
@@ -100,7 +103,7 @@ def api_data_paginated(table_name):
             "offset": offset
         })
     except sqlite3.Error as e:
-        print(f"Erro na base de dados ao procurar dados paginados da tabela '{table_name}': {e}")
+        logger.error(f"Erro na base de dados ao procurar dados paginados da tabela '{table_name}': {e}", exc_info=True)
         return jsonify({"error": f"Erro interno ao procurar dados paginados da tabela '{table_name}'"}), 500
     finally:
         if conn: conn.close()
@@ -133,7 +136,7 @@ def api_finance_summary_by_due_date():
         data_list = [dict(row) for row in data]
         return jsonify(data_list)
     except sqlite3.Error as e:
-        print(f"Erro na base de dados ao buscar faturamento por data de vencimento: {e}")
+        logger.error(f"Erro na base de dados ao buscar faturamento por data de vencimento: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()
@@ -423,7 +426,7 @@ def api_finance_summary(table_name):
             active_clients_summary = conn.execute(active_clients_stacked_bar_query, stacked_params_ativos).fetchall()
         except sqlite3.Error as e:
             if "no such table" in str(e).lower() and "contratos_negativacao" in str(e).lower():
-                print("Aviso (Resumo Financeiro): Tabela Contratos_Negativacao não encontrada. Executando fallback para Clientes Ativos.")
+                logger.warning("Aviso (Resumo Financeiro): Tabela Contratos_Negativacao não encontrada. Executando fallback para Clientes Ativos.")
                 active_clients_stacked_bar_query_fallback = active_clients_stacked_bar_query.replace(
                     "AND C.Cliente NOT IN (SELECT DISTINCT Cliente FROM Contratos_Negativacao)",
                     ""
@@ -444,7 +447,7 @@ def api_finance_summary(table_name):
             "last_3_months_active_clients": active_clients_summary_list
         })
     except sqlite3.Error as e:
-        print(f"Erro na base de dados ao procurar resumo financeiro da tabela 'Contas_a_Receber': {e}")
+        logger.error(f"Erro na base de dados ao procurar resumo financeiro da tabela 'Contas_a_Receber': {e}", exc_info=True)
         return jsonify({"error": f"Erro interno ao procurar resumo financeiro da tabela '{table_name}'"}), 500
     finally:
         if conn: conn.close()
@@ -525,7 +528,7 @@ def api_atendimento_summary(table_name):
             "years": unique_years
         })
     except sqlite3.Error as e:
-        print(f"Erro na base de dados ao procurar resumo de atendimento da tabela '{table_name}': {e}")
+        logger.error(f"Erro na base de dados ao procurar resumo de atendimento da tabela '{table_name}': {e}", exc_info=True)
         return jsonify({"error": f"Erro interno ao procurar resumo de atendimento da tabela '{table_name}'"}), 500
     finally:
         if conn: conn.close()
@@ -597,7 +600,7 @@ def api_os_summary(table_name):
             "cities": unique_cities
         })
     except sqlite3.Error as e:
-        print(f"Erro na base de dados ao procurar resumo de OS da tabela '{table_name}': {e}")
+        logger.error(f"Erro na base de dados ao procurar resumo de OS da tabela '{table_name}': {e}", exc_info=True)
         return jsonify({"error": f"Erro interno ao procurar resumo de OS da tabela '{table_name}'"}), 500
     finally:
         if conn: conn.close()
@@ -716,7 +719,7 @@ def api_generic_summary(table_name):
         return jsonify(summary_data)
 
     except sqlite3.Error as e:
-        print(f"Erro na base de dados ao gerar resumo para '{table_name}': {e}")
+        logger.error(f"Erro na base de dados ao gerar resumo para '{table_name}': {e}", exc_info=True)
         return jsonify({"error": f"Erro interno ao gerar resumo para a tabela '{table_name}'"}), 500
     finally:
         if conn: conn.close()

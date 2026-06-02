@@ -8,6 +8,9 @@ from flask import Blueprint, jsonify, request, abort, current_app
 
 details_churn_bp = Blueprint('details_churn_bp', __name__)
 
+from logger import get_logger
+logger = get_logger(__name__)
+
 
 def get_db():
     return current_app.config['GET_DB_CONNECTION']()
@@ -63,7 +66,7 @@ def api_complaints_details(client_name):
         return jsonify({"data": [dict(r) for r in data], "total_rows": total_rows})
 
     except sqlite3.Error as e:
-        print(f"Erro ao buscar detalhes de complaints: {e}")
+        logger.error(f"Erro ao buscar detalhes de complaints: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()
@@ -106,7 +109,7 @@ def api_cancellation_context(client_name, contract_id):
         })
 
     except sqlite3.Error as e:
-        print(f"Erro ao buscar contexto de cancelamento: {e}")
+        logger.error(f"Erro ao buscar contexto de cancelamento: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()
@@ -165,7 +168,7 @@ def api_city_clients():
         return jsonify({"data": [dict(r) for r in data], "total_rows": total_rows})
 
     except sqlite3.Error as e:
-        print(f"Erro ao buscar clientes da cidade: {e}")
+        logger.error(f"Erro ao buscar clientes da cidade: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()
@@ -225,7 +228,7 @@ def api_neighborhood_clients():
         return jsonify({"data": [dict(r) for r in data], "total_rows": total_rows})
 
     except sqlite3.Error as e:
-        print(f"Erro ao buscar clientes do bairro: {e}")
+        logger.error(f"Erro ao buscar clientes do bairro: {e}", exc_info=True)
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()
