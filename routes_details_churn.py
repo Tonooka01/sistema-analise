@@ -76,13 +76,17 @@ def api_complaints_details(client_name):
 def api_cancellation_context(client_name, contract_id):
     conn = get_db()
     try:
+        def _valid_date(d):
+            """Retorna None se a data for inválida (NULL, vazia ou '0000-00-00')."""
+            return d if d and not str(d).startswith('0000') else None
+
         contract_info = conn.execute('SELECT Data_cancelamento FROM Contratos WHERE ID = ?', (contract_id,)).fetchone()
-        end_date = contract_info['Data_cancelamento'] if contract_info else None
+        end_date = _valid_date(contract_info['Data_cancelamento'] if contract_info else None)
 
         if not end_date:
             try:
                 neg_info = conn.execute('SELECT Data_negativa_o FROM Contratos_Negativacao WHERE ID = ?', (contract_id,)).fetchone()
-                if neg_info: end_date = neg_info['Data_negativa_o']
+                if neg_info: end_date = _valid_date(neg_info['Data_negativa_o'])
             except sqlite3.Error as e:
                 if "no such table" not in str(e): raise
 
@@ -94,11 +98,13 @@ def api_cancellation_context(client_name, contract_id):
             (contract_id,)
         ).fetchall()
         os_data = conn.execute(
-            f"SELECT ID, Abertura, Fechamento, SLA, Assunto, Mensagem FROM OS WHERE Cliente = ? {where_os} ORDER BY Abertura DESC",
-            (client_name,)
+            f"SELECT ID, Abertura, Fechamento, SLA, Assunto, Mensagem FROM OS "
+            f"WHERE (UPPER(TRIM(Cliente)) = UPPER(TRIM(?)) OR CAST(Contrato AS TEXT) = ?) {where_os} ORDER BY Abertura DESC",
+            (client_name, contract_id)
         ).fetchall()
         atendimentos = conn.execute(
-            f"SELECT ID, Criado_em, ltima_altera_o, Assunto, Novo_status, Descri_o FROM Atendimentos WHERE Cliente = ? {where_at} ORDER BY Criado_em DESC",
+            f"SELECT ID, Criado_em, ltima_altera_o, Assunto, Novo_status, Descri_o FROM Atendimentos "
+            f"WHERE UPPER(TRIM(Cliente)) = UPPER(TRIM(?)) {where_at} ORDER BY Criado_em DESC",
             (client_name,)
         ).fetchall()
 

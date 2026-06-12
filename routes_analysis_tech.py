@@ -134,39 +134,34 @@ def api_equipment_by_olt():
     try:
         city = request.args.get('city', '')
 
-        where_clauses = [
-            "E.Status_comodato = 'Emprestado'",
-            "L.Transmissor IS NOT NULL",
-            "L.Transmissor != ''"
-        ]
         params = []
-
+        city_filter = ""
         if city:
-            where_clauses.append("C.Cidade = ?")
+            city_filter = "AND C.Cidade = ?"
             params.append(city)
 
-        where_sql = " AND ".join(where_clauses)
-
+        # Clientes_Fibra.Nome = serial/MAC da ONU = Logins.Login (campo Login em CF está NULL)
         query = f"""
             SELECT
+                CF.Transmissor AS OLT,
                 E.Descricao_produto,
                 COUNT(*) AS Count
-            FROM Logins L
-            JOIN Contratos C ON L.ID_contrato = C.ID
-            JOIN Equipamento E ON C.ID = TRIM(E.ID_contrato)
-            WHERE {where_sql}
-            GROUP BY E.Descricao_produto
-            ORDER BY Count DESC
-            LIMIT 30;
+            FROM Equipamento E
+            JOIN Contratos C ON C.ID = CAST(TRIM(E.ID_contrato) AS INTEGER)
+            JOIN Logins L ON L.ID_contrato = C.ID AND L.Ativo = 'S'
+            JOIN Clientes_Fibra CF ON CF.Nome = L.Login
+            WHERE E.Status_comodato = 'Emprestado'
+              AND CF.Transmissor IS NOT NULL AND CF.Transmissor != ''
+              {city_filter}
+            GROUP BY CF.Transmissor, E.Descricao_produto
+            ORDER BY CF.Transmissor, Count DESC
         """
         data = conn.execute(query, tuple(params)).fetchall()
 
         cities_query = """
-            SELECT DISTINCT C.Cidade
-            FROM Contratos C
-            JOIN Logins L ON C.ID = L.ID_contrato
-            WHERE C.Cidade IS NOT NULL AND TRIM(C.Cidade) != ''
-            ORDER BY C.Cidade
+            SELECT DISTINCT Cidade FROM Contratos
+            WHERE Cidade IS NOT NULL AND TRIM(Cidade) != ''
+            ORDER BY Cidade
         """
         cities_data = conn.execute(cities_query).fetchall()
 

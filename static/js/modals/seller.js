@@ -112,15 +112,20 @@ export async function fetchAndDisplaySellerActivationDetails(page) {
         const response = await fetch(url);
         if (!response.ok) throw new Error(await handleFetchError(response, 'Não foi possível carregar os detalhes de ativação do vendedor.'));
         const result = await response.json();
-        state.setSellerActivationDetailState({ totalRows: result.total_rows });
 
         if (!result.data || result.data.length === 0) {
             if (dom.sellerActivationDetailContent) dom.sellerActivationDetailContent.innerHTML = '<p class="text-center text-gray-500 p-4">Nenhum cliente encontrado para este filtro.</p>';
             return;
         }
 
+        state.setSellerActivationDetailState({ totalRows: result.total_rows });
+        const updatedState = state.getSellerActivationDetailState();
+
         const columns = [
-            { header: 'Cliente', render: r => `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline" data-client-name="${r.Cliente.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${r.Cliente}</span>` },
+            { header: 'Cliente', render: r => {
+                const nome = r.Cliente || 'Não identificado';
+                return `<span class="cancellation-detail-trigger cursor-pointer text-blue-600 hover:underline" data-client-name="${nome.replace(/"/g, '&quot;')}" data-contract-id="${r.Contrato_ID}">${nome}</span>`;
+            }},
             { header: 'Contrato ID', key: 'Contrato_ID' },
             { header: 'Data Ativação', key: 'Data_ativa_o', isDate: true },
             { header: 'Status Contrato', key: 'Status_contrato' },
@@ -129,7 +134,7 @@ export async function fetchAndDisplaySellerActivationDetails(page) {
         ];
 
         if (dom.sellerActivationDetailContent) dom.sellerActivationDetailContent.innerHTML = renderGenericDetailTable(null, result.data, columns, true);
-        renderGenericPagination(dom.sellerActivationDetailPaginationControls, dom.sellerActivationDetailPageInfo, dom.sellerActivationDetailPrevPageBtn, dom.sellerActivationDetailNextPageBtn, currentState);
+        renderGenericPagination(dom.sellerActivationDetailPaginationControls, dom.sellerActivationDetailPageInfo, dom.sellerActivationDetailPrevPageBtn, dom.sellerActivationDetailNextPageBtn, updatedState);
 
     } catch (error) {
         console.error("Erro ao buscar detalhes de ativação do vendedor:", error);

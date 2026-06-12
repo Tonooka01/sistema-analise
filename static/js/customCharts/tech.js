@@ -44,27 +44,40 @@ export async function fetchAndRenderEquipmentByOlt(city = '') {
         const grid = getGridStack();
 
         if (!result.data || result.data.length === 0) {
-            dom.mainChartsArea.innerHTML = `<p class="text-center text-gray-500 mt-4">${city ? `Nenhum equipamento ativo para ${city}.` : 'Nenhum equipamento ativo encontrado.'}</p>`;
+            dom.mainChartsArea.innerHTML = `<p class="text-center text-gray-500 mt-4">${city ? `Nenhum equipamento ativo para ${city}.` : 'Nenhum equipamento ativo encontrado. Verifique se o sync de Equipamentos foi executado.'}</p>`;
             return;
         }
 
-        const labels = result.data.map(d => d.Descricao_produto || 'N/A');
-        const data = result.data.map(d => d.Count || 0);
-        const filterText = city ? `em ${city}` : '(Todas as Cidades)';
+        // Agrupa por OLT
+        const byOlt = {};
+        result.data.forEach(d => {
+            const olt = d.OLT || 'Sem OLT';
+            if (!byOlt[olt]) byOlt[olt] = [];
+            byOlt[olt].push(d);
+        });
 
-        if(grid) grid.addWidget({ w: 12, h: 10, content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 id="equipmentChartTitle" class="chart-title"></h3></div><div class="chart-canvas-container"><canvas id="equipmentChart"></canvas></div></div>`, id: 'equipmentChartWidget' });
+        let col = 0;
+        const colsPerRow = 2;
+        let x = 0, y = 0;
 
-        renderChart('equipmentChart', 'bar_horizontal', labels, [{ label: 'Contagem', data: data }], `Equipamentos em Comodato Ativo ${filterText}`, {
-            formatterType: 'number',
-            plugins: { legend: { display: false } },
-            onClick: (event, elements) => {
-                if (elements.length > 0) {
-                    const chart = state.getMainCharts()['equipmentChart'];
-                    const element = elements[0];
-                    const equipmentName = chart.data.labels[element.index];
-                    modals.openActiveEquipmentDetailModal(equipmentName, dom.equipmentAnalysisCityFilter?.value || '');
-                }
-            }
+        Object.entries(byOlt).forEach(([oltName, items], idx) => {
+            const labels = items.map(d => d.Descricao_produto || 'N/A');
+            const data   = items.map(d => d.Count || 0);
+            const chartId = `equipmentOltChart_${idx}`;
+
+            if (grid) grid.addWidget({
+                x, y, w: 6, h: 8,
+                content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 class="chart-title">${oltName}</h3></div><div class="chart-canvas-container"><canvas id="${chartId}"></canvas></div></div>`,
+                id: `${chartId}Widget`
+            });
+
+            renderChart(chartId, 'bar_horizontal', labels, [{ label: 'Qtd', data }], oltName, {
+                formatterType: 'number',
+                plugins: { legend: { display: false } }
+            });
+
+            x += 6; col++;
+            if (col >= colsPerRow) { x = 0; y += 8; col = 0; }
         });
 
     } catch (error) {

@@ -156,13 +156,21 @@ def api_seller_activations():
 
         df_paged = df_filtered.sort_values('Data_ativa_o', ascending=False).iloc[offset: offset + limit]
 
+        def _val(v):
+            try:
+                return None if pd.isna(v) else v
+            except (TypeError, ValueError):
+                return v
+
         data_list = []
         for _, row in df_paged.iterrows():
             data_list.append({
-                "Cliente": row['Cliente'], "Contrato_ID": row['ID'], "Status_contrato": row['Status_contrato'],
-                "Data_ativa_o":       row['Data_ativa_o'].strftime('%Y-%m-%d') if pd.notna(row['Data_ativa_o']) else None,
-                "end_date":           row['end_date'].strftime('%Y-%m-%d') if pd.notna(row['end_date']) else None,
-                "permanencia_meses":  int(row['permanencia_meses']) if pd.notna(row['permanencia_meses']) else None
+                "Cliente":           _val(row['Cliente']),
+                "Contrato_ID":       int(row['ID']) if pd.notna(row['ID']) else None,
+                "Status_contrato":   _val(row['Status_contrato']),
+                "Data_ativa_o":      row['Data_ativa_o'].strftime('%Y-%m-%d') if pd.notna(row['Data_ativa_o']) else None,
+                "end_date":          row['end_date'].strftime('%Y-%m-%d') if pd.notna(row['end_date']) else None,
+                "permanencia_meses": int(row['permanencia_meses']) if pd.notna(row['permanencia_meses']) else None,
             })
 
         return jsonify({"data": data_list, "total_rows": total_rows})

@@ -102,7 +102,8 @@ def _ixc_query_builder(sql, token):
                 verify=False
             )
             resp.raise_for_status()
-            return resp.json().get('registros', [])
+            data = resp.json()
+            return data.get('registros', []) if isinstance(data, dict) else data
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
             if attempt == 2:
                 raise
@@ -157,7 +158,12 @@ def _sync_clientes(conn, token, log, since=None):
     total_c = 0
     total_n = 0
 
-    for filial in ['2', '4']:
+    # Filial 1: clientes das nossas cidades que estão cadastrados na filial principal
+    # Filial 2: clientes ativos → Clientes
+    # Filial 4: clientes negativados → Clientes_Negativacao
+    FILIAIS = [('1', 'Clientes'), ('2', 'Clientes'), ('4', 'Clientes_Negativacao')]
+
+    for filial, table in FILIAIS:
         params = {
             'qtype':     'cliente.filial_id',
             'query':     filial,
@@ -171,9 +177,14 @@ def _sync_clientes(conn, token, log, since=None):
             params['oper2']  = '>='
 
         records = _ixc_get('cliente', params, token)
+
+        # Filial 1 pode ter clientes de qualquer cidade do sistema;
+        # filtramos apenas os das nossas cidades para não poluir o banco.
+        if filial == '1':
+            records = [r for r in records if str(r.get('cidade', '')) in CIDADES_IDS]
+
         logger.info(f"  [filial {filial}] {len(records)} clientes")
 
-        table = 'Clientes' if filial == '2' else 'Clientes_Negativacao'
         for r in records:
             cidade_id = str(r.get('cidade', ''))
             cidade_nome = CIDADE_NOMES.get(cidade_id, cidade_id if cidade_id not in ('0', '') else None)
@@ -192,7 +203,7 @@ def _sync_clientes(conn, token, log, since=None):
                 r.get('filial_id'), r.get('tipo_pessoa'), r.get('whatsapp'),
                 r.get('latitude'), r.get('longitude')
             ))
-            if filial == '2':
+            if table == 'Clientes':
                 total_c += 1
             else:
                 total_n += 1
@@ -244,12 +255,24 @@ def _sync_contratos(conn, token, log, since=None):
             id_cli = str(int(float(r.get('id_cliente', 0) or 0)))
             nome, cidade = cliente_cache.get(id_cli, (None, None))
 
+            if not nome and id_cli and id_cli != '0':
+                db_row = conn.execute(
+                    "SELECT Raz_o_social, Cidade FROM Clientes WHERE ID = ? "
+                    "UNION SELECT Raz_o_social, Cidade FROM Clientes_Negativacao WHERE ID = ? LIMIT 1",
+                    (id_cli, id_cli)
+                ).fetchone()
+                if db_row:
+                    nome, cidade = db_row[0], db_row[1]
+                    cliente_cache[id_cli] = (nome, cidade)
+
+            nome_final = nome or r.get('cliente_razao')
+
             row = (
                 r.get('id'),
                 r.get('id_filial'),
                 _map_status_contrato(r.get('status')),
                 _map_status_acesso(r.get('status_internet')),
-                nome or r.get('cliente_razao'),
+                nome_final,
                 r.get('data_assinatura'),        # Data_primeira_assinatura
                 r.get('data_ativacao'),           # Data_ativa_o
                 r.get('data'),                    # Data_base
@@ -406,20 +429,21 @@ def _sync_contas_receber(conn, token, log, full=True):
 
     total_inseridos = 0
 
-    # Filial 1 — a partir de 2025, busca única sem loop de ano
-    log.append("  → Filial 1 (a partir de 2025)...")
+    # Filial 1 — filtra na API por vencimento >= 2025-01-01 para evitar timeout
+    log.append("  → Filial 1 (vencimento a partir de 2025)...")
     logger.info("  → Buscando filial 1...")
     try:
         records = _ixc_get('fn_areceber', {
             'qtype':     'fn_areceber.filial_id',
             'query':     '1',
             'oper':      '=',
+            'qtype2':    'fn_areceber.data_vencimento',
+            'query2':    '2025-01-01',
+            'oper2':     '>=',
             'sortname':  'fn_areceber.id',
             'sortorder': 'asc'
         }, token)
-        # Filtra localmente por data de pagamento >= 2025
-        records = [r for r in records if str(r.get('pagamento_data', '') or '')[:4] >= '2025']
-        logger.info(f"    [filial 1] {len(records)} registros a partir de 2025")
+        logger.info(f"    [filial 1] {len(records)} registros")
         # Limpa filial 1 antes de reinserir para evitar duplicatas
         if full:
             conn.execute("DELETE FROM Contas_a_Receber WHERE Filial = 1")
@@ -537,7 +561,18 @@ def _sync_os(conn, token, log, since=None):
             cidade     = CIDADE_IDS_MAP.get(cidade_id, cidade_id)
 
             id_cli = str(int(float(r.get('id_cliente') or 0))) if r.get('id_cliente') else ''
-            nome_cliente = cliente_cache.get(id_cli, id_cli)
+            nome_cliente = cliente_cache.get(id_cli)
+            if not nome_cliente and id_cli:
+                row = conn.execute(
+                    "SELECT Raz_o_social FROM Clientes WHERE ID = ? "
+                    "UNION SELECT Raz_o_social FROM Clientes_Negativacao WHERE ID = ? LIMIT 1",
+                    (id_cli, id_cli)
+                ).fetchone()
+                nome_cliente = row[0] if row else id_cli
+                if row:
+                    cliente_cache[id_cli] = row[0]
+            elif not nome_cliente:
+                nome_cliente = id_cli
 
             conn.execute("""
                 INSERT OR REPLACE INTO OS
@@ -727,36 +762,8 @@ def _sync_vendedores(conn, token, log):
 
 
 def _sync_equipamentos(conn, token, log):
-    log.append("→ Equipamentos...")
-    sql = """
-        SELECT
-            cliente_contrato_comodato_cliente_contrato.id as id_contrato,
-            cliente_contrato_cliente.razao as cliente,
-            movimento_produtos.descricao as descricao_produto,
-            movimento_produtos.status_comodato as status_comodato,
-            DATE_FORMAT(movimento_produtos.data, '%d/%m/%Y') as data,
-            cliente_contrato_comodato_produtos.id as id_produto
-        FROM movimento_produtos
-        LEFT JOIN cliente_contrato cliente_contrato_comodato_cliente_contrato
-            ON movimento_produtos.id_contrato = cliente_contrato_comodato_cliente_contrato.id
-        LEFT JOIN produtos cliente_contrato_comodato_produtos
-            ON movimento_produtos.id_produto = cliente_contrato_comodato_produtos.id
-        LEFT JOIN cliente cliente_contrato_cliente
-            ON cliente_contrato_comodato_cliente_contrato.id_cliente = cliente_contrato_cliente.id
-        WHERE cliente_contrato_comodato_cliente_contrato.id >= '1'
-    """
-    records = _ixc_query_builder(sql, token)
-    conn.execute("DELETE FROM Equipamento")
-    for r in records:
-        conn.execute("""
-            INSERT INTO Equipamento
-            (ID_contrato, Raz_o_social_nome, Descricao_produto, Status_comodato, Data)
-            VALUES (?,?,?,?,?)
-        """, (
-            r.get('id_contrato'), r.get('cliente'),
-            r.get('descricao_produto'), r.get('status_comodato'), r.get('data')
-        ))
-    log.append(f"  ✅ {len(records)} equipamentos")
+    # Atualização manual via upload_sqlite.py com query do IXCSoft query builder.
+    log.append("→ Equipamentos: atualização manual (ignorado no sync automático).")
 
 
 def _sync_plano_venda(conn, token, log):
