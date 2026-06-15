@@ -25,6 +25,7 @@ import { setupCustomAnalysisListeners } from './customAnalysis.js';
 import { setupPaginationListeners } from './pagination.js';
 import { setupDelegationListeners } from './delegation.js';
 import { renderCashflowDashboard } from '../cashflow.js';
+import { renderDreDashboard } from '../dre.js';
 
 export function initializeEventListeners() {
 
@@ -44,9 +45,22 @@ export function initializeEventListeners() {
         }
     });
 
+    // --- Botão DRE ---
+    document.getElementById('btnDRE')?.addEventListener('click', e => {
+        utils.resetAllFilters();
+        utils.setActiveControl(e.target);
+        if (dom.customAnalysisSelector) dom.customAnalysisSelector.value = '';
+        utils.hideAllCustomFilters();
+        if (dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
+        if (dom.dashboardContentDiv) {
+            dom.dashboardContentDiv.classList.remove('hidden');
+            renderDreDashboard(dom.dashboardContentDiv);
+        }
+    });
+
     // --- Seletores de Coleção Principal (botões azuis) ---
     document.querySelector('.collection-selector')?.addEventListener('click', e => {
-        if (e.target.tagName === 'BUTTON' && e.target.id && e.target.id !== 'saveLayoutBtn' && e.target.id !== 'btnCashflow') {
+        if (e.target.tagName === 'BUTTON' && e.target.id && e.target.id !== 'saveLayoutBtn' && e.target.id !== 'btnCashflow' && e.target.id !== 'btnDRE') {
             const buttonText = e.target.textContent;
             if (buttonText) {
                 utils.resetAllFilters();

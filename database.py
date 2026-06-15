@@ -48,6 +48,45 @@ def init_db_users():
                 value TEXT
             )
         ''')
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS DRE (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                Ano              INTEGER,
+                Mes              INTEGER,
+                Ano_Mes          TEXT,
+                Grupo_DRE        TEXT,
+                Subgrupo_DRE     TEXT,
+                Plano_de_Contas  TEXT,
+                Centro_de_Custo  TEXT,
+                Fornecedor       TEXT,
+                CNPJ             TEXT,
+                Situacao         TEXT,
+                Data_Competencia TEXT,
+                Data_Vencimento  TEXT,
+                Data_Confirmacao TEXT,
+                Valor            REAL,
+                NFe              TEXT,
+                Cod_Lancamento   INTEGER,
+                Loja             TEXT,
+                Observacao       TEXT
+            )
+        ''')
+
+        # Índices UNIQUE nas tabelas IXC para evitar duplicatas no INSERT OR REPLACE
+        _IXC_INDEXES = [
+            ('idx_contratos_id',         'Contratos',             'ID'),
+            ('idx_contratos_neg_id',     'Contratos_Negativacao', 'ID'),
+            ('idx_clientes_id',          'Clientes',              'ID'),
+            ('idx_clientes_neg_id',      'Clientes_Negativacao',  'ID'),
+            ('idx_logins_id',            'Logins',                'ID'),
+        ]
+        for idx, table, col in _IXC_INDEXES:
+            try:
+                conn.execute(
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {idx} ON {table}({col})"
+                )
+            except Exception:
+                pass  # tabela ainda não existe no primeiro boot
 
         # Migrations
         cursor = conn.cursor()
