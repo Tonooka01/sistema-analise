@@ -13,6 +13,7 @@ Logs gravados em logs/app.log com rotação de 10 MB (5 backups).
 import logging
 import logging.handlers
 import os
+import sys
 
 _LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
 os.makedirs(_LOG_DIR, exist_ok=True)
@@ -37,8 +38,13 @@ def get_logger(name: str) -> logging.Logger:
     logger.setLevel(level)
     logger.propagate = False  # evita interferência do root logger do Flask
 
-    # Console
-    ch = logging.StreamHandler()
+    # Console — força UTF-8 no Windows para evitar UnicodeEncodeError com emoji
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+    ch = logging.StreamHandler(sys.stdout)
     ch.setLevel(level)
     ch.setFormatter(_FORMATTER)
     logger.addHandler(ch)

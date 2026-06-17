@@ -1,0 +1,551 @@
+/**
+ * static/js/dre2.js
+ * Gestão Financeira — DRE · DFC · CAC · Lançamentos
+ * Dados: Excel Gestao_Completa_v9 importado no SQLite
+ */
+
+import * as state from './state.js';
+import { renderAuxiliar } from './dre_auxiliar.js';
+
+const API = state.API_BASE_URL;
+
+let _chart     = null;
+let _chart2    = null;
+let _activeTab = 'dre';
+let _dateFrom  = '';
+let _dateTo    = '';
+let _lancPage  = 1;
+let _lancTotal = 0;
+let _lancFilters = { ano: '', grupo: '', situacao: '', search: '', date_from: '', date_to: '' };
+const PER_PAGE   = 50;
+
+const _MESES = [
+    ['','Todos os meses'],['01','Janeiro'],['02','Fevereiro'],['03','Março'],
+    ['04','Abril'],['05','Maio'],['06','Junho'],['07','Julho'],['08','Agosto'],
+    ['09','Setembro'],['10','Outubro'],['11','Novembro'],['12','Dezembro']
+];
+function _mesOpts(selectedVal) {
+    return _MESES.map(([v,l]) => `<option value="${v}" ${v===selectedVal?'selected':''}>${l}</option>`).join('');
+}
+
+// ─── Entry point ────────────────────────────────────────────────────────────
+export async function renderDre2Dashboard(container) {
+    if (!container) return;
+    container.innerHTML = _shell();
+    _bindEvents();
+    await _loadTab('dre');
+}
+
+// ─── Shell ───────────────────────────────────────────────────────────────────
+function _shell() {
+    const isAdmin = window._currentUser?.is_admin;
+    return `
+<div id="dre2-root">
+<style>
+  #dre2-root { font-family:'Inter',sans-serif; padding:.5rem 0; }
+  #dre2-root .d2-hdr  { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.75rem; margin-bottom:1.1rem; }
+  #dre2-root .d2-ttl  { font-size:1.4rem; font-weight:800; color:#0f2d5e; margin:0; }
+  #dre2-root .d2-sub  { font-size:.72rem; color:#64748b; margin:.1rem 0 0; }
+  #dre2-root .d2-sel  { background:#f8fafc; border:1.5px solid #dde3ec; border-radius:7px; padding:.36rem .65rem; font-size:.82rem; color:#1e293b; height:32px; }
+  #dre2-root .d2-btn  { background:#1d6dcc; color:#fff; border:none; border-radius:7px; padding:.36rem 1rem; font-size:.82rem; font-weight:600; cursor:pointer; height:32px; white-space:nowrap; }
+  #dre2-root .d2-btn:hover  { background:#1558a8; }
+  #dre2-root .d2-btn-sec { background:#f1f5f9; color:#374151; border:1.5px solid #dde3ec; border-radius:7px; padding:.36rem .9rem; font-size:.8rem; font-weight:600; cursor:pointer; height:32px; }
+  #dre2-root .d2-btn-sec:hover { background:#e2e8f0; }
+  #dre2-root .d2-tabs { display:flex; gap:.2rem; border-bottom:2px solid #dde3ec; margin-bottom:1rem; flex-wrap:wrap; }
+  #dre2-root .d2-tab  { padding:.5rem 1.2rem; border:none; background:none; font-size:.84rem; font-weight:600; color:#64748b; cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-2px; border-radius:4px 4px 0 0; }
+  #dre2-root .d2-tab.on { color:#4f46e5; border-bottom-color:#4f46e5; background:#f5f3ff; }
+  #dre2-root .d2-tab:hover:not(.on) { background:#f1f5f9; color:#1e293b; }
+  #dre2-root .d2-kpis { display:flex; gap:.85rem; flex-wrap:wrap; margin-bottom:1.1rem; }
+  #dre2-root .d2-kpi  { flex:1 1 155px; background:#fff; border-radius:10px; padding:.85rem 1rem; box-shadow:0 2px 8px rgba(15,45,94,.07); border:1px solid #dde3ec; }
+  #dre2-root .d2-kpi-lbl { font-size:.66rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.05em; }
+  #dre2-root .d2-kpi-val { font-size:1.3rem; font-weight:800; color:#0f2d5e; margin-top:.2rem; }
+  #dre2-root .d2-card { background:#fff; border-radius:12px; padding:1rem 1.1rem; box-shadow:0 2px 8px rgba(15,45,94,.07); border:1px solid #dde3ec; margin-bottom:1rem; }
+  #dre2-root .d2-ctitle { font-size:.83rem; font-weight:700; color:#0f2d5e; margin-bottom:.7rem; padding-bottom:.45rem; border-bottom:2px solid #e0e7ff; }
+  #dre2-root table  { width:100%; border-collapse:collapse; font-size:.77rem; }
+  #dre2-root th     { background:#f8fafc; color:#374151; font-weight:700; padding:.45rem .6rem; text-align:left; border-bottom:2px solid #dde3ec; white-space:nowrap; }
+  #dre2-root td     { padding:.38rem .6rem; border-bottom:1px solid #f1f5f9; color:#374151; }
+  #dre2-root tr:hover td { background:#f8fafc; }
+  #dre2-root .r     { text-align:right; font-variant-numeric:tabular-nums; }
+  #dre2-root .pos   { color:#10b981; font-weight:700; }
+  #dre2-root .neg   { color:#ef4444; font-weight:700; }
+  #dre2-root .d2-filters { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-bottom:.75rem; }
+  #dre2-root .d2-inp { background:#f8fafc; border:1.5px solid #dde3ec; border-radius:7px; padding:.36rem .65rem; font-size:.8rem; height:32px; }
+  #dre2-root .d2-pag { display:flex; gap:.5rem; align-items:center; justify-content:flex-end; margin-top:.7rem; font-size:.8rem; color:#64748b; }
+  #dre2-root .d2-pag button { background:#f1f5f9; border:1.5px solid #dde3ec; border-radius:6px; padding:.26rem .7rem; font-size:.8rem; cursor:pointer; }
+  #dre2-root .d2-pag button:disabled { opacity:.4; cursor:default; }
+  #dre2-root .d2-load { text-align:center; color:#64748b; padding:2.5rem; font-size:.9rem; }
+  #dre2-root .chip-c { background:#d1fae5; color:#065f46; border-radius:4px; padding:.08rem .38rem; font-size:.68rem; font-weight:700; }
+  #dre2-root .chip-p { background:#fef3c7; color:#92400e; border-radius:4px; padding:.08rem .38rem; font-size:.68rem; font-weight:700; }
+  #dre2-root .import-bar { display:flex; align-items:center; gap:.75rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:.55rem .85rem; margin-bottom:1rem; font-size:.8rem; color:#1e40af; }
+</style>
+
+<div class="d2-hdr">
+  <div>
+    <p class="d2-ttl">📊 Gestão Financeira</p>
+    <p class="d2-sub">DRE · DFC · CAC · Lançamentos — Competência · 2022–2026</p>
+  </div>
+  <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
+    <span style="font-size:.8rem;color:#64748b;font-weight:600;">De</span>
+    <input type="date" id="d2DateFrom" class="d2-sel" style="width:150px;">
+    <span style="font-size:.8rem;color:#64748b;font-weight:600;">Até</span>
+    <input type="date" id="d2DateTo"   class="d2-sel" style="width:150px;">
+    <button id="d2Filtrar" class="d2-btn">Filtrar</button>
+    <button id="d2LimparFiltro" class="d2-btn-sec" title="Limpar filtros">✕</button>
+  </div>
+</div>
+
+${isAdmin ? `
+<div class="import-bar" id="d2ImportBar">
+  <span id="d2ImportStatus">Verificando dados…</span>
+  <div style="display:flex;align-items:center;gap:.5rem;margin-left:auto;flex-wrap:wrap;">
+    <input type="file" id="d2ImportFile" accept=".xlsx" style="font-size:.78rem;max-width:220px;">
+    <button id="d2BtnImportar" class="d2-btn-sec">⬆ Importar / Reimportar</button>
+  </div>
+  <span id="d2ImportMsg" style="font-size:.75rem;"></span>
+</div>` : ''}
+
+<div class="d2-tabs">
+  <button class="d2-tab on" data-tab="dre">📈 DRE</button>
+  <button class="d2-tab" data-tab="dfc">💵 Fluxo de Caixa</button>
+  <button class="d2-tab" data-tab="cac">🎯 CAC</button>
+  <button class="d2-tab" data-tab="lancamentos">📋 Lançamentos</button>
+  <button class="d2-tab" data-tab="metricas">📊 Métricas</button>
+</div>
+
+<div id="d2Content"><div class="d2-load">Carregando…</div></div>
+</div>`;
+}
+
+// ─── Events ──────────────────────────────────────────────────────────────────
+function _bindEvents() {
+    document.querySelectorAll('#dre2-root .d2-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#dre2-root .d2-tab').forEach(b => b.classList.remove('on'));
+            btn.classList.add('on');
+            _activeTab = btn.dataset.tab;
+            _loadTab(_activeTab);
+        });
+    });
+
+    document.getElementById('d2Filtrar')?.addEventListener('click', () => {
+        _dateFrom = document.getElementById('d2DateFrom')?.value || '';
+        _dateTo   = document.getElementById('d2DateTo')?.value   || '';
+        _loadTab(_activeTab);
+    });
+
+    document.getElementById('d2LimparFiltro')?.addEventListener('click', () => {
+        document.getElementById('d2DateFrom').value = '';
+        document.getElementById('d2DateTo').value   = '';
+        _dateFrom = ''; _dateTo = '';
+        _loadTab(_activeTab);
+    });
+
+    // Admin: importar
+    document.getElementById('d2BtnImportar')?.addEventListener('click', async () => {
+        const fileInput = document.getElementById('d2ImportFile');
+        const msg = document.getElementById('d2ImportMsg');
+        const btn = document.getElementById('d2BtnImportar');
+        if (!fileInput?.files?.length) {
+            msg.textContent = 'Selecione um arquivo .xlsx'; msg.style.color = '#ef4444'; return;
+        }
+        btn.disabled = true; msg.textContent = 'Importando…'; msg.style.color = '#64748b';
+        try {
+            const form = new FormData();
+            form.append('file', fileInput.files[0]);
+            const d = await fetch(`${API}/api/dre2/importar`, { method: 'POST', body: form }).then(r => r.json());
+            if (d.error) { msg.textContent = `Erro: ${d.error}`; msg.style.color = '#ef4444'; }
+            else {
+                const c = d.counts;
+                msg.textContent = `✓ DRE:${c.dre} DFC:${c.dfc} CAC:${c.cac} Lanç:${c.lancamentos}`;
+                msg.style.color = '#10b981';
+                document.getElementById('d2ImportStatus').textContent = `${c.dre} meses importados`;
+                _loadTab(_activeTab);
+            }
+        } catch (e) {
+            msg.textContent = `Erro: ${e}`; msg.style.color = '#ef4444';
+        } finally { btn.disabled = false; }
+    });
+
+    // Verifica status inicial (admin)
+    if (window._currentUser?.is_admin) {
+        fetch(`${API}/api/dre2/status`).then(r => r.json()).then(d => {
+            const el = document.getElementById('d2ImportStatus');
+            if (el) el.textContent = d.imported ? `${d.rows} meses importados` : '⚠ Dados não importados — clique em Importar';
+        }).catch(() => {});
+    }
+}
+
+// ─── Tab dispatcher ──────────────────────────────────────────────────────────
+async function _loadTab(tab) {
+    const root = document.getElementById('d2Content');
+    if (!root) return;
+    root.innerHTML = '<div class="d2-load">Carregando…</div>';
+    if (_chart)  { _chart.destroy();  _chart  = null; }
+    if (_chart2) { _chart2.destroy(); _chart2 = null; }
+
+    if      (tab === 'dre')         await _renderDre(root);
+    else if (tab === 'dfc')         await _renderDfc(root);
+    else if (tab === 'cac')         await _renderCac(root);
+    else if (tab === 'metricas')    await _renderMetricas(root);
+    else if (tab === 'lancamentos') { _lancPage = 1; _lancFilters = { ano: '', grupo: '', situacao: '', search: '', date_from: _dateFrom, date_to: _dateTo }; await _renderLancamentos(root, true); }
+}
+
+// ─── Tab DRE ─────────────────────────────────────────────────────────────────
+async function _renderDre(root) {
+    try {
+        const d = await fetch(`${API}/api/dre2/dre?${new URLSearchParams({date_from:_dateFrom,date_to:_dateTo})}`).then(r => r.json());
+        if (d.error) { root.innerHTML = `<div class="d2-load">Erro: ${d.error}</div>`; return; }
+        const k = d.kpis;
+
+        root.innerHTML = `
+<div class="d2-kpis">
+  <div class="d2-kpi" style="border-left:4px solid #3b82f6;">
+    <div class="d2-kpi-lbl">Receita Bruta</div>
+    <div class="d2-kpi-val">${_brl(k.receita)}</div>
+  </div>
+  <div class="d2-kpi" style="border-left:4px solid #ef4444;">
+    <div class="d2-kpi-lbl">Total Despesas</div>
+    <div class="d2-kpi-val">${_brl(k.despesas)}</div>
+  </div>
+  <div class="d2-kpi" style="border-left:4px solid ${k.resultado >= 0 ? '#10b981' : '#ef4444'};">
+    <div class="d2-kpi-lbl">Resultado</div>
+    <div class="d2-kpi-val ${k.resultado >= 0 ? 'pos' : 'neg'}">${_brl(k.resultado)}</div>
+  </div>
+  <div class="d2-kpi" style="border-left:4px solid #8b5cf6;">
+    <div class="d2-kpi-lbl">Margem Média</div>
+    <div class="d2-kpi-val ${k.margem >= 0 ? 'pos' : 'neg'}">${_pct(k.margem)}</div>
+  </div>
+</div>
+<div class="d2-card">
+  <div class="d2-ctitle">Receita × Despesas × Resultado</div>
+  <canvas id="d2ChartDre" height="90"></canvas>
+</div>
+<div class="d2-card">
+  <div class="d2-ctitle">Detalhamento Mensal</div>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr>
+      <th>Mês</th><th class="r">Receita Bruta</th><th class="r">CMV</th>
+      <th class="r">Desp. Oper.</th><th class="r">Encargos</th><th class="r">Desp. Fin.</th>
+      <th class="r">Total Desp.</th><th class="r">Resultado</th><th class="r">Margem</th>
+    </tr></thead>
+    <tbody>${d.data.map(r => `<tr>
+      <td>${r.AnoMes}</td>
+      <td class="r">${_brl(r.ReceitaBruta)}</td>
+      <td class="r">${_brl(r.CMV)}</td>
+      <td class="r">${_brl(r.DespOp)}</td>
+      <td class="r">${_brl(r.Encargos)}</td>
+      <td class="r">${_brl(r.DespFin)}</td>
+      <td class="r">${_brl(r.TotalDespesas)}</td>
+      <td class="r ${(r.Resultado||0) >= 0 ? 'pos' : 'neg'}">${_brl(r.Resultado)}</td>
+      <td class="r ${(r.Margem||0) >= 0 ? 'pos' : 'neg'}">${_pct(r.Margem)}</td>
+    </tr>`).join('')}</tbody>
+  </table>
+  </div>
+</div>`;
+
+        _chart = new Chart(document.getElementById('d2ChartDre'), {
+            type: 'bar',
+            data: {
+                labels: d.data.map(r => r.AnoMes),
+                datasets: [
+                    { label: 'Receita Bruta',  data: d.data.map(r => r.ReceitaBruta  || 0), backgroundColor: 'rgba(59,130,246,.55)', yAxisID: 'y' },
+                    { label: 'Total Despesas', data: d.data.map(r => r.TotalDespesas || 0), backgroundColor: 'rgba(239,68,68,.55)',   yAxisID: 'y' },
+                    { label: 'Resultado',      data: d.data.map(r => r.Resultado     || 0), type: 'line', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.1)', tension: .3, pointRadius: 3, borderWidth: 2, yAxisID: 'y' },
+                    { label: 'Margem %',       data: d.data.map(r => (r.Margem || 0) * 100), type: 'line', borderColor: '#8b5cf6', borderDash: [5,3], tension: .3, pointRadius: 0, borderWidth: 1.5, yAxisID: 'y2' },
+                ]
+            },
+            options: _opts('Margem (%)'),
+        });
+    } catch (e) { root.innerHTML = `<div class="d2-load">Erro: ${e}</div>`; }
+}
+
+// ─── Tab DFC ─────────────────────────────────────────────────────────────────
+async function _renderDfc(root) {
+    try {
+        const d = await fetch(`${API}/api/dre2/dfc?${new URLSearchParams({date_from:_dateFrom,date_to:_dateTo})}`).then(r => r.json());
+        if (d.error) { root.innerHTML = `<div class="d2-load">Erro: ${d.error}</div>`; return; }
+        const k = d.kpis;
+
+        root.innerHTML = `
+<div class="d2-kpis">
+  <div class="d2-kpi" style="border-left:4px solid #10b981;">
+    <div class="d2-kpi-lbl">Total Entradas</div>
+    <div class="d2-kpi-val pos">${_brl(k.entradas)}</div>
+  </div>
+  <div class="d2-kpi" style="border-left:4px solid #ef4444;">
+    <div class="d2-kpi-lbl">Total Saídas</div>
+    <div class="d2-kpi-val neg">${_brl(k.saidas)}</div>
+  </div>
+  <div class="d2-kpi" style="border-left:4px solid #3b82f6;">
+    <div class="d2-kpi-lbl">Saldo do Período</div>
+    <div class="d2-kpi-val ${k.saldo_periodo >= 0 ? 'pos' : 'neg'}">${_brl(k.saldo_periodo)}</div>
+  </div>
+  <div class="d2-kpi" style="border-left:4px solid #8b5cf6;">
+    <div class="d2-kpi-lbl">Saldo Acumulado</div>
+    <div class="d2-kpi-val ${k.saldo_acumulado >= 0 ? 'pos' : 'neg'}">${_brl(k.saldo_acumulado)}</div>
+  </div>
+</div>
+<div class="d2-card">
+  <div class="d2-ctitle">Entradas × Saídas × Saldo Acumulado</div>
+  <canvas id="d2ChartDfc" height="90"></canvas>
+</div>
+<div class="d2-card">
+  <div class="d2-ctitle">Detalhamento Mensal</div>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr>
+      <th>Mês</th><th class="r">Entradas</th><th class="r">CMV</th>
+      <th class="r">Desp. Oper.</th><th class="r">Encargos</th><th class="r">Desp. Fin.</th>
+      <th class="r">Total Saídas</th><th class="r">Saldo Período</th><th class="r">Saldo Acum.</th>
+    </tr></thead>
+    <tbody>${d.data.map(r => `<tr>
+      <td>${r.AnoMes}</td>
+      <td class="r pos">${_brl(r.Entradas)}</td>
+      <td class="r">${_brl(r.CMV)}</td>
+      <td class="r">${_brl(r.DespOp)}</td>
+      <td class="r">${_brl(r.Encargos)}</td>
+      <td class="r">${_brl(r.DespFin)}</td>
+      <td class="r neg">${_brl(r.TotalSaidas)}</td>
+      <td class="r ${(r.SaldoPeriodo||0) >= 0 ? 'pos' : 'neg'}">${_brl(r.SaldoPeriodo)}</td>
+      <td class="r ${(r.SaldoAcumulado||0) >= 0 ? 'pos' : 'neg'}">${_brl(r.SaldoAcumulado)}</td>
+    </tr>`).join('')}</tbody>
+  </table>
+  </div>
+</div>`;
+
+        _chart = new Chart(document.getElementById('d2ChartDfc'), {
+            type: 'bar',
+            data: {
+                labels: d.data.map(r => r.AnoMes),
+                datasets: [
+                    { label: 'Entradas',        data: d.data.map(r => r.Entradas    || 0), backgroundColor: 'rgba(16,185,129,.55)', yAxisID: 'y' },
+                    { label: 'Total Saídas',    data: d.data.map(r => r.TotalSaidas || 0), backgroundColor: 'rgba(239,68,68,.55)',   yAxisID: 'y' },
+                    { label: 'Saldo Acumulado', data: d.data.map(r => r.SaldoAcumulado || 0), type: 'line', borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,.1)', tension: .3, pointRadius: 3, borderWidth: 2, yAxisID: 'y' },
+                ]
+            },
+            options: _opts(null),
+        });
+    } catch (e) { root.innerHTML = `<div class="d2-load">Erro: ${e}</div>`; }
+}
+
+// ─── Tab CAC ─────────────────────────────────────────────────────────────────
+async function _renderCac(root) {
+    try {
+        const d = await fetch(`${API}/api/dre2/cac?${new URLSearchParams({date_from:_dateFrom,date_to:_dateTo})}`).then(r => r.json());
+        if (d.error) { root.innerHTML = `<div class="d2-load">Erro: ${d.error}</div>`; return; }
+        const k = d.kpis;
+
+        root.innerHTML = `
+<div class="d2-kpis">
+  <div class="d2-kpi" style="border-left:4px solid #f97316;">
+    <div class="d2-kpi-lbl">Total CAC</div>
+    <div class="d2-kpi-val">${_brl(k.cac_total)}</div>
+  </div>
+  <div class="d2-kpi" style="border-left:4px solid #10b981;">
+    <div class="d2-kpi-lbl">Instalações</div>
+    <div class="d2-kpi-val">${(k.instalacoes||0).toLocaleString('pt-BR')}</div>
+  </div>
+  <div class="d2-kpi" style="border-left:4px solid #3b82f6;">
+    <div class="d2-kpi-lbl">CAC Médio / Cliente</div>
+    <div class="d2-kpi-val">${_brl(k.cac_medio)}</div>
+  </div>
+</div>
+<div class="d2-card">
+  <div class="d2-ctitle">CAC por Categoria + CAC/Cliente</div>
+  <canvas id="d2ChartCac" height="100"></canvas>
+</div>
+<div class="d2-card">
+  <div class="d2-ctitle">Detalhamento Mensal</div>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr>
+      <th>Mês</th><th class="r">Comission.</th><th class="r">Marketing</th>
+      <th class="r">Mat. Campo</th><th class="r">ONTs / Equip.</th>
+      <th class="r">Total CAC</th><th class="r">Instalações</th><th class="r">CAC/Cliente</th>
+    </tr></thead>
+    <tbody>${d.data.map(r => `<tr>
+      <td>${r.AnoMes}</td>
+      <td class="r">${_brl(r.Comissionamento)}</td>
+      <td class="r">${_brl(r.Marketing)}</td>
+      <td class="r">${_brl(r.MaterialCampo)}</td>
+      <td class="r">${_brl(r.ONTs)}</td>
+      <td class="r"><strong>${_brl(r.TotalCAC)}</strong></td>
+      <td class="r">${(r.NInstalacoes||0).toLocaleString('pt-BR')}</td>
+      <td class="r">${_brl(r.CACUnitario)}</td>
+    </tr>`).join('')}</tbody>
+  </table>
+  </div>
+</div>`;
+
+        _chart = new Chart(document.getElementById('d2ChartCac'), {
+            type: 'bar',
+            data: {
+                labels: d.data.map(r => r.AnoMes),
+                datasets: [
+                    { label: 'Comissionamento', data: d.data.map(r => r.Comissionamento||0), backgroundColor: '#3b82f6', stack: 'cac', yAxisID: 'y' },
+                    { label: 'Marketing',       data: d.data.map(r => r.Marketing      ||0), backgroundColor: '#8b5cf6', stack: 'cac', yAxisID: 'y' },
+                    { label: 'Material Campo',  data: d.data.map(r => r.MaterialCampo  ||0), backgroundColor: '#f97316', stack: 'cac', yAxisID: 'y' },
+                    { label: 'ONTs / Equip.',   data: d.data.map(r => r.ONTs           ||0), backgroundColor: '#06b6d4', stack: 'cac', yAxisID: 'y' },
+                    { label: 'CAC/Cliente (R$)',data: d.data.map(r => r.CACUnitario    ||0), type: 'line', borderColor: '#ef4444', backgroundColor: 'transparent', tension: .3, pointRadius: 3, borderWidth: 2, yAxisID: 'y2' },
+                ]
+            },
+            options: _opts('CAC/Cliente (R$)'),
+        });
+    } catch (e) { root.innerHTML = `<div class="d2-load">Erro: ${e}</div>`; }
+}
+
+// ─── Tab Lançamentos ─────────────────────────────────────────────────────────
+async function _renderLancamentos(root, init = false) {
+    if (init) {
+        root.innerHTML = `
+<div class="d2-card">
+  <div class="d2-ctitle">Filtros</div>
+  <div class="d2-filters">
+    <select id="d2LFAno"   class="d2-sel" style="min-width:85px;"><option value="">Ano</option></select>
+    <select id="d2LFMes"   class="d2-sel" style="min-width:130px;">${_mesOpts('')}</select>
+    <select id="d2LFGrupo" class="d2-sel" style="min-width:195px;"><option value="">Grupo DRE</option></select>
+    <select id="d2LFSit"   class="d2-sel"><option value="">Situação</option></select>
+  </div>
+  <div class="d2-filters" style="margin-top:.4rem;">
+    <span style="font-size:.75rem;color:#64748b;white-space:nowrap;">Data competência:</span>
+    <input type="date" id="d2LFDateDe"  class="d2-inp" title="Data inicial">
+    <span style="color:#94a3b8;font-size:.75rem;">até</span>
+    <input type="date" id="d2LFDateAte" class="d2-inp" title="Data final">
+    <input id="d2LFSrch" class="d2-inp" placeholder="Fornecedor / Plano de Contas…" style="flex:1;min-width:155px;">
+    <button id="d2LFBuscar" class="d2-btn">Buscar</button>
+    <button id="d2LFLimpar" class="d2-btn-sec">✕ Limpar</button>
+  </div>
+</div>
+<div id="d2LancTable"><div class="d2-load">Carregando…</div></div>`;
+
+        try {
+            const d = await fetch(`${API}/api/dre2/lancamentos?page=1`).then(r => r.json());
+            const f = d.filters || {};
+            const sa = document.getElementById('d2LFAno');
+            const sg = document.getElementById('d2LFGrupo');
+            const ss = document.getElementById('d2LFSit');
+            (f.anos     || []).forEach(a => { const o = document.createElement('option'); o.value=a; o.textContent=a; sa.appendChild(o); });
+            (f.grupos   || []).forEach(g => { const o = document.createElement('option'); o.value=g; o.textContent=g; sg.appendChild(o); });
+            (f.situacoes|| []).forEach(s => { const o = document.createElement('option'); o.value=s; o.textContent=s; ss.appendChild(o); });
+            // pre-populate date filters if set
+            if (_dateFrom) { const df = document.getElementById('d2LFDateDe'); if(df) df.value = _dateFrom; }
+            if (_dateTo)   { const dt = document.getElementById('d2LFDateAte'); if(dt) dt.value = _dateTo; }
+        } catch {}
+
+        document.getElementById('d2LFBuscar')?.addEventListener('click', () => {
+            _lancFilters.ano      = document.getElementById('d2LFAno')?.value     || '';
+            _lancFilters.mes      = document.getElementById('d2LFMes')?.value     || '';
+            _lancFilters.grupo    = document.getElementById('d2LFGrupo')?.value   || '';
+            _lancFilters.situacao = document.getElementById('d2LFSit')?.value     || '';
+            _lancFilters.search   = document.getElementById('d2LFSrch')?.value    || '';
+            _lancFilters.date_from= document.getElementById('d2LFDateDe')?.value  || '';
+            _lancFilters.date_to  = document.getElementById('d2LFDateAte')?.value || '';
+            _lancPage = 1;
+            _renderLancTable();
+        });
+
+        document.getElementById('d2LFLimpar')?.addEventListener('click', () => {
+            ['d2LFAno','d2LFMes','d2LFGrupo','d2LFSit','d2LFSrch','d2LFDateDe','d2LFDateAte']
+                .forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+            _lancFilters = { ano:'', mes:'', grupo:'', situacao:'', search:'', date_from:'', date_to:'' };
+            _lancPage = 1;
+            _renderLancTable();
+        });
+    }
+    await _renderLancTable();
+}
+
+async function _renderLancTable() {
+    const tr = document.getElementById('d2LancTable');
+    if (!tr) return;
+    tr.innerHTML = '<div class="d2-load">Carregando…</div>';
+    try {
+        const p = new URLSearchParams({ page: _lancPage, ano: _lancFilters.ano, mes: _lancFilters.mes||'', grupo: _lancFilters.grupo, situacao: _lancFilters.situacao, search: _lancFilters.search, date_from: _lancFilters.date_from||'', date_to: _lancFilters.date_to||'' });
+        const d = await fetch(`${API}/api/dre2/lancamentos?${p}`).then(r => r.json());
+        _lancTotal = d.total || 0;
+        const pages = Math.ceil(_lancTotal / PER_PAGE) || 1;
+
+        tr.innerHTML = `
+<div class="d2-card">
+  <div class="d2-ctitle">Lançamentos <span style="font-weight:400;font-size:.73rem;color:#64748b;">${_lancTotal.toLocaleString('pt-BR')} registros</span></div>
+  <div style="overflow-x:auto;">
+  <table>
+    <thead><tr>
+      <th>Mês</th><th>Grupo DRE</th><th>Subgrupo</th><th>Fornecedor</th>
+      <th>Centro Custo</th><th>Data Comp.</th><th>Situação</th><th class="r">Valor</th>
+    </tr></thead>
+    <tbody>${d.data.map(r => `<tr>
+      <td>${r.AnoMes||''}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.GrupoDRE||''}">${r.GrupoDRE||''}</td>
+      <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.SubgrupoDRE||''}">${r.SubgrupoDRE||''}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.Fornecedor||''}">${r.Fornecedor||''}</td>
+      <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.CentroCusto||''}</td>
+      <td>${r.DataCompetencia||''}</td>
+      <td>${r.Situacao === 'Confirmado' ? '<span class="chip-c">Confirmado</span>' : '<span class="chip-p">Em aberto</span>'}</td>
+      <td class="r"><strong>${_brl(r.Valor)}</strong></td>
+    </tr>`).join('')}</tbody>
+  </table>
+  </div>
+  <div class="d2-pag">
+    <button id="d2LancPrev" ${_lancPage <= 1 ? 'disabled' : ''}>← Anterior</button>
+    <span>Pág. ${_lancPage} / ${pages}</span>
+    <button id="d2LancNext" ${_lancPage >= pages ? 'disabled' : ''}>Próxima →</button>
+  </div>
+</div>`;
+
+        document.getElementById('d2LancPrev')?.addEventListener('click', () => { _lancPage--; _renderLancTable(); });
+        document.getElementById('d2LancNext')?.addEventListener('click', () => { _lancPage++; _renderLancTable(); });
+    } catch (e) { tr.innerHTML = `<div class="d2-load">Erro: ${e}</div>`; }
+}
+
+// ─── Tab Métricas — reutiliza renderAuxiliar com período do filtro ─────────────
+async function _renderMetricas(root) {
+    await renderAuxiliar(root, { start_date: _dateFrom, end_date: _dateTo });
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function _brl(v) {
+    if (v === null || v === undefined) return '—';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v);
+}
+
+function _pct(v) {
+    if (v === null || v === undefined) return '—';
+    return ((v || 0) * 100).toFixed(1) + '%';
+}
+
+function _opts(y2Label) {
+    const scales = {
+        x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45 } },
+        y: {
+            position: 'left',
+            ticks: { font: { size: 10 }, callback: v => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}k` : v },
+            grid: { color: 'rgba(0,0,0,.05)' }
+        }
+    };
+    if (y2Label) {
+        scales.y2 = {
+            position: 'right',
+            ticks: { font: { size: 10 }, callback: v => v.toFixed(1) },
+            grid: { drawOnChartArea: false }
+        };
+    }
+    return {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12 } },
+            tooltip: {
+                callbacks: {
+                    label(ctx) {
+                        const v = ctx.raw;
+                        if (ctx.dataset.yAxisID === 'y2') return ` ${ctx.dataset.label}: ${(v||0).toFixed(1)}`;
+                        return ` ${ctx.dataset.label}: ${new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(v)}`;
+                    }
+                }
+            }
+        },
+        scales,
+    };
+}

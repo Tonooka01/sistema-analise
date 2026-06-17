@@ -147,9 +147,6 @@ def set_user_permissions():
 @admin_bp.route('/api/admin/profile', methods=['POST'])
 @login_required
 def update_profile():
-    if current_user.username != 'admin':
-        return jsonify({"error": "Acesso negado"}), 403
-
     new_username = (request.json.get('username') or '').strip()
     new_password = (request.json.get('password') or '').strip()
 

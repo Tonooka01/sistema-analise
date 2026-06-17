@@ -15,14 +15,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const user = window._currentUser;
     if (!user || user.is_admin || user.permissions === null) return;
     const perms = user.permissions;
-    const moduleMap = { cashflow: 'btnCashflow', dre: 'btnDRE', crescimento: 'btnCrescimento' };
+    const moduleMap = { cashflow: 'btnCashflow', dre: 'btnDRE', dre2: 'btnDRE2', crescimento: 'btnCrescimento' };
     Object.entries(moduleMap).forEach(([mod, id]) => {
         const btn = document.getElementById(id);
         if (btn && !perms.includes(mod)) btn.style.display = 'none';
     });
     if (!perms.includes('dashboard')) {
         document.querySelectorAll('.collection-selector button').forEach(btn => {
-            if (!['btnCashflow','btnDRE','btnCrescimento','saveLayoutBtn'].includes(btn.id))
+            if (!['btnCashflow','btnDRE','btnDRE2','btnCrescimento','saveLayoutBtn'].includes(btn.id))
                 btn.style.display = 'none';
         });
         const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
@@ -35,8 +35,10 @@ document.addEventListener('DOMContentLoaded', () => {
 <div class="nv-topbar">
     <h1>Dashboard Analítico · NetVale</h1>
     <div class="nv-topbar-actions">
-        {% if current_user.is_authenticated and current_user.username == 'admin' %}
+        {% if current_user.is_authenticated %}
             <button id="openAdminSettingsModalBtn" class="btn btn-ghost">⚙️ Configurações</button>
+        {% endif %}
+        {% if current_user.is_authenticated and current_user.username == 'admin' %}
             <a href="/admin/logs" class="btn btn-ghost">👁️ Logs</a>
         {% endif %}
         <a href="/logout" class="btn btn-danger">Sair</a>
@@ -48,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="collection-selector flex flex-wrap gap-2 justify-center items-center">
         <button id="btnCashflow" style="background:#10b981 !important; border-color:#059669 !important; display:none !important;">💰 Cashflow</button>
         <button id="btnDRE" style="background:#6366f1 !important; border-color:#4f46e5 !important;">📊 DRE</button>
+        <button id="btnDRE2" style="background:#0f766e !important; border-color:#0d9488 !important;">📊 Gestão</button>
         <button id="btnCrescimento" style="background:#0891b2 !important; border-color:#0e7490 !important;">📈 Crescimento</button>
         <button id="btnClientes">Clientes</button>
         <button id="btnContasAReceber">Contas a Receber</button>

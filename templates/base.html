@@ -232,6 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { id: 'dashboard',   label: '🏠 Dashboard Principal' },
         { id: 'cashflow',    label: '💰 Cashflow' },
         { id: 'dre',         label: '📊 DRE' },
+        { id: 'dre2',        label: '📊 Gestão Financeira' },
         { id: 'crescimento', label: '📈 Crescimento Analítico' },
     ];
 
@@ -385,6 +386,38 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btnStartSync')?.addEventListener('click', () => _startSync('incremental'));
     document.getElementById('btnFullSync')?.addEventListener('click',  () => _startSync('full'));
 
+    // --- Gestão Financeira: Importar Excel ---
+    document.getElementById('btnImportarGestao')?.addEventListener('click', async () => {
+        const fileInput = document.getElementById('gestaoImportFile');
+        const btn    = document.getElementById('btnImportarGestao');
+        const status = document.getElementById('gestaoImportStatus');
+        if (!fileInput?.files?.length) {
+            status.classList.remove('hidden'); status.textContent = '⚠ Selecione um arquivo .xlsx primeiro.';
+            status.style.color = '#92400e'; return;
+        }
+        btn.disabled = true; btn.textContent = '⏳ Importando…';
+        status.classList.remove('hidden'); status.textContent = 'Importando dados do Excel, aguarde…';
+        try {
+            const form = new FormData();
+            form.append('file', fileInput.files[0]);
+            const res  = await fetch('/api/dre2/importar', { method: 'POST', body: form });
+            const data = await res.json();
+            if (data.ok) {
+                const c = data.counts;
+                status.textContent = `✅ Importado: DRE ${c.dre} meses | DFC ${c.dfc} meses | CAC ${c.cac} meses | ${c.lancamentos} lançamentos`;
+                status.style.color = '#065f46';
+            } else {
+                status.textContent = '❌ Erro: ' + (data.error || 'Desconhecido');
+                status.style.color = '#991b1b';
+            }
+        } catch (e) {
+            status.textContent = '❌ Erro de conexão: ' + e;
+            status.style.color = '#991b1b';
+        } finally {
+            btn.disabled = false; btn.textContent = '⬆ Importar / Reimportar';
+        }
+    });
+
     async function _startSync(mode) {
         const label = mode === 'full' ? 'Sync Completa (pode demorar vários minutos)' : 'Sync Rápida';
         const checks = document.querySelectorAll('.ixc-table-check:checked');
@@ -404,8 +437,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Carrega status e usuários ao abrir o modal admin
-    openBtn?.addEventListener('click', () => { loadIxcStatus(); loadUsers(); });
+    // Carrega status e usuários ao abrir o modal (só admin)
+    openBtn?.addEventListener('click', () => { if (_IS_ADMIN) { loadIxcStatus(); loadUsers(); } });
     
     refreshUsersBtn?.addEventListener('click', loadUsers);
 
