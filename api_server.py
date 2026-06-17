@@ -52,6 +52,9 @@ from routes_cashflow import cashflow_bp
 # --- Blueprint DRE ---
 from routes_dre import dre_bp
 
+# --- Blueprint Crescimento Analítico ---
+from routes_crescimento import crescimento_bp
+
 # --- Blueprint Sync IXC ---
 from routes_ixc_sync import ixc_sync_bp
 
@@ -164,6 +167,7 @@ app.register_blueprint(details_sales_bp,    url_prefix='/api/details')
 app.register_blueprint(details_churn_bp,    url_prefix='/api/details')
 app.register_blueprint(cashflow_bp,         url_prefix='/api/cashflow')
 app.register_blueprint(dre_bp,              url_prefix='/api/dre')
+app.register_blueprint(crescimento_bp,     url_prefix='/api/crescimento')
 app.register_blueprint(ixc_sync_bp,         url_prefix='/api/ixc')
 
 # Agendamento semanal

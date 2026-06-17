@@ -5,6 +5,31 @@
 {% endblock %}
 
 {% block content %}
+<script>
+window._currentUser = {
+    username: "{{ current_user.username | e }}",
+    is_admin: {{ 'true' if current_user.username == 'admin' else 'false' }},
+    permissions: {% if current_user.permissions %}{{ current_user.permissions | safe }}{% else %}null{% endif %}
+};
+document.addEventListener('DOMContentLoaded', () => {
+    const user = window._currentUser;
+    if (!user || user.is_admin || user.permissions === null) return;
+    const perms = user.permissions;
+    const moduleMap = { cashflow: 'btnCashflow', dre: 'btnDRE', crescimento: 'btnCrescimento' };
+    Object.entries(moduleMap).forEach(([mod, id]) => {
+        const btn = document.getElementById(id);
+        if (btn && !perms.includes(mod)) btn.style.display = 'none';
+    });
+    if (!perms.includes('dashboard')) {
+        document.querySelectorAll('.collection-selector button').forEach(btn => {
+            if (!['btnCashflow','btnDRE','btnCrescimento','saveLayoutBtn'].includes(btn.id))
+                btn.style.display = 'none';
+        });
+        const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
+        if (selWrap) selWrap.style.display = 'none';
+    }
+});
+</script>
 
 <!-- Top Bar -->
 <div class="nv-topbar">
@@ -23,6 +48,7 @@
     <div class="collection-selector flex flex-wrap gap-2 justify-center items-center">
         <button id="btnCashflow" style="background:#10b981 !important; border-color:#059669 !important; display:none !important;">💰 Cashflow</button>
         <button id="btnDRE" style="background:#6366f1 !important; border-color:#4f46e5 !important;">📊 DRE</button>
+        <button id="btnCrescimento" style="background:#0891b2 !important; border-color:#0e7490 !important;">📈 Crescimento</button>
         <button id="btnClientes">Clientes</button>
         <button id="btnContasAReceber">Contas a Receber</button>
         <button id="btnAtendimentos">Atendimentos</button>

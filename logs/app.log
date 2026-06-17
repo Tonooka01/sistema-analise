@@ -5457,3 +5457,48 @@ Traceback (most recent call last):
     )
     ^
 sqlite3.OperationalError: attempt to write a readonly database
+2026-06-16 10:16:58 [INFO] __main__: Servidor iniciado na porta 5000...
+2026-06-16 10:22:49 [INFO] __main__: Servidor iniciado na porta 5000...
+2026-06-16 10:26:30 [INFO] __main__: Servidor iniciado na porta 5000...
+2026-06-16 10:51:57 [INFO] database: Atualizando tabela Users: Adicionando 'permissions'...
+2026-06-16 10:51:57 [INFO] __main__: Servidor iniciado na porta 5000...
+2026-06-16 10:52:29 [INFO] __main__: Servidor iniciado na porta 5000...
+2026-06-16 10:55:56 [INFO] __main__: Servidor iniciado na porta 5000...
+2026-06-16 11:07:35 [INFO] __main__: Servidor iniciado na porta 5000...
+2026-06-16 11:46:06 [INFO] __main__: Servidor iniciado na porta 5000...
+2026-06-16 11:47:24 [INFO] routes_ixc_sync: 
+==================================================
+🔁 Completa — iniciada em 16/06/2026 11:47:24
+2026-06-16 11:47:24 [INFO] routes_ixc_sync: [IXC   0%] Sincronizando Contratos...
+2026-06-16 11:47:25 [INFO] routes_ixc_sync:   [cliente_contrato] página 1 — 500/7346
+2026-06-16 11:47:26 [INFO] routes_ixc_sync:   [cliente_contrato] página 2 — 1000/7346
+2026-06-16 11:47:26 [INFO] routes_ixc_sync:   [cliente_contrato] página 3 — 1500/7346
+2026-06-16 11:47:27 [INFO] routes_ixc_sync:   [cliente_contrato] página 4 — 2000/7346
+2026-06-16 11:47:28 [INFO] routes_ixc_sync:   [cliente_contrato] página 5 — 2500/7346
+2026-06-16 11:47:29 [INFO] routes_ixc_sync:   [cliente_contrato] página 6 — 3000/7346
+2026-06-16 11:47:30 [INFO] routes_ixc_sync:   [cliente_contrato] página 7 — 3500/7346
+2026-06-16 11:47:31 [INFO] routes_ixc_sync:   [cliente_contrato] página 8 — 4000/7346
+2026-06-16 11:47:31 [INFO] routes_ixc_sync:   [cliente_contrato] página 9 — 4500/7346
+2026-06-16 11:47:32 [INFO] routes_ixc_sync:   [cliente_contrato] página 10 — 5000/7346
+2026-06-16 11:47:33 [INFO] routes_ixc_sync:   [cliente_contrato] página 11 — 5500/7346
+2026-06-16 11:47:34 [INFO] routes_ixc_sync:   [cliente_contrato] página 12 — 6000/7346
+2026-06-16 11:47:34 [INFO] routes_ixc_sync:   [cliente_contrato] página 13 — 6500/7346
+2026-06-16 11:47:35 [INFO] routes_ixc_sync:   [cliente_contrato] página 14 — 7000/7346
+2026-06-16 11:47:36 [INFO] routes_ixc_sync:   [cliente_contrato] página 15 — 7346/7346
+2026-06-16 11:47:36 [INFO] routes_ixc_sync:   [filial 2] 7346 contratos
+2026-06-16 11:47:37 [INFO] routes_ixc_sync:   [cliente_contrato] página 1 — 500/4199
+2026-06-16 11:47:38 [INFO] routes_ixc_sync:   [cliente_contrato] página 2 — 1000/4199
+2026-06-16 11:47:38 [INFO] routes_ixc_sync:   [cliente_contrato] página 3 — 1500/4199
+2026-06-16 11:47:39 [INFO] routes_ixc_sync:   [cliente_contrato] página 4 — 2000/4199
+2026-06-16 11:47:40 [INFO] routes_ixc_sync:   [cliente_contrato] página 5 — 2500/4199
+2026-06-16 11:47:40 [INFO] routes_ixc_sync:   [cliente_contrato] página 6 — 3000/4199
+2026-06-16 11:47:41 [INFO] routes_ixc_sync:   [cliente_contrato] página 7 — 3500/4199
+2026-06-16 11:47:42 [INFO] routes_ixc_sync:   [cliente_contrato] página 8 — 4000/4199
+2026-06-16 11:47:42 [INFO] routes_ixc_sync:   [cliente_contrato] página 9 — 4199/4199
+2026-06-16 11:47:42 [INFO] routes_ixc_sync:   [filial 4] 4199 contratos
+2026-06-16 11:47:43 [INFO] routes_ixc_sync:   Contratos concluído
+2026-06-16 11:47:43 [INFO] routes_ixc_sync: 
+✅ Concluída em 18s
+==================================================
+2026-06-16 11:47:43 [INFO] routes_ixc_sync: [IXC 100%] Concluído!
+2026-06-16 11:52:56 [INFO] __main__: Servidor iniciado na porta 5000...

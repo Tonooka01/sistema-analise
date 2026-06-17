@@ -233,10 +233,12 @@
     </div>
 </div>
 <div id="adminSettingsModal" class="modal">
-    <div class="modal-content w-full max-w-3xl h-auto max-h-[90vh] p-0 overflow-y-auto"> 
+    <div class="modal-content w-full max-w-3xl p-0"
+         style="overflow-y:auto !important; max-height:90vh !important; padding:0 !important; display:flex !important; flex-direction:column !important;">
         <div class="bg-white p-6 rounded-lg shadow-lg w-full border-t-4 border-blue-600">
-            
-            <div class="modal-header flex justify-between items-center mb-6 border-b pb-3">
+
+            <!-- Header fixo -->
+            <div class="modal-header flex justify-between items-center mb-6 border-b pb-3 sticky top-0 bg-white z-10">
                 <h2 class="text-2xl font-bold text-gray-800">⚙️ Painel do Administrador</h2>
                 <button id="closeAdminSettingsModalBtn" class="modal-close-button text-2xl text-gray-500 hover:text-gray-800">×</button>
             </div>
@@ -294,6 +296,7 @@
                                 <th class="py-3 px-4 text-left">Usuário</th>
                                 <th class="py-3 px-4 text-center">Status</th>
                                 <th class="py-3 px-4 text-center">Último Acesso</th>
+                                <th class="py-3 px-4 text-center">Permissões</th>
                                 <th class="py-3 px-4 text-center">Ação</th>
                             </tr>
                         </thead>
@@ -305,6 +308,28 @@
             
             <div class="mt-4 text-right">
                 <a href="/admin/logs" class="text-xs text-gray-500 hover:text-blue-600 underline">Ver Logs Completos de Acesso ➚</a>
+            </div>
+
+            <!-- Meu Perfil -->
+            <div class="bg-purple-50 p-4 rounded-lg border border-purple-200 mt-4">
+                <h3 class="text-md font-bold text-purple-700 mb-3">👤 Meu Perfil</h3>
+                <div class="flex flex-col sm:flex-row gap-3 items-end">
+                    <div class="w-full">
+                        <label class="block text-gray-600 text-xs font-bold mb-1">Novo nome de usuário</label>
+                        <input type="text" id="profileUsername" placeholder="Deixe vazio para não alterar"
+                               class="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500">
+                    </div>
+                    <div class="w-full">
+                        <label class="block text-gray-600 text-xs font-bold mb-1">Nova senha</label>
+                        <input type="password" id="profilePassword" placeholder="Deixe vazio para não alterar"
+                               class="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500">
+                    </div>
+                    <button onclick="saveProfile()"
+                            class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded shadow transition text-sm w-full sm:w-auto whitespace-nowrap">
+                        Salvar
+                    </button>
+                </div>
+                <span id="profileStatus" class="text-xs text-green-700 hidden mt-2 block"></span>
             </div>
 
             <!-- Painel IXC Sync -->
@@ -398,6 +423,54 @@
                 <p class="text-xs text-blue-500 mt-3">⏰ Sincronização automática todo domingo às 23:59</p>
             </div>
 
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Editar Usuário -->
+<div id="editUserModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:.75rem;padding:1.5rem;width:360px;max-width:95vw;box-shadow:0 20px 40px rgba(0,0,0,.3);">
+        <h4 style="margin:0 0 1rem;font-size:1rem;font-weight:700;color:#1e293b;">✏️ Editar Usuário</h4>
+        <input type="hidden" id="editUserId">
+        <div style="margin-bottom:.75rem;">
+            <label style="display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.3rem;">Novo nome de usuário</label>
+            <input type="text" id="editUsername"
+                   style="width:100%;border:1px solid #d1d5db;border-radius:.375rem;padding:.5rem .75rem;font-size:.85rem;box-sizing:border-box;">
+        </div>
+        <div style="margin-bottom:1.25rem;">
+            <label style="display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:.3rem;">Nova senha</label>
+            <input type="password" id="editPassword" placeholder="Deixe vazio para não alterar"
+                   style="width:100%;border:1px solid #d1d5db;border-radius:.375rem;padding:.5rem .75rem;font-size:.85rem;box-sizing:border-box;">
+        </div>
+        <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+            <button onclick="document.getElementById('editUserModal').style.display='none'"
+                    style="border:1px solid #d1d5db;background:#fff;border-radius:.375rem;padding:.5rem 1rem;cursor:pointer;font-size:.85rem;">
+                Cancelar
+            </button>
+            <button onclick="saveUserEdit()"
+                    style="background:#7c3aed;color:#fff;border:none;border-radius:.375rem;padding:.5rem 1.25rem;cursor:pointer;font-size:.85rem;font-weight:600;">
+                💾 Salvar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Permissões de Acesso -->
+<div id="permissionsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:.75rem;padding:1.5rem;width:380px;max-width:95vw;box-shadow:0 20px 40px rgba(0,0,0,.3);">
+        <h4 style="margin:0 0 .25rem;font-size:1rem;font-weight:700;color:#1e293b;">🔒 Permissões de Acesso</h4>
+        <p id="permUserLabel" style="font-size:.8rem;color:#6b7280;margin:0 0 1rem;"></p>
+        <input type="hidden" id="permUserId">
+        <div id="permCheckboxes" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.25rem;"></div>
+        <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+            <button onclick="document.getElementById('permissionsModal').style.display='none'"
+                    style="border:1px solid #d1d5db;background:#fff;border-radius:.375rem;padding:.5rem 1rem;cursor:pointer;font-size:.85rem;">
+                Cancelar
+            </button>
+            <button onclick="savePermissions()"
+                    style="background:#0891b2;color:#fff;border:none;border-radius:.375rem;padding:.5rem 1.25rem;cursor:pointer;font-size:.85rem;font-weight:600;">
+                💾 Salvar
+            </button>
         </div>
     </div>
 </div>

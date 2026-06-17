@@ -26,6 +26,7 @@ import { setupPaginationListeners } from './pagination.js';
 import { setupDelegationListeners } from './delegation.js';
 import { renderCashflowDashboard } from '../cashflow.js';
 import { renderDreDashboard } from '../dre.js';
+import { renderCrescimento } from '../crescimento.js';
 
 export function initializeEventListeners() {
 
@@ -58,9 +59,22 @@ export function initializeEventListeners() {
         }
     });
 
+    // --- Botão Crescimento Analítico ---
+    document.getElementById('btnCrescimento')?.addEventListener('click', e => {
+        utils.resetAllFilters();
+        utils.setActiveControl(e.target);
+        if (dom.customAnalysisSelector) dom.customAnalysisSelector.value = '';
+        utils.hideAllCustomFilters();
+        if (dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
+        if (dom.dashboardContentDiv) {
+            dom.dashboardContentDiv.classList.remove('hidden');
+            renderCrescimento(dom.dashboardContentDiv);
+        }
+    });
+
     // --- Seletores de Coleção Principal (botões azuis) ---
     document.querySelector('.collection-selector')?.addEventListener('click', e => {
-        if (e.target.tagName === 'BUTTON' && e.target.id && e.target.id !== 'saveLayoutBtn' && e.target.id !== 'btnCashflow' && e.target.id !== 'btnDRE') {
+        if (e.target.tagName === 'BUTTON' && e.target.id && e.target.id !== 'saveLayoutBtn' && e.target.id !== 'btnCashflow' && e.target.id !== 'btnDRE' && e.target.id !== 'btnCrescimento') {
             const buttonText = e.target.textContent;
             if (buttonText) {
                 utils.resetAllFilters();

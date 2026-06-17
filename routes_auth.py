@@ -26,11 +26,13 @@ def login():
         if user_data and check_password_hash(user_data['password_hash'], password):
             keys = user_data.keys()
             is_active = bool(user_data['is_active']) if 'is_active' in keys else True
+            permissions = user_data['permissions'] if 'permissions' in keys else None
             user = User(
                 id=user_data['id'],
                 username=user_data['username'],
                 password_hash=user_data['password_hash'],
-                is_active=is_active
+                is_active=is_active,
+                permissions=permissions
             )
             login_user(user)
             return redirect(url_for('index'))

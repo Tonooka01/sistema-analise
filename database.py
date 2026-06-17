@@ -101,6 +101,10 @@ def init_db_users():
             logger.info("Atualizando tabela Users: Adicionando 'last_seen'...")
             conn.execute("ALTER TABLE Users ADD COLUMN last_seen DATETIME")
 
+        if 'permissions' not in columns:
+            logger.info("Atualizando tabela Users: Adicionando 'permissions'...")
+            conn.execute("ALTER TABLE Users ADD COLUMN permissions TEXT DEFAULT NULL")
+
         # Dados padrão
         if not conn.execute("SELECT value FROM Settings WHERE key = 'inactivity_timeout_minutes'").fetchone():
             conn.execute("INSERT INTO Settings (key, value) VALUES (?, ?)", ('inactivity_timeout_minutes', '30'))

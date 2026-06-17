@@ -3,9 +3,12 @@ routes_admin.py
 Blueprint administrativo — settings, usuários, logs de acesso.
 """
 
+import json
+import sqlite3
 from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify, abort
 from flask_login import login_required, current_user
+from werkzeug.security import generate_password_hash
 from database import get_db_connection
 
 admin_bp = Blueprint('admin_bp', __name__)
@@ -46,7 +49,7 @@ def get_users():
         return jsonify({"error": "Acesso negado"}), 403
 
     conn = get_db_connection()
-    users = conn.execute("SELECT id, username, is_active, last_seen FROM Users").fetchall()
+    users = conn.execute("SELECT id, username, is_active, last_seen, permissions FROM Users").fetchall()
     conn.close()
 
     now = datetime.now()
@@ -64,7 +67,8 @@ def get_users():
             "username": u['username'],
             "is_active": bool(u['is_active']) if u['is_active'] is not None else True,
             "last_seen": u['last_seen'],
-            "is_online": is_online
+            "is_online": is_online,
+            "permissions": u['permissions'],
         })
 
     return jsonify(users_list)
@@ -85,6 +89,88 @@ def toggle_user():
     conn.commit()
     conn.close()
     return jsonify({"success": True})
+
+
+@admin_bp.route('/api/admin/users/edit', methods=['POST'])
+@login_required
+def edit_user():
+    if current_user.username != 'admin':
+        return jsonify({"error": "Acesso negado"}), 403
+
+    user_id = request.json.get('user_id')
+    new_username = (request.json.get('username') or '').strip()
+    new_password = (request.json.get('password') or '').strip()
+
+    if not user_id:
+        return jsonify({"error": "user_id obrigatório"}), 400
+    if not new_username and not new_password:
+        return jsonify({"error": "Nada para atualizar"}), 400
+
+    conn = get_db_connection()
+    try:
+        if new_username:
+            conn.execute("UPDATE Users SET username = ? WHERE id = ?", (new_username, user_id))
+        if new_password:
+            hashed = generate_password_hash(new_password, method='scrypt')
+            conn.execute("UPDATE Users SET password_hash = ? WHERE id = ?", (hashed, user_id))
+        conn.commit()
+        return jsonify({"success": True})
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Nome de usuário já existe"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/admin/users/permissions', methods=['POST'])
+@login_required
+def set_user_permissions():
+    if current_user.username != 'admin':
+        return jsonify({"error": "Acesso negado"}), 403
+
+    user_id = request.json.get('user_id')
+    permissions = request.json.get('permissions')  # None = all, list = restricted
+
+    conn = get_db_connection()
+    try:
+        perms_str = json.dumps(permissions) if permissions is not None else None
+        conn.execute("UPDATE Users SET permissions = ? WHERE id = ?", (perms_str, user_id))
+        conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/admin/profile', methods=['POST'])
+@login_required
+def update_profile():
+    if current_user.username != 'admin':
+        return jsonify({"error": "Acesso negado"}), 403
+
+    new_username = (request.json.get('username') or '').strip()
+    new_password = (request.json.get('password') or '').strip()
+
+    if not new_username and not new_password:
+        return jsonify({"error": "Nada para atualizar"}), 400
+
+    conn = get_db_connection()
+    try:
+        if new_username:
+            conn.execute("UPDATE Users SET username = ? WHERE id = ?", (new_username, current_user.id))
+        if new_password:
+            hashed = generate_password_hash(new_password, method='scrypt')
+            conn.execute("UPDATE Users SET password_hash = ? WHERE id = ?", (hashed, current_user.id))
+        conn.commit()
+        return jsonify({"success": True})
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Nome de usuário já existe"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
 
 @admin_bp.route('/admin/logs')

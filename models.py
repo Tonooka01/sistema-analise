@@ -8,11 +8,12 @@ from database import get_db_connection
 
 
 class User(UserMixin):
-    def __init__(self, id, username, password_hash, is_active=True):
+    def __init__(self, id, username, password_hash, is_active=True, permissions=None):
         self.id = id
         self.username = username
         self.password_hash = password_hash
         self.active = is_active
+        self.permissions = permissions  # JSON string or None (None = all access)
 
     @property
     def is_active(self):
@@ -26,10 +27,12 @@ def load_user(user_id):
     if user_data:
         keys = user_data.keys()
         is_active = bool(user_data['is_active']) if 'is_active' in keys else True
+        permissions = user_data['permissions'] if 'permissions' in keys else None
         return User(
             id=user_data['id'],
             username=user_data['username'],
             password_hash=user_data['password_hash'],
-            is_active=is_active
+            is_active=is_active,
+            permissions=permissions
         )
     return None
