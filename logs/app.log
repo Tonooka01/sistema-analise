@@ -8681,3 +8681,17 @@ sqlite3.OperationalError: database is locked
 2026-06-18 11:38:47 [INFO] __main__: GET /api/admin/settings 200 -> 127.0.0.1 [admin]
 2026-06-18 11:46:56 [INFO] __main__: GET /logout 302 -> 127.0.0.1 [Visitante]
 2026-06-18 11:46:56 [INFO] __main__: GET /login 200 -> 127.0.0.1 [Visitante]
+2026-06-22 16:49:30 [INFO] __main__: Servidor iniciado na porta 5000...
+2026-06-22 16:49:32 [INFO] __main__: GET / 302 -> 127.0.0.1 [Visitante]
+2026-06-22 16:49:32 [INFO] __main__: GET /login 200 -> 127.0.0.1 [Visitante]
+2026-06-22 16:49:34 [INFO] __main__: POST /login 302 -> 127.0.0.1 [admin]
+2026-06-22 16:49:34 [INFO] __main__: GET / 200 -> 127.0.0.1 [admin]
+2026-06-22 16:49:35 [INFO] __main__: GET /api/admin/settings 200 -> 127.0.0.1 [admin]
+2026-06-22 16:49:36 [INFO] __main__: GET /api/dre2/status 200 -> 127.0.0.1 [admin]
+2026-06-22 16:49:36 [INFO] __main__: GET /api/dre2/dre 200 -> 127.0.0.1 [admin]
+2026-06-22 16:49:44 [INFO] routes_dre2: GestaoCompleta importada: {'dre': 53, 'dfc': 53, 'cac': 53, 'lancamentos': 10013}
+2026-06-22 16:49:44 [INFO] __main__: POST /api/dre2/importar 200 -> 127.0.0.1 [admin]
+2026-06-22 16:49:44 [INFO] __main__: GET /api/dre2/dre 200 -> 127.0.0.1 [admin]
+2026-06-22 16:49:46 [INFO] __main__: GET /api/dre2/dfc 200 -> 127.0.0.1 [admin]
+2026-06-22 16:49:52 [INFO] __main__: GET /api/dre/auxiliar 200 -> 127.0.0.1 [admin]
+2026-06-22 16:50:12 [INFO] __main__: GET /api/dre/auxiliar 200 -> 127.0.0.1 [admin]
