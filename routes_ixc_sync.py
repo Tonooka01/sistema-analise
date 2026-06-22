@@ -234,137 +234,162 @@ def _sync_contratos(conn, token, log, since=None):
 
     total_c = 0
     total_n = 0
+    filial_counts = {}  # diagnóstico: quantos por id_filial na resposta
 
-    for filial in ['2', '4']:
+    _CIDADES_NOMES = set(CIDADE_NOMES.values())
+
+    # Busca TODOS os contratos sem filtro por filial.
+    # Filial 4 → Contratos_Negativacao.
+    # Filial 2 → Contratos (sem filtro de cidade, pois serve nossas cidades).
+    # Demais (filial 1 ou outro valor) → Contratos se a cidade do cliente
+    #   estiver entre as nossas 4 cidades.
+    # Nota: filtrar por id_filial=1 na API retorna 0 registros (comportamento
+    #   documentado do IXC), por isso buscamos tudo e separamos localmente.
+    if since:
         params = {
-            'qtype':     'cliente_contrato.id_filial',
-            'query':     filial,
-            'oper':      '=',
+            'qtype':     'cliente_contrato.ultima_atualizacao',
+            'query':     since,
+            'oper':      '>=',
             'sortname':  'cliente_contrato.ultima_atualizacao',
             'sortorder': 'asc'
         }
-        if since:
-            params['qtype2'] = 'cliente_contrato.ultima_atualizacao'
-            params['query2'] = since
-            params['oper2']  = '>='
+    else:
+        params = {
+            'qtype':     'cliente_contrato.id',
+            'query':     '1',
+            'oper':      '>=',
+            'sortname':  'cliente_contrato.ultima_atualizacao',
+            'sortorder': 'asc'
+        }
 
-        records = _ixc_get('cliente_contrato', params, token)
-        logger.info(f"  [filial {filial}] {len(records)} contratos")
+    records = _ixc_get('cliente_contrato', params, token)
+    logger.info(f"  [todos] {len(records)} contratos recebidos da API")
 
-        for r in records:
-            id_cli = str(int(float(r.get('id_cliente', 0) or 0)))
-            nome, cidade = cliente_cache.get(id_cli, (None, None))
+    for r in records:
+        id_filial_val = str(r.get('id_filial') or '').strip()
+        filial_counts[id_filial_val] = filial_counts.get(id_filial_val, 0) + 1
 
-            if not nome and id_cli and id_cli != '0':
-                db_row = conn.execute(
-                    "SELECT Raz_o_social, Cidade FROM Clientes WHERE ID = ? "
-                    "UNION SELECT Raz_o_social, Cidade FROM Clientes_Negativacao WHERE ID = ? LIMIT 1",
-                    (id_cli, id_cli)
-                ).fetchone()
-                if db_row:
-                    nome, cidade = db_row[0], db_row[1]
-                    cliente_cache[id_cli] = (nome, cidade)
+        id_cli = str(int(float(r.get('id_cliente', 0) or 0)))
+        nome, cidade = cliente_cache.get(id_cli, (None, None))
 
-            nome_final = nome or r.get('cliente_razao')
+        if not nome and id_cli and id_cli != '0':
+            db_row = conn.execute(
+                "SELECT Raz_o_social, Cidade FROM Clientes WHERE ID = ? "
+                "UNION SELECT Raz_o_social, Cidade FROM Clientes_Negativacao WHERE ID = ? LIMIT 1",
+                (id_cli, id_cli)
+            ).fetchone()
+            if db_row:
+                nome, cidade = db_row[0], db_row[1]
+                cliente_cache[id_cli] = (nome, cidade)
 
-            row = (
-                r.get('id'),
-                r.get('id_filial'),
-                _map_status_contrato(r.get('status')),
-                _map_status_acesso(r.get('status_internet')),
-                nome_final,
-                r.get('data_assinatura'),        # Data_primeira_assinatura
-                r.get('data_ativacao'),           # Data_ativa_o
-                r.get('data'),                    # Data_base
-                r.get('data_renovacao'),          # Data_renova_o
-                r.get('data_expiracao'),          # Data_de_expira_o
-                r.get('isentar_contrato'),        # Isento
-                r.get('pago_ate_data'),           # Pago_at
-                r.get('id_vd_contrato'),          # Plano_de_venda
-                r.get('contrato'),                # Descri_o
-                r.get('endereco'),                # Endere_o
-                r.get('numero'),                  # N_mero
-                r.get('bairro'),                  # Bairro
-                r.get('tipo'),                    # Tipo
-                r.get('descricao_aux_plano_venda'), # Descri_o_aux_plano_venda
-                r.get('dia_fixo_vencimento'),     # Dia_fixo_do_vencimento
-                r.get('id_carteira_cobranca'),    # Cobran_a / Carteira
-                r.get('status_velocidade'),       # Status_velocidade
-                r.get('id_vendedor'),             # Vendedor
-                r.get('nao_avisar_ate'),          # N_o_avisar_at
-                r.get('nao_bloquear_ate'),        # N_o_bloquear_at
-                r.get('id_tipo_documento'),       # Tipo_doc
-                r.get('tipo_doc_opc'),            # Doc_opc
-                r.get('tipo_doc_opc2'),           # Doc_opc_2
-                r.get('tipo_doc_opc3'),           # Doc_opc_3
-                r.get('tipo_doc_opc4'),           # Doc_opc_4
-                r.get('desbloqueio_confianca'),   # Desbloqueio_confian_a
-                r.get('data_negativacao'),        # Data_negativa_o
-                r.get('data_acesso_desativado'),  # Data_de_acesso_desativado
-                r.get('motivo_cancelamento'),     # Motivo_cancelamento
-                r.get('data_cancelamento'),       # Data_cancelamento
-                r.get('obs_cancelamento'),        # Obs_cancelamento
-                r.get('id_vendedor_ativ'),        # Vendedor_ativa_o
-                r.get('fidelidade'),              # Fidelidade
-                r.get('desbloqueio_confianca_ativo'), # Desbloqueio_confian_a_ativo
-                r.get('dt_ult_bloq_auto'),        # ltimo_bloqueio_autom_tico
-                r.get('dt_ult_bloq_manual'),      # ltimo_bloqueio_manual
-                r.get('dt_ult_des_bloq_conf'),    # ltimo_desbloqueio_de_confian_a
-                r.get('dt_ult_finan_atraso'),     # ltimo_financeiro_em_atraso
-                r.get('dt_utl_negativacao'),      # ltima_negativa_o
-                r.get('data_cadastro_sistema'),   # Data_cadastro_sistema
-                r.get('ultima_atualizacao'),      # ltima_atualiza_o
-                r.get('complemento'),             # Complemento
-                r.get('cep'),                     # Cep
-                cidade,                           # Cidade
-                r.get('taxa_instalacao'),         # Taxa_ativa_o
-                r.get('motivo_inclusao'),         # Motivo_de_inclus_o
-                r.get('dia_fixo_vencimento'),     # Dia_fixo_do_vencimento (2nd ref)
-            )
+        # Filial 2: aceita tudo (serve nossas cidades, sem filtro de cidade).
+        # Filial 4: vai para Contratos_Negativacao (sem filtro de cidade).
+        # Demais (incl. Filial 1): só aceita se a cidade estiver nas nossas 4.
+        if id_filial_val not in ('2', '4'):
+            if cidade not in _CIDADES_NOMES:
+                continue
 
-            if filial == '4':
-                conn.execute("""
-                    INSERT OR REPLACE INTO Contratos_Negativacao
-                    (ID, Filial, Status_contrato, Status_acesso, Cliente,
-                     Data_primeira_assinatura, Data_ativa_o, Data_base, Data_renova_o,
-                     Data_de_expira_o, Isento, Pago_at, Plano_de_venda, Descri_o,
-                     Endere_o, N_mero, Bairro, Tipo, Descri_o_aux_plano_venda,
-                     Dia_fixo_do_vencimento, Cobran_a, Status_velocidade, Vendedor,
-                     N_o_avisar_at, N_o_bloquear_at, Tipo_doc, Doc_opc, Doc_opc_2,
-                     Doc_opc_3, Doc_opc_4, Desbloqueio_confian_a, Data_negativa_o,
-                     Data_de_acesso_desativado, Motivo_cancelamento, Data_cancelamento,
-                     Obs_cancelamento, Vendedor_ativa_o, Fidelidade,
-                     Desbloqueio_confian_a_ativo, ltimo_bloqueio_autom_tico,
-                     ltimo_bloqueio_manual, ltimo_desbloqueio_de_confian_a,
-                     ltimo_financeiro_em_atraso, ltima_negativa_o,
-                     Data_cadastro_sistema, ltima_atualiza_o, Complemento, Cep,
-                     Cidade, Taxa_ativa_o, Motivo_de_inclus_o)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                """, row[:-1])  # remove duplicate dia_fixo
-                total_n += 1
-            else:
-                conn.execute("""
-                    INSERT OR REPLACE INTO Contratos
-                    (ID, Filial, Status_contrato, Status_acesso, Cliente,
-                     Data_primeira_assinatura, Data_ativa_o, Data_base, Data_renova_o,
-                     Data_de_expira_o, Isento, Pago_at, Plano_de_venda, Descri_o,
-                     Endere_o, N_mero, Bairro, Tipo, Descri_o_aux_plano_venda,
-                     Dia_fixo_do_vencimento, Cobran_a, Status_velocidade, Vendedor,
-                     N_o_avisar_at, N_o_bloquear_at, Tipo_doc, Doc_opc, Doc_opc_2,
-                     Doc_opc_3, Doc_opc_4, Desbloqueio_confian_a, Data_negativa_o,
-                     Data_de_acesso_desativado, Motivo_cancelamento, Data_cancelamento,
-                     Obs_cancelamento, Vendedor_ativa_o, Fidelidade,
-                     Desbloqueio_confian_a_ativo, ltimo_bloqueio_autom_tico,
-                     ltimo_bloqueio_manual, ltimo_desbloqueio_de_confian_a,
-                     ltimo_financeiro_em_atraso, ltima_negativa_o,
-                     Data_cadastro_sistema, ltima_atualiza_o, Complemento, Cep,
-                     Cidade, Taxa_ativa_o, Motivo_de_inclus_o)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                """, row[:-1])  # remove duplicate dia_fixo
-                total_c += 1
+        nome_final = nome or r.get('cliente_razao')
+
+        row = (
+            r.get('id'),
+            r.get('id_filial'),
+            _map_status_contrato(r.get('status')),
+            _map_status_acesso(r.get('status_internet')),
+            nome_final,
+            r.get('data_assinatura'),
+            r.get('data_ativacao'),
+            r.get('data'),
+            r.get('data_renovacao'),
+            r.get('data_expiracao'),
+            r.get('isentar_contrato'),
+            r.get('pago_ate_data'),
+            r.get('id_vd_contrato'),
+            r.get('contrato'),
+            r.get('endereco'),
+            r.get('numero'),
+            r.get('bairro'),
+            r.get('tipo'),
+            r.get('descricao_aux_plano_venda'),
+            r.get('dia_fixo_vencimento'),
+            r.get('id_carteira_cobranca'),
+            r.get('status_velocidade'),
+            r.get('id_vendedor'),
+            r.get('nao_avisar_ate'),
+            r.get('nao_bloquear_ate'),
+            r.get('id_tipo_documento'),
+            r.get('tipo_doc_opc'),
+            r.get('tipo_doc_opc2'),
+            r.get('tipo_doc_opc3'),
+            r.get('tipo_doc_opc4'),
+            r.get('desbloqueio_confianca'),
+            r.get('data_negativacao'),
+            r.get('data_acesso_desativado'),
+            r.get('motivo_cancelamento'),
+            r.get('data_cancelamento'),
+            r.get('obs_cancelamento'),
+            r.get('id_vendedor_ativ'),
+            r.get('fidelidade'),
+            r.get('desbloqueio_confianca_ativo'),
+            r.get('dt_ult_bloq_auto'),
+            r.get('dt_ult_bloq_manual'),
+            r.get('dt_ult_des_bloq_conf'),
+            r.get('dt_ult_finan_atraso'),
+            r.get('dt_utl_negativacao'),
+            r.get('data_cadastro_sistema'),
+            r.get('ultima_atualizacao'),
+            r.get('complemento'),
+            r.get('cep'),
+            cidade,
+            r.get('taxa_instalacao'),
+            r.get('motivo_inclusao'),
+            r.get('dia_fixo_vencimento'),
+        )
+
+        if id_filial_val == '4':
+            conn.execute("""
+                INSERT OR REPLACE INTO Contratos_Negativacao
+                (ID, Filial, Status_contrato, Status_acesso, Cliente,
+                 Data_primeira_assinatura, Data_ativa_o, Data_base, Data_renova_o,
+                 Data_de_expira_o, Isento, Pago_at, Plano_de_venda, Descri_o,
+                 Endere_o, N_mero, Bairro, Tipo, Descri_o_aux_plano_venda,
+                 Dia_fixo_do_vencimento, Cobran_a, Status_velocidade, Vendedor,
+                 N_o_avisar_at, N_o_bloquear_at, Tipo_doc, Doc_opc, Doc_opc_2,
+                 Doc_opc_3, Doc_opc_4, Desbloqueio_confian_a, Data_negativa_o,
+                 Data_de_acesso_desativado, Motivo_cancelamento, Data_cancelamento,
+                 Obs_cancelamento, Vendedor_ativa_o, Fidelidade,
+                 Desbloqueio_confian_a_ativo, ltimo_bloqueio_autom_tico,
+                 ltimo_bloqueio_manual, ltimo_desbloqueio_de_confian_a,
+                 ltimo_financeiro_em_atraso, ltima_negativa_o,
+                 Data_cadastro_sistema, ltima_atualiza_o, Complemento, Cep,
+                 Cidade, Taxa_ativa_o, Motivo_de_inclus_o)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, row[:-1])
+            total_n += 1
+        else:
+            conn.execute("""
+                INSERT OR REPLACE INTO Contratos
+                (ID, Filial, Status_contrato, Status_acesso, Cliente,
+                 Data_primeira_assinatura, Data_ativa_o, Data_base, Data_renova_o,
+                 Data_de_expira_o, Isento, Pago_at, Plano_de_venda, Descri_o,
+                 Endere_o, N_mero, Bairro, Tipo, Descri_o_aux_plano_venda,
+                 Dia_fixo_do_vencimento, Cobran_a, Status_velocidade, Vendedor,
+                 N_o_avisar_at, N_o_bloquear_at, Tipo_doc, Doc_opc, Doc_opc_2,
+                 Doc_opc_3, Doc_opc_4, Desbloqueio_confian_a, Data_negativa_o,
+                 Data_de_acesso_desativado, Motivo_cancelamento, Data_cancelamento,
+                 Obs_cancelamento, Vendedor_ativa_o, Fidelidade,
+                 Desbloqueio_confian_a_ativo, ltimo_bloqueio_autom_tico,
+                 ltimo_bloqueio_manual, ltimo_desbloqueio_de_confian_a,
+                 ltimo_financeiro_em_atraso, ltima_negativa_o,
+                 Data_cadastro_sistema, ltima_atualiza_o, Complemento, Cep,
+                 Cidade, Taxa_ativa_o, Motivo_de_inclus_o)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, row[:-1])
+            total_c += 1
 
     conn.commit()
-    log.append(f"  ✅ {total_c} contratos | {total_n} negativados")
+    logger.info(f"  Contratos por id_filial na API: {filial_counts}")
+    log.append(f"  ✅ {total_c} contratos | {total_n} negativados (filiais: {filial_counts})")
 
 
 def _insert_car_records(conn, records, cliente_cache):

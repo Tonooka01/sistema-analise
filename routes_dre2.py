@@ -20,6 +20,15 @@ dre2_bp = Blueprint('dre2', __name__)
 # Helpers internos
 # ---------------------------------------------------------------------------
 
+def _add_columns(conn, table, cols):
+    """Adiciona colunas que não existem ainda (idempotente)."""
+    for col_name, col_type in cols:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}")
+        except Exception:
+            pass
+
+
 def _ensure_tables(conn):
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS GC_DRE_Completo (
@@ -50,6 +59,16 @@ def _ensure_tables(conn):
             Valor REAL, NFe TEXT, CodLancamento INTEGER, Loja TEXT, Descricao TEXT
         );
     """)
+    conn.commit()
+    # Migrations — novas colunas do v9
+    _add_columns(conn, 'GC_DFC_Mensal', [
+        ('Pessoal', 'REAL'), ('EncargosTrabalh', 'REAL'), ('Marketing_DFC', 'REAL'),
+        ('Infraestrutura', 'REAL'), ('Tecnologia', 'REAL'), ('Frota', 'REAL'),
+        ('DespAdmin', 'REAL'), ('Atendimento', 'REAL'), ('Impostos', 'REAL'), ('IRPJCSLL', 'REAL'),
+    ])
+    _add_columns(conn, 'GC_Lancamentos', [
+        ('CategoriaEstruturada', 'TEXT'), ('CapexOpex', 'TEXT'),
+    ])
     conn.commit()
 
 
@@ -91,16 +110,39 @@ def _import_excel(conn, file_bytes):
              _f(row[11]), _f(row[12]), _f(row[13]))
         )
 
-    # --- DFC Mensal ---
+    # --- DFC Mensal (v9: colunas ordenadas alfanumericamente pelo prefixo) ---
+    # idx: 3=ENTRADAS, 4=1.CMV, 5=10.DespFin, 6=11.Outros, 7=12.Atendimento,
+    #      8=2.Pessoal, 9=3.EncargosTrabalh, 10=4.Marketing, 11=5.Infra,
+    #      12=6.Tecnologia, 13=7.Frota, 14=8.DespAdmin, 15=8.Impostos,
+    #      16=9.IRPJ, 17=TOTAL SAÍDAS, 18=SALDO PERÍODO, 19=SALDO ACUMULADO
     ws = wb['💵 DFC Mensal']
     for row in ws.iter_rows(min_row=4, values_only=True):
         if not row[0] or not isinstance(row[0], int):
             continue
+        atendimento = _f(row[7])
+        pessoal     = _f(row[8])
+        enc_trabal  = _f(row[9])
+        marketing   = _f(row[10])
+        infra       = _f(row[11])
+        tecnologia  = _f(row[12])
+        frota       = _f(row[13])
+        desp_admin  = _f(row[14])
+        impostos    = _f(row[15])
+        irpj        = _f(row[16])
+        desp_op  = atendimento + pessoal + marketing + infra + tecnologia + frota + desp_admin
+        encargos = enc_trabal + impostos + irpj
         conn.execute(
-            "INSERT OR REPLACE INTO GC_DFC_Mensal VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            """INSERT OR REPLACE INTO GC_DFC_Mensal
+               (AnoMes, Ano, Mes, Entradas, CMV, DespOp, Encargos, DespFin, Outros,
+                TotalSaidas, SaldoPeriodo, SaldoAcumulado,
+                Pessoal, EncargosTrabalh, Marketing_DFC, Infraestrutura, Tecnologia,
+                Frota, DespAdmin, Atendimento, Impostos, IRPJCSLL)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (row[2], row[0], row[1],
-             _f(row[3]), _f(row[4]), _f(row[5]), _f(row[6]), _f(row[7]), _f(row[8]),
-             _f(row[9]), _f(row[10]), _f(row[11]))
+             _f(row[3]), _f(row[4]), desp_op, encargos, _f(row[5]), _f(row[6]),
+             _f(row[17]), _f(row[18]), _f(row[19]),
+             pessoal, enc_trabal, marketing, infra, tecnologia,
+             frota, desp_admin, atendimento, impostos, irpj)
         )
 
     # --- CAC Mensal ---
@@ -115,7 +157,7 @@ def _import_excel(conn, file_bytes):
              _f(row[7]), int(row[8] or 0), _f(row[9]))
         )
 
-    # --- Lançamentos ---
+    # --- Lançamentos (v9: cols 18=CategoriaEstruturada, 19=CAPEX/OPEX) ---
     ws = wb['📊 Dados para DRE']
     batch = []
     for row in ws.iter_rows(min_row=4, values_only=True):
@@ -126,14 +168,16 @@ def _import_excel(conn, file_bytes):
             row[3], row[4], row[5], row[6], row[7], row[8],
             row[9], _dt(row[10]), _dt(row[11]), _dt(row[12]),
             _f(row[13]), str(row[14]) if row[14] else None,
-            row[15], row[16], row[17]
+            row[15], row[16], row[17],
+            str(row[18]) if len(row) > 18 and row[18] else None,
+            str(row[19]) if len(row) > 19 and row[19] else None,
         ))
     conn.executemany("""
         INSERT INTO GC_Lancamentos
         (Ano, Mes, AnoMes, GrupoDRE, SubgrupoDRE, PlanoContas, CentroCusto, Fornecedor, CNPJ,
          Situacao, DataCompetencia, DataVencimento, DataConfirmacao, Valor, NFe,
-         CodLancamento, Loja, Descricao)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         CodLancamento, Loja, Descricao, CategoriaEstruturada, CapexOpex)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, batch)
 
     conn.commit()
@@ -264,7 +308,12 @@ def api_dre2_dfc():
 
         rows = conn.execute(f"""
             SELECT AnoMes, Ano, Mes, Entradas, CMV, DespOp, Encargos, DespFin, Outros,
-                   TotalSaidas, SaldoPeriodo, SaldoAcumulado
+                   TotalSaidas, SaldoPeriodo, SaldoAcumulado,
+                   COALESCE(Pessoal,0) AS Pessoal, COALESCE(EncargosTrabalh,0) AS EncargosTrabalh,
+                   COALESCE(Marketing_DFC,0) AS Marketing_DFC, COALESCE(Infraestrutura,0) AS Infraestrutura,
+                   COALESCE(Tecnologia,0) AS Tecnologia, COALESCE(Frota,0) AS Frota,
+                   COALESCE(DespAdmin,0) AS DespAdmin, COALESCE(Atendimento,0) AS Atendimento,
+                   COALESCE(Impostos,0) AS Impostos, COALESCE(IRPJCSLL,0) AS IRPJCSLL
             FROM GC_DFC_Mensal {where}
             ORDER BY AnoMes
         """, params).fetchall()
@@ -332,23 +381,25 @@ def api_dre2_lancamentos():
     conn = get_db()
     try:
         _ensure_tables(conn)
-        ano       = request.args.get('ano',       '')
-        mes       = request.args.get('mes',       '')
-        grupo     = request.args.get('grupo',     '')
-        situacao  = request.args.get('situacao',  '')
-        search    = request.args.get('search',    '')
-        date_from = request.args.get('date_from', '')
-        date_to   = request.args.get('date_to',   '')
-        page      = max(1, int(request.args.get('page', 1)))
-        per_page  = 50
+        ano        = request.args.get('ano',        '')
+        mes        = request.args.get('mes',        '')
+        grupo      = request.args.get('grupo',      '')
+        situacao   = request.args.get('situacao',   '')
+        capex_opex = request.args.get('capex_opex', '')
+        search     = request.args.get('search',     '')
+        date_from  = request.args.get('date_from',  '')
+        date_to    = request.args.get('date_to',    '')
+        page       = max(1, int(request.args.get('page', 1)))
+        per_page   = 50
 
         conds, params = [], []
-        if ano:       conds.append("Ano = ?");                               params.append(int(ano))
-        if mes:       conds.append("CAST(SUBSTR(AnoMes,6,2) AS INTEGER)=?"); params.append(int(mes))
-        if grupo:     conds.append("GrupoDRE = ?");                          params.append(grupo)
-        if situacao:  conds.append("Situacao = ?");                          params.append(situacao)
-        if date_from: conds.append("DataCompetencia >= ?");                  params.append(date_from)
-        if date_to:   conds.append("DataCompetencia <= ?");                  params.append(date_to)
+        if ano:        conds.append("Ano = ?");                               params.append(int(ano))
+        if mes:        conds.append("CAST(SUBSTR(AnoMes,6,2) AS INTEGER)=?"); params.append(int(mes))
+        if grupo:      conds.append("GrupoDRE = ?");                          params.append(grupo)
+        if situacao:   conds.append("Situacao = ?");                          params.append(situacao)
+        if capex_opex: conds.append("CapexOpex = ?");                         params.append(capex_opex)
+        if date_from:  conds.append("DataCompetencia >= ?");                  params.append(date_from)
+        if date_to:    conds.append("DataCompetencia <= ?");                  params.append(date_to)
         if search:
             conds.append("(Fornecedor LIKE ? OR Descricao LIKE ? OR PlanoContas LIKE ?)")
             params += [f'%{search}%', f'%{search}%', f'%{search}%']
@@ -358,7 +409,9 @@ def api_dre2_lancamentos():
         total = conn.execute(f"SELECT COUNT(*) FROM GC_Lancamentos {where}", params).fetchone()[0]
         rows  = conn.execute(f"""
             SELECT ID, AnoMes, GrupoDRE, SubgrupoDRE, PlanoContas, Fornecedor,
-                   Situacao, DataCompetencia, Valor, CentroCusto, Loja, Descricao
+                   Situacao, DataCompetencia, Valor, CentroCusto, Loja, Descricao,
+                   COALESCE(CategoriaEstruturada,'') AS CategoriaEstruturada,
+                   COALESCE(CapexOpex,'') AS CapexOpex
             FROM GC_Lancamentos {where}
             ORDER BY DataCompetencia DESC, ID DESC
             LIMIT ? OFFSET ?
@@ -370,6 +423,9 @@ def api_dre2_lancamentos():
         situacoes = [r[0] for r in conn.execute(
             "SELECT DISTINCT Situacao FROM GC_Lancamentos WHERE Situacao IS NOT NULL ORDER BY Situacao"
         ).fetchall()]
+        capex_opts = [r[0] for r in conn.execute(
+            "SELECT DISTINCT CapexOpex FROM GC_Lancamentos WHERE CapexOpex IS NOT NULL AND CapexOpex != '' ORDER BY CapexOpex"
+        ).fetchall()]
         anos     = [r[0] for r in conn.execute(
             "SELECT DISTINCT Ano FROM GC_Lancamentos ORDER BY Ano"
         ).fetchall()]
@@ -379,7 +435,7 @@ def api_dre2_lancamentos():
             'total':    total,
             'page':     page,
             'per_page': per_page,
-            'filters':  {'grupos': grupos, 'situacoes': situacoes, 'anos': anos},
+            'filters':  {'grupos': grupos, 'situacoes': situacoes, 'anos': anos, 'capex_opts': capex_opts},
         })
     except Exception as e:
         traceback.print_exc()

@@ -314,7 +314,7 @@ async function _loadAux() {
 function _renderKpis(d) {
     const k   = d.kpis;
     const fmt = v => formatCurrency(v || 0);
-    const fN  = (v, dec = 1) => (v != null ? Number(v).toFixed(dec) : '—');
+    const fN  = (v, dec = 1) => (v != null ? Number(v).toFixed(dec).replace('.', ',') : '—');
     const fI  = v => (v || 0).toLocaleString('pt-BR');
 
     // Receita & Base
@@ -346,9 +346,17 @@ function _renderKpis(d) {
           desc: 'Percentual de clientes que cancelaram por mês. Referência: abaixo de 2% = saudável; acima de 5% = crítico.',
           color: cc },
         { label:'Cancelamentos / mês', value: fI(k.churn_count),
-          sub: 'média mensal no período',
+          sub: `${fI(k.churn_total)} total no período`,
           desc: 'Quantidade média de contratos encerrados por mês. Considere sazonalidade e motivos para análise.',
           color: cc },
+        { label:'Negativações / mês', value: fI(k.neg_count),
+          sub: `${fI(k.neg_total)} total no período`,
+          desc: 'Quantidade média de contratos negativados por mês (baseado em Data_negativa_o). Clientes com acesso suspenso por inadimplência.',
+          color: '#f59e0b' },
+        { label:'Cancelados + Negativados / mês', value: fI(k.combined_count),
+          sub: `${fI(k.combined_total)} total no período`,
+          desc: 'Soma de cancelamentos e negativações por mês. Representa o total de contratos saídos ou suspensos no período.',
+          color: '#ef4444' },
     ]);
 
     // CAC note
@@ -438,7 +446,7 @@ function _renderKpis(d) {
           desc: 'Custo operacional total (OPEX da DRE) dividido por clientes ativos e meses do período. Indica o custo médio para manter cada cliente.',
           color:'#6366f1' },
         { label:'Custo / Mbps', value: k.custo_por_mbps > 0
-            ? 'R$ ' + Number(k.custo_por_mbps).toFixed(4) : '—',
+            ? 'R$ ' + Number(k.custo_por_mbps).toFixed(4).replace('.', ',') : '—',
           sub: `${fI(k.total_mbps)} Mbps em contratos ativos`,
           desc: 'OPEX total dividido pela soma de Mbps de todos os contratos ativos. A velocidade é extraída do campo de descrição do plano (ex: "200M").',
           color:'#6366f1' },

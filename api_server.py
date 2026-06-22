@@ -128,6 +128,9 @@ def log_request(response):
     except Exception as e:
         logger.error(f"Erro ao gravar log: {e}", exc_info=True)
 
+    logger.info("%s %s %s -> %s [%s]",
+                request.method, request.path, response.status_code, ip, username)
+
     return response
 
 

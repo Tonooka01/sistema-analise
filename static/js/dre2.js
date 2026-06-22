@@ -267,6 +267,10 @@ async function _renderDfc(root) {
         if (d.error) { root.innerHTML = `<div class="d2-load">Erro: ${d.error}</div>`; return; }
         const k = d.kpis;
 
+        const _pctOf = (v, base) => base ? ((v||0)/base*100).toFixed(1)+'%' : '—';
+        const margem_periodo = k.entradas ? k.saldo_periodo / k.entradas : 0;
+        const pct_saidas     = k.entradas ? k.saidas       / k.entradas : 0;
+
         root.innerHTML = `
 <div class="d2-kpis">
   <div class="d2-kpi" style="border-left:4px solid #10b981;">
@@ -276,10 +280,12 @@ async function _renderDfc(root) {
   <div class="d2-kpi" style="border-left:4px solid #ef4444;">
     <div class="d2-kpi-lbl">Total Saídas</div>
     <div class="d2-kpi-val neg">${_brl(k.saidas)}</div>
+    <div style="font-size:.72rem;color:#ef4444;margin-top:.15rem;">${_pct(pct_saidas)} das entradas</div>
   </div>
   <div class="d2-kpi" style="border-left:4px solid #3b82f6;">
     <div class="d2-kpi-lbl">Saldo do Período</div>
     <div class="d2-kpi-val ${k.saldo_periodo >= 0 ? 'pos' : 'neg'}">${_brl(k.saldo_periodo)}</div>
+    <div style="font-size:.72rem;color:${margem_periodo >= 0 ? '#10b981' : '#ef4444'};margin-top:.15rem;">${_pct(margem_periodo)} margem caixa</div>
   </div>
   <div class="d2-kpi" style="border-left:4px solid #8b5cf6;">
     <div class="d2-kpi-lbl">Saldo Acumulado</div>
@@ -295,24 +301,37 @@ async function _renderDfc(root) {
   <div style="overflow-x:auto;">
   <table>
     <thead><tr>
-      <th>Mês</th><th class="r">Entradas</th><th class="r">CMV</th>
-      <th class="r">Desp. Oper.</th><th class="r">Encargos</th><th class="r">Desp. Fin.</th>
-      <th class="r">Total Saídas</th><th class="r">Saldo Período</th><th class="r">Saldo Acum.</th>
+      <th>Mês</th><th class="r">Entradas</th><th class="r">CMV</th><th class="r">% CMV</th>
+      <th class="r">Desp. Oper.</th><th class="r">% D.Op.</th>
+      <th class="r">Encargos</th><th class="r">Desp. Fin.</th>
+      <th class="r">Total Saídas</th><th class="r">% Saídas</th>
+      <th class="r">Saldo Período</th><th class="r">% Margem</th><th class="r">Saldo Acum.</th>
     </tr></thead>
-    <tbody>${d.data.map(r => `<tr>
+    <tbody>${d.data.map(r => {
+      const ent = r.Entradas || 0;
+      return `<tr>
       <td>${r.AnoMes}</td>
       <td class="r pos">${_brl(r.Entradas)}</td>
       <td class="r">${_brl(r.CMV)}</td>
+      <td class="r" style="color:#64748b;font-size:.73rem;">${_pctOf(r.CMV,ent)}</td>
       <td class="r">${_brl(r.DespOp)}</td>
+      <td class="r" style="color:#64748b;font-size:.73rem;">${_pctOf(r.DespOp,ent)}</td>
       <td class="r">${_brl(r.Encargos)}</td>
       <td class="r">${_brl(r.DespFin)}</td>
       <td class="r neg">${_brl(r.TotalSaidas)}</td>
+      <td class="r" style="color:#ef4444;font-size:.73rem;font-weight:700;">${_pctOf(r.TotalSaidas,ent)}</td>
       <td class="r ${(r.SaldoPeriodo||0) >= 0 ? 'pos' : 'neg'}">${_brl(r.SaldoPeriodo)}</td>
+      <td class="r" style="color:${(r.SaldoPeriodo||0)>=0?'#10b981':'#ef4444'};font-size:.73rem;font-weight:700;">${_pctOf(r.SaldoPeriodo,ent)}</td>
       <td class="r ${(r.SaldoAcumulado||0) >= 0 ? 'pos' : 'neg'}">${_brl(r.SaldoAcumulado)}</td>
-    </tr>`).join('')}</tbody>
+    </tr>`;}).join('')}</tbody>
   </table>
   </div>
-</div>`;
+</div>
+${d.data.some(r => (r.Pessoal||0) + (r.Marketing_DFC||0) > 0) ? `
+<div class="d2-card">
+  <div class="d2-ctitle">Composição das Saídas por Sub-categoria</div>
+  <canvas id="d2ChartDfcSub" height="110"></canvas>
+</div>` : ''}`;
 
         _chart = new Chart(document.getElementById('d2ChartDfc'), {
             type: 'bar',
@@ -326,6 +345,30 @@ async function _renderDfc(root) {
             },
             options: _opts(null),
         });
+
+        if (d.data.some(r => (r.Pessoal||0) + (r.Marketing_DFC||0) > 0)) {
+            _chart2 = new Chart(document.getElementById('d2ChartDfcSub'), {
+                type: 'bar',
+                data: {
+                    labels: d.data.map(r => r.AnoMes),
+                    datasets: [
+                        { label: 'CMV',              data: d.data.map(r => r.CMV           ||0), backgroundColor: '#ef4444', stack: 's' },
+                        { label: 'Pessoal',          data: d.data.map(r => r.Pessoal        ||0), backgroundColor: '#3b82f6', stack: 's' },
+                        { label: 'Enc. Trabalhistas',data: d.data.map(r => r.EncargosTrabalh||0), backgroundColor: '#6366f1', stack: 's' },
+                        { label: 'Marketing',        data: d.data.map(r => r.Marketing_DFC  ||0), backgroundColor: '#8b5cf6', stack: 's' },
+                        { label: 'Infraestrutura',   data: d.data.map(r => r.Infraestrutura  ||0), backgroundColor: '#f97316', stack: 's' },
+                        { label: 'Tecnologia',       data: d.data.map(r => r.Tecnologia     ||0), backgroundColor: '#06b6d4', stack: 's' },
+                        { label: 'Frota',            data: d.data.map(r => r.Frota          ||0), backgroundColor: '#10b981', stack: 's' },
+                        { label: 'Desp. Admin.',     data: d.data.map(r => r.DespAdmin      ||0), backgroundColor: '#f59e0b', stack: 's' },
+                        { label: 'Atendimento',      data: d.data.map(r => r.Atendimento    ||0), backgroundColor: '#84cc16', stack: 's' },
+                        { label: 'Impostos/IRPJ',    data: d.data.map(r => (r.Impostos||0)+(r.IRPJCSLL||0)), backgroundColor: '#64748b', stack: 's' },
+                        { label: 'Desp. Financeiras',data: d.data.map(r => r.DespFin        ||0), backgroundColor: '#ec4899', stack: 's' },
+                        { label: 'Outros',           data: d.data.map(r => r.Outros         ||0), backgroundColor: '#a78bfa', stack: 's' },
+                    ]
+                },
+                options: { ...(_opts(null)), scales: { ...(_opts(null).scales), x: { stacked: true, grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45 } }, y: { stacked: true, ticks: { font: { size: 10 }, callback: v => v>=1e6?`${(v/1e6).toFixed(1)}M`:v>=1e3?`${(v/1e3).toFixed(0)}k`:v }, grid: { color: 'rgba(0,0,0,.05)' } } } },
+            });
+        }
     } catch (e) { root.innerHTML = `<div class="d2-load">Erro: ${e}</div>`; }
 }
 
@@ -406,6 +449,7 @@ async function _renderLancamentos(root, init = false) {
     <select id="d2LFMes"   class="d2-sel" style="min-width:130px;">${_mesOpts('')}</select>
     <select id="d2LFGrupo" class="d2-sel" style="min-width:195px;"><option value="">Grupo DRE</option></select>
     <select id="d2LFSit"   class="d2-sel"><option value="">Situação</option></select>
+    <select id="d2LFCapex" class="d2-sel"><option value="">CAPEX / OPEX</option></select>
   </div>
   <div class="d2-filters" style="margin-top:.4rem;">
     <span style="font-size:.75rem;color:#64748b;white-space:nowrap;">Data competência:</span>
@@ -425,30 +469,33 @@ async function _renderLancamentos(root, init = false) {
             const sa = document.getElementById('d2LFAno');
             const sg = document.getElementById('d2LFGrupo');
             const ss = document.getElementById('d2LFSit');
-            (f.anos     || []).forEach(a => { const o = document.createElement('option'); o.value=a; o.textContent=a; sa.appendChild(o); });
-            (f.grupos   || []).forEach(g => { const o = document.createElement('option'); o.value=g; o.textContent=g; sg.appendChild(o); });
-            (f.situacoes|| []).forEach(s => { const o = document.createElement('option'); o.value=s; o.textContent=s; ss.appendChild(o); });
+            const sc = document.getElementById('d2LFCapex');
+            (f.anos      || []).forEach(a => { const o = document.createElement('option'); o.value=a; o.textContent=a; sa.appendChild(o); });
+            (f.grupos    || []).forEach(g => { const o = document.createElement('option'); o.value=g; o.textContent=g; sg.appendChild(o); });
+            (f.situacoes || []).forEach(s => { const o = document.createElement('option'); o.value=s; o.textContent=s; ss.appendChild(o); });
+            (f.capex_opts|| []).forEach(c => { const o = document.createElement('option'); o.value=c; o.textContent=c; sc.appendChild(o); });
             // pre-populate date filters if set
             if (_dateFrom) { const df = document.getElementById('d2LFDateDe'); if(df) df.value = _dateFrom; }
             if (_dateTo)   { const dt = document.getElementById('d2LFDateAte'); if(dt) dt.value = _dateTo; }
         } catch {}
 
         document.getElementById('d2LFBuscar')?.addEventListener('click', () => {
-            _lancFilters.ano      = document.getElementById('d2LFAno')?.value     || '';
-            _lancFilters.mes      = document.getElementById('d2LFMes')?.value     || '';
-            _lancFilters.grupo    = document.getElementById('d2LFGrupo')?.value   || '';
-            _lancFilters.situacao = document.getElementById('d2LFSit')?.value     || '';
-            _lancFilters.search   = document.getElementById('d2LFSrch')?.value    || '';
-            _lancFilters.date_from= document.getElementById('d2LFDateDe')?.value  || '';
-            _lancFilters.date_to  = document.getElementById('d2LFDateAte')?.value || '';
+            _lancFilters.ano       = document.getElementById('d2LFAno')?.value     || '';
+            _lancFilters.mes       = document.getElementById('d2LFMes')?.value     || '';
+            _lancFilters.grupo     = document.getElementById('d2LFGrupo')?.value   || '';
+            _lancFilters.situacao  = document.getElementById('d2LFSit')?.value     || '';
+            _lancFilters.capex_opex= document.getElementById('d2LFCapex')?.value   || '';
+            _lancFilters.search    = document.getElementById('d2LFSrch')?.value    || '';
+            _lancFilters.date_from = document.getElementById('d2LFDateDe')?.value  || '';
+            _lancFilters.date_to   = document.getElementById('d2LFDateAte')?.value || '';
             _lancPage = 1;
             _renderLancTable();
         });
 
         document.getElementById('d2LFLimpar')?.addEventListener('click', () => {
-            ['d2LFAno','d2LFMes','d2LFGrupo','d2LFSit','d2LFSrch','d2LFDateDe','d2LFDateAte']
+            ['d2LFAno','d2LFMes','d2LFGrupo','d2LFSit','d2LFCapex','d2LFSrch','d2LFDateDe','d2LFDateAte']
                 .forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
-            _lancFilters = { ano:'', mes:'', grupo:'', situacao:'', search:'', date_from:'', date_to:'' };
+            _lancFilters = { ano:'', mes:'', grupo:'', situacao:'', capex_opex:'', search:'', date_from:'', date_to:'' };
             _lancPage = 1;
             _renderLancTable();
         });
@@ -461,7 +508,7 @@ async function _renderLancTable() {
     if (!tr) return;
     tr.innerHTML = '<div class="d2-load">Carregando…</div>';
     try {
-        const p = new URLSearchParams({ page: _lancPage, ano: _lancFilters.ano, mes: _lancFilters.mes||'', grupo: _lancFilters.grupo, situacao: _lancFilters.situacao, search: _lancFilters.search, date_from: _lancFilters.date_from||'', date_to: _lancFilters.date_to||'' });
+        const p = new URLSearchParams({ page: _lancPage, ano: _lancFilters.ano, mes: _lancFilters.mes||'', grupo: _lancFilters.grupo, situacao: _lancFilters.situacao, capex_opex: _lancFilters.capex_opex||'', search: _lancFilters.search, date_from: _lancFilters.date_from||'', date_to: _lancFilters.date_to||'' });
         const d = await fetch(`${API}/api/dre2/lancamentos?${p}`).then(r => r.json());
         _lancTotal = d.total || 0;
         const pages = Math.ceil(_lancTotal / PER_PAGE) || 1;
@@ -473,7 +520,7 @@ async function _renderLancTable() {
   <table>
     <thead><tr>
       <th>Mês</th><th>Grupo DRE</th><th>Subgrupo</th><th>Fornecedor</th>
-      <th>Centro Custo</th><th>Data Comp.</th><th>Situação</th><th class="r">Valor</th>
+      <th>Centro Custo</th><th>Data Comp.</th><th>Situação</th><th>CAPEX/OPEX</th><th class="r">Valor</th>
     </tr></thead>
     <tbody>${d.data.map(r => `<tr>
       <td>${r.AnoMes||''}</td>
@@ -483,6 +530,7 @@ async function _renderLancTable() {
       <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.CentroCusto||''}</td>
       <td>${r.DataCompetencia||''}</td>
       <td>${r.Situacao === 'Confirmado' ? '<span class="chip-c">Confirmado</span>' : '<span class="chip-p">Em aberto</span>'}</td>
+      <td style="font-size:.72rem;font-weight:600;color:${r.CapexOpex==='CAPEX'?'#f97316':'#6366f1'}">${r.CapexOpex||'—'}</td>
       <td class="r"><strong>${_brl(r.Valor)}</strong></td>
     </tr>`).join('')}</tbody>
   </table>

@@ -342,7 +342,7 @@ def api_dre_auxiliar():
         st_acesso   = [s.strip() for s in _raw_st_a.split(',') if s.strip()] or ['Ativo']
 
         # ------------------------------------------------------------------
-        # 1. Clientes ativos: Status_contrato E Status_acesso ambos filtráveis
+        # 1. Clientes ativos: Status_contrato E Status_acesso selecionáveis pelo usuário
         # ------------------------------------------------------------------
         st_c_ph = ','.join(['?'] * len(st_contrato))
         st_a_ph = ','.join(['?'] * len(st_acesso))
@@ -397,6 +397,26 @@ def api_dre_auxiliar():
         """, churn_p).fetchall()
         churn_by_p  = {r['periodo']: r['cnt'] for r in churn_rows if r['periodo']}
         total_churn = sum(churn_by_p.values())
+
+        # ------------------------------------------------------------------
+        # 3b. Negativações por mês (usando Data_negativa_o)
+        # ------------------------------------------------------------------
+        neg_c = [
+            "Status_contrato = 'Negativado'",
+            "Data_negativa_o IS NOT NULL", "Data_negativa_o != ''",
+        ]
+        neg_p = []
+        if start_date: neg_c.append("Data_negativa_o >= ?"); neg_p.append(start_date)
+        if end_date:   neg_c.append("Data_negativa_o <= ?"); neg_p.append(end_date)
+
+        neg_rows = conn.execute(f"""
+            SELECT STRFTIME('%Y-%m', Data_negativa_o) AS periodo, COUNT(*) AS cnt
+            FROM Contratos
+            WHERE {' AND '.join(neg_c)}
+            GROUP BY periodo ORDER BY periodo
+        """, neg_p).fetchall()
+        neg_by_p  = {r['periodo']: r['cnt'] for r in neg_rows if r['periodo']}
+        total_neg = sum(neg_by_p.values())
 
         # Churn por motivo
         _MOTIVO_MAP = {
@@ -463,15 +483,18 @@ def api_dre_auxiliar():
         # 5. Métricas derivadas do período
         # ------------------------------------------------------------------
         all_periods = sorted(
-            set(list(mrr_by_p.keys()) + list(churn_by_p.keys()) + list(new_by_p.keys()))
+            set(list(mrr_by_p.keys()) + list(churn_by_p.keys()) + list(new_by_p.keys()) + list(neg_by_p.keys()))
         )
         period_months = max(1, len(all_periods))
 
         mrr_current = mrr_by_p.get(all_periods[-1], 0) if all_periods else 0
         arpu        = mrr_current / active_q if active_q > 0 else 0
 
-        avg_monthly_churn = total_churn / period_months
-        churn_rate_pct    = (avg_monthly_churn / active_q * 100) if active_q > 0 else 0
+        avg_monthly_churn    = total_churn / period_months
+        churn_rate_pct       = (avg_monthly_churn / active_q * 100) if active_q > 0 else 0
+        avg_monthly_neg      = total_neg / period_months
+        total_combined       = total_churn + total_neg
+        avg_monthly_combined = total_combined / period_months
 
         # ------------------------------------------------------------------
         # 6. CAC — custo dos subgrupos selecionados ÷ novas ativações
@@ -695,6 +718,10 @@ def api_dre_auxiliar():
                 'churn_rate':         round(churn_rate_pct, 2),
                 'churn_count':        int(round(avg_monthly_churn)),
                 'churn_total':        int(total_churn),
+                'neg_count':          int(round(avg_monthly_neg)),
+                'neg_total':          int(total_neg),
+                'combined_count':     int(round(avg_monthly_combined)),
+                'combined_total':     int(total_combined),
                 'new_clients':        int(total_new),
                 'cac':                round(cac, 2),
                 'cac_cost':           round(cac_cost, 2),

@@ -26,6 +26,23 @@ _FORMATTER = logging.Formatter(
 )
 
 
+class _SafeStreamHandler(logging.StreamHandler):
+    """StreamHandler que nunca deixa um UnicodeEncodeError derrubar o output.
+    Converte a mensagem para a encoding do stream antes de escrever."""
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            stream = self.stream
+            enc = getattr(stream, 'encoding', None) or 'utf-8'
+            # Substitui chars não suportados por '?' em vez de crashar
+            safe_msg = msg.encode(enc, errors='replace').decode(enc)
+            stream.write(safe_msg + self.terminator)
+            self.flush()
+        except Exception:
+            self.handleError(record)
+
+
 def get_logger(name: str) -> logging.Logger:
     """Retorna um logger configurado com handlers de console e arquivo rotativo."""
     logger = logging.getLogger(name)
@@ -38,13 +55,8 @@ def get_logger(name: str) -> logging.Logger:
     logger.setLevel(level)
     logger.propagate = False  # evita interferência do root logger do Flask
 
-    # Console — força UTF-8 no Windows para evitar UnicodeEncodeError com emoji
-    try:
-        if hasattr(sys.stdout, 'reconfigure'):
-            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-    except Exception:
-        pass
-    ch = logging.StreamHandler(sys.stdout)
+    # Console — usa sys.stderr (padrão do logging) com handler seguro para UTF-8
+    ch = _SafeStreamHandler(sys.stderr)
     ch.setLevel(level)
     ch.setFormatter(_FORMATTER)
     logger.addHandler(ch)
