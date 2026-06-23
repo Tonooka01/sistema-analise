@@ -170,6 +170,28 @@ function _auxShell() {
     <!-- Conteúdo -->
     <div id="auxContent" style="display:none;">
 
+        <!-- Gestão Financeira (Excel) -->
+        <div class="aux-section" id="auxSectionGestao" style="display:none;">
+            <h3 class="aux-section-title">💼 Gestão Financeira (Excel importado)</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
+                <div>
+                    <div style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;
+                                letter-spacing:0.04em;margin-bottom:0.4rem;">DRE — último mês do período</div>
+                    <div class="aux-metric-grid" id="auxGridGestaoDRE"></div>
+                </div>
+                <div>
+                    <div style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;
+                                letter-spacing:0.04em;margin-bottom:0.4rem;">CAC — acumulado do período</div>
+                    <div class="aux-metric-grid" id="auxGridGestaoCAC"></div>
+                </div>
+                <div>
+                    <div style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;
+                                letter-spacing:0.04em;margin-bottom:0.4rem;">DFC — médias mensais</div>
+                    <div class="aux-metric-grid" id="auxGridGestaoDFC"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Receita & Base -->
         <div class="aux-section">
             <h3 class="aux-section-title">📈 Receita & Base de Clientes</h3>
@@ -316,15 +338,69 @@ function _renderKpis(d) {
     const fmt = v => formatCurrency(v || 0);
     const fN  = (v, dec = 1) => (v != null ? Number(v).toFixed(dec).replace('.', ',') : '—');
     const fI  = v => (v || 0).toLocaleString('pt-BR');
+    const fPct = v => fN(v, 1) + '%';
+
+    // Gestão Financeira (Excel)
+    const secGestao = document.getElementById('auxSectionGestao');
+    if (k.gc_has_data && secGestao) {
+        secGestao.style.display = '';
+        const resSinal = (k.gc_resultado || 0) >= 0 ? '#10b981' : '#ef4444';
+        const saldoSinal = (k.gc_saldo_periodo || 0) >= 0 ? '#10b981' : '#ef4444';
+        _fillGrid('auxGridGestaoDRE', [
+            { label:'Receita Bruta',   value: fmt(k.gc_receita_bruta),
+              sub: `Recebido: ${fmt(k.gc_recebido)} · A receber: ${fmt(k.gc_a_receber)}`,
+              color:'#10b981' },
+            { label:'Total Despesas',  value: fmt(k.gc_total_desp),
+              sub: 'CMV + DespOp + Encargos + DespFin + Outros',
+              color:'#f97316' },
+            { label:'Resultado',       value: fmt(k.gc_resultado),
+              sub: `Receita − Despesas`,
+              color: resSinal },
+            { label:'Margem',          value: fPct(k.gc_margem),
+              sub: `Resultado / Receita Bruta`,
+              color: resSinal },
+        ]);
+        const n = k.gc_n_meses || 1;
+        _fillGrid('auxGridGestaoCAC', [
+            { label:'Total CAC',       value: fmt(k.gc_cac_total),
+              sub: `${fI(k.gc_instalacoes)} instalações no período`,
+              color:'#6366f1' },
+            { label:'CAC Unitário',    value: fmt(k.gc_cac_unit),
+              sub: `Média por instalação no período`,
+              color:'#6366f1' },
+        ]);
+        _fillGrid('auxGridGestaoDFC', [
+            { label:'Entradas / mês',  value: fmt(k.gc_entradas),
+              sub: `Total: ${fmt(k.gc_entradas * n)}`,
+              color:'#10b981' },
+            { label:'Saídas / mês',    value: fmt(k.gc_saidas),
+              sub: `Total: ${fmt(k.gc_saidas_total)}`,
+              color:'#f97316' },
+            { label:'Saldo Período / mês', value: fmt(k.gc_saldo_periodo),
+              sub: 'Entradas − Saídas',
+              color: saldoSinal },
+            { label:'Saldo Acumulado', value: fmt(k.gc_saldo_acum),
+              sub: 'Caixa acumulado até o último mês',
+              color: (k.gc_saldo_acum || 0) >= 0 ? '#10b981' : '#ef4444' },
+        ]);
+    } else if (secGestao) {
+        secGestao.style.display = 'none';
+    }
+
+    const excelBadge = k.gc_has_data
+        ? ' <span style="font-size:0.6rem;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:4px;padding:0 4px;vertical-align:middle;">Excel</span>'
+        : '';
 
     // Receita & Base
     _fillGrid('auxGridReceita', [
-        { label:'MRR', value: fmt(k.mrr),
-          sub: 'Receita recorrente (último mês)',
-          desc: 'Monthly Recurring Revenue — soma de toda a receita recebida no último mês do período selecionado.',
+        { label:'MRR' + excelBadge, value: fmt(k.mrr),
+          sub: k.gc_has_data ? 'Receita Bruta (último mês · Excel)' : 'Receita recorrente (último mês)',
+          desc: k.gc_has_data
+            ? 'Receita Bruta do mês mais recente importado da planilha Gestão Completa (DRE Completo).'
+            : 'Monthly Recurring Revenue — soma de toda a receita recebida no último mês do período selecionado.',
           color:'#10b981' },
-        { label:'ARPU', value: fmt(k.arpu),
-          sub: 'Receita média por cliente ativo',
+        { label:'ARPU' + excelBadge, value: fmt(k.arpu),
+          sub: k.gc_has_data ? `Receita Bruta ÷ ${fI(k.active_clients)} clientes ativos` : 'Receita média por cliente ativo',
           desc: 'Average Revenue Per User — MRR dividido pelo total de clientes ativos. Indica o ticket médio mensal.',
           color:'#10b981' },
         { label:'Clientes Ativos', value: fI(k.active_clients),
@@ -362,7 +438,9 @@ function _renderKpis(d) {
     // CAC note
     const cacNote = document.getElementById('auxCacNote');
     if (cacNote) {
-        if (_cacSelected.size === 0) {
+        if (k.gc_has_data) {
+            cacNote.innerHTML = `✅ CAC calculado pela planilha Gestão Completa (Excel). ${excelBadge}`;
+        } else if (_cacSelected.size === 0) {
             cacNote.innerHTML = '⚠️ Nenhum subgrupo selecionado — <em>CAC, LTV e Payback não calculados.</em> Configure o painel acima.';
         } else {
             cacNote.textContent = `Subgrupos incluídos no CAC: ${[..._cacSelected].join(' · ')}`;
@@ -373,20 +451,25 @@ function _renderKpis(d) {
     const lc    = k.ltv_cac || 0;
     const lcc   = lc >= 3 ? '#10b981' : lc >= 1 ? '#f59e0b' : '#ef4444';
     const lifeM = k.arpu > 0 && k.ltv > 0 ? Math.round(k.ltv / k.arpu) : 0;
+    const cacSub = k.gc_has_data
+        ? `${fmt(k.cac_cost)} ÷ ${fI(k.gc_instalacoes || k.new_clients)} instalações (Excel)`
+        : `${fmt(k.cac_cost)} ÷ ${fI(k.new_clients)} ativações`;
     _fillGrid('auxGridCac', [
-        { label:'CAC', value: k.cac > 0 ? fmt(k.cac) : '—',
-          sub: `${fmt(k.cac_cost)} ÷ ${fI(k.new_clients)} ativações`,
-          desc: 'Custo de Aquisição de Cliente — total gasto com os subgrupos selecionados dividido pelas novas ativações no período.',
+        { label:'CAC' + excelBadge, value: k.cac > 0 ? fmt(k.cac) : '—',
+          sub: cacSub,
+          desc: k.gc_has_data
+            ? 'Custo de Aquisição de Cliente calculado pela planilha Gestão Completa (TotalCAC ÷ NInstalações).'
+            : 'Custo de Aquisição de Cliente — total gasto com os subgrupos selecionados dividido pelas novas ativações no período.',
           color:'#6366f1' },
-        { label:'LTV', value: k.ltv > 0 ? fmt(k.ltv) : '—',
+        { label:'LTV' + excelBadge, value: k.ltv > 0 ? fmt(k.ltv) : '—',
           sub: lifeM > 0 ? `ARPU × ${lifeM} meses de vida útil média` : 'Requer dados de churn',
           desc: 'Lifetime Value — receita total esperada de um cliente ao longo de sua vida útil média. Calculado como ARPU ÷ Taxa de Churn mensal.',
           color:'#6366f1' },
-        { label:'LTV / CAC', value: lc > 0 ? fN(lc, 1) + 'x' : '—',
+        { label:'LTV / CAC' + excelBadge, value: lc > 0 ? fN(lc, 1) + 'x' : '—',
           sub: 'Ideal ≥ 3x para negócio saudável',
           desc: 'Razão entre o retorno gerado pelo cliente e o custo para adquiri-lo. Abaixo de 1x = prejuízo; entre 1–3x = atenção; acima de 3x = saudável.',
           color: lcc },
-        { label:'Payback CAC', value: k.payback_months > 0 ? fN(k.payback_months, 1) + ' meses' : '—',
+        { label:'Payback CAC' + excelBadge, value: k.payback_months > 0 ? fN(k.payback_months, 1) + ' meses' : '—',
           sub: 'Tempo para recuperar o CAC via ARPU',
           desc: 'Quantos meses de ARPU são necessários para cobrir o CAC. Quanto menor, mais rápido o retorno sobre o investimento em aquisição.',
           color:'#94a3b8' },
@@ -441,11 +524,15 @@ function _renderKpis(d) {
 
     // Custos & Penetração
     _fillGrid('auxGridCustos', [
-        { label:'OPEX / Cliente / Mês', value: fmt(k.opex_per_client),
-          sub: `${fmt(k.total_opex)} total no período`,
-          desc: 'Custo operacional total (OPEX da DRE) dividido por clientes ativos e meses do período. Indica o custo médio para manter cada cliente.',
+        { label:'OPEX / Cliente / Mês' + excelBadge, value: fmt(k.opex_per_client),
+          sub: k.gc_has_data
+            ? `${fmt(k.total_opex)} total saídas DFC no período`
+            : `${fmt(k.total_opex)} total no período`,
+          desc: k.gc_has_data
+            ? 'Total de Saídas do DFC (planilha Gestão Completa) dividido por clientes ativos e meses do período.'
+            : 'Custo operacional total (OPEX da DRE) dividido por clientes ativos e meses do período. Indica o custo médio para manter cada cliente.',
           color:'#6366f1' },
-        { label:'Custo / Mbps', value: k.custo_por_mbps > 0
+        { label:'Custo / Mbps' + excelBadge, value: k.custo_por_mbps > 0
             ? 'R$ ' + Number(k.custo_por_mbps).toFixed(4).replace('.', ',') : '—',
           sub: `${fI(k.total_mbps)} Mbps em contratos ativos`,
           desc: 'OPEX total dividido pela soma de Mbps de todos os contratos ativos. A velocidade é extraída do campo de descrição do plano (ex: "200M").',

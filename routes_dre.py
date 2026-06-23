@@ -712,7 +712,96 @@ def api_dre_auxiliar():
         ]
 
         # ------------------------------------------------------------------
-        # 15. Dados de tendência para gráfico
+        # 15. Dados financeiros do Excel (GC_*)
+        # ------------------------------------------------------------------
+        gestao = {}
+        try:
+            gc_conds, gc_params = [], []
+            if start_date: gc_conds.append("AnoMes >= ?"); gc_params.append(start_date[:7])
+            if end_date:   gc_conds.append("AnoMes <= ?"); gc_params.append(end_date[:7])
+            wg = (" AND " + " AND ".join(gc_conds)) if gc_conds else ""
+
+            dre_last = conn.execute(f"""
+                SELECT ReceitaBruta, Recebido, AReceber, TotalDespesas, Resultado, Margem
+                FROM GC_DRE_Completo WHERE 1=1{wg}
+                ORDER BY AnoMes DESC LIMIT 1
+            """, gc_params).fetchone()
+            dre_agg = conn.execute(f"""
+                SELECT SUM(ReceitaBruta) AS rb_total, SUM(Resultado) AS res_total, COUNT(*) AS n
+                FROM GC_DRE_Completo WHERE 1=1{wg}
+            """, gc_params).fetchone()
+
+            if dre_last:
+                gestao.update({
+                    'gc_receita_bruta': float(dre_last['ReceitaBruta'] or 0),
+                    'gc_recebido':      float(dre_last['Recebido']     or 0),
+                    'gc_a_receber':     float(dre_last['AReceber']     or 0),
+                    'gc_total_desp':    float(dre_last['TotalDespesas']or 0),
+                    'gc_resultado':     float(dre_last['Resultado']    or 0),
+                    'gc_margem':        float(dre_last['Margem']       or 0),
+                })
+            if dre_agg and (dre_agg['n'] or 0) > 0:
+                gestao.update({
+                    'gc_rb_total':  float(dre_agg['rb_total']  or 0),
+                    'gc_res_total': float(dre_agg['res_total'] or 0),
+                    'gc_n_meses':   int(dre_agg['n']),
+                })
+
+            cac_gc = conn.execute(f"""
+                SELECT SUM(TotalCAC) AS total_cac, SUM(NInstalacoes) AS total_inst,
+                       CAST(SUM(TotalCAC) AS REAL) / NULLIF(SUM(NInstalacoes), 0) AS cac_unit
+                FROM GC_CAC_Mensal WHERE 1=1{wg}
+            """, gc_params).fetchone()
+            if cac_gc and (cac_gc['total_inst'] or 0) > 0:
+                gestao.update({
+                    'gc_cac_total':  float(cac_gc['total_cac']  or 0),
+                    'gc_instalacoes': int(cac_gc['total_inst']),
+                    'gc_cac_unit':   float(cac_gc['cac_unit']   or 0),
+                })
+
+            dfc_last = conn.execute(f"""
+                SELECT SaldoAcumulado FROM GC_DFC_Mensal WHERE 1=1{wg}
+                ORDER BY AnoMes DESC LIMIT 1
+            """, gc_params).fetchone()
+            dfc_agg = conn.execute(f"""
+                SELECT AVG(Entradas) AS ent, AVG(TotalSaidas) AS sai,
+                       AVG(SaldoPeriodo) AS sp, SUM(TotalSaidas) AS sai_total, COUNT(*) AS n
+                FROM GC_DFC_Mensal WHERE 1=1{wg}
+            """, gc_params).fetchone()
+            if dfc_agg and (dfc_agg['n'] or 0) > 0:
+                gestao.update({
+                    'gc_entradas':      float(dfc_agg['ent']       or 0),
+                    'gc_saidas':        float(dfc_agg['sai']       or 0),
+                    'gc_saldo_periodo': float(dfc_agg['sp']        or 0),
+                    'gc_saldo_acum':    float(dfc_last['SaldoAcumulado'] or 0) if dfc_last else 0,
+                    'gc_saidas_total':  float(dfc_agg['sai_total'] or 0),
+                })
+
+        except Exception:
+            pass
+
+        # Override métricas com dados do Excel quando disponíveis
+        if gestao.get('gc_receita_bruta', 0) > 0:
+            mrr_current = gestao['gc_receita_bruta']
+            arpu        = mrr_current / active_q if active_q > 0 else 0
+            avg_life    = 1.0 / (churn_rate_pct / 100.0) if churn_rate_pct > 0 else 0.0
+            ltv         = arpu * avg_life
+            ltv_cac     = ltv / cac if cac > 0 else 0.0
+            payback     = cac / arpu if arpu > 0 else 0.0
+
+        if gestao.get('gc_cac_unit', 0) > 0:
+            cac      = gestao['gc_cac_unit']
+            cac_cost = gestao.get('gc_cac_total', cac_cost)
+            ltv_cac  = ltv / cac if cac > 0 else 0.0
+            payback  = cac / arpu if arpu > 0 else 0.0
+
+        if gestao.get('gc_saidas_total', 0) > 0:
+            total_opex      = gestao['gc_saidas_total']
+            opex_per_client = total_opex / (active_q * period_months) if (active_q * period_months) > 0 else 0.0
+            custo_por_mbps  = round(total_opex / total_mbps, 4) if total_mbps > 0 else 0.0
+
+        # ------------------------------------------------------------------
+        # 16. Dados de tendência para gráfico
         # ------------------------------------------------------------------
         trend = [
             {
@@ -762,6 +851,10 @@ def api_dre_auxiliar():
                 'custo_por_mbps':     custo_por_mbps,
                 'total_mbps':         int(total_mbps),
                 'taxa_penetracao':    taxa_penetracao,
+                # Gestão Excel
+                **{gk: round(gv, 2) if isinstance(gv, float) else gv
+                   for gk, gv in gestao.items()},
+                'gc_has_data':        bool(gestao.get('gc_receita_bruta', 0)),
             },
             'trend':             trend,
             'city_penetracao':   city_pen,
