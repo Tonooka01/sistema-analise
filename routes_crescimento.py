@@ -75,13 +75,17 @@ def _gen_months(start_ym, end_ym):
 @crescimento_bp.route('/dados')
 @login_required
 def api_crescimento_dados():
-    """Retorna histórico (24 meses) + projeção linear (6 meses) de MRR, clientes, churn."""
+    """Retorna histórico (24 meses) + projeção linear (6 meses) de MRR, clientes, churn, neg."""
     try:
         conn = get_db()
         hoje     = date.today()
         cur_ym   = f"{hoje.year:04d}-{hoje.month:02d}"
         start_ym = f"{hoje.year - 2:04d}-{hoje.month:02d}"
         months   = _gen_months(start_ym, cur_ym)
+
+        # Filtro de data opcional (para periodo_stats nos KPI cards)
+        filter_start = request.args.get('start_date', '').strip()
+        filter_end   = request.args.get('end_date',   '').strip()
 
         # Fator de extrapolação para o mês atual (compensar dias faltantes)
         days_in_cur = int(_month_end(cur_ym)[-2:])
@@ -116,49 +120,107 @@ def api_crescimento_dados():
             if r['mes']:
                 new_by_m[r['mes']] = r['n']
 
-        # ── Churn por mês (data de cancelamento) ─────────────────────────────
-        churn_by_m = {}
-        for r in conn.execute("""
+        # ── Verifica se tabela Contratos_Negativacao existe ──────────────────
+        has_neg = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='Contratos_Negativacao'"
+        ).fetchone()
+
+        # ── Churn por mês — UNION ambas as tabelas (mesma lógica de routes_dre.py) ──
+        _churn_st = "(Status_contrato = 'Inativo' OR Status_contrato = 'Negativado' OR Status_contrato = 'Cancelado' OR Status_contrato = 'Desistente')"
+        _churn_base = f"{_churn_st} AND Data_cancelamento IS NOT NULL AND Data_cancelamento != '' AND Data_cancelamento != '0000-00-00'"
+        churn_sql = f"""
             SELECT STRFTIME('%Y-%m', Data_cancelamento) AS mes, COUNT(*) AS n
-            FROM Contratos
-            WHERE Data_cancelamento IS NOT NULL AND Data_cancelamento != ''
-              AND Status_contrato IN ('Inativo', 'Desistente', 'Negativado')
-            GROUP BY mes
-        """):
+            FROM (
+                SELECT Data_cancelamento FROM Contratos WHERE {_churn_base}
+                UNION ALL
+                SELECT Data_cancelamento FROM Contratos_Negativacao WHERE {_churn_base}
+            ) t GROUP BY mes
+        """ if has_neg else f"""
+            SELECT STRFTIME('%Y-%m', Data_cancelamento) AS mes, COUNT(*) AS n
+            FROM Contratos WHERE {_churn_base} GROUP BY mes
+        """
+        churn_by_m = {}
+        for r in conn.execute(churn_sql):
             if r['mes']:
                 churn_by_m[r['mes']] = r['n']
+
+        # ── Negativações por mês (Data_negativa_o) — UNION ambas as tabelas ──
+        neg_by_m = {}
+        neg_sql = """
+            SELECT STRFTIME('%Y-%m', Data_negativa_o) AS mes, COUNT(*) AS n
+            FROM (
+                SELECT Data_negativa_o FROM Contratos
+                WHERE Status_contrato = 'Negativado'
+                  AND Data_negativa_o IS NOT NULL AND Data_negativa_o != ''
+                UNION ALL
+                SELECT Data_negativa_o FROM Contratos_Negativacao
+                WHERE Data_negativa_o IS NOT NULL AND Data_negativa_o != ''
+            ) t GROUP BY mes
+        """ if has_neg else """
+            SELECT STRFTIME('%Y-%m', Data_negativa_o) AS mes, COUNT(*) AS n
+            FROM Contratos
+            WHERE Status_contrato = 'Negativado'
+              AND Data_negativa_o IS NOT NULL AND Data_negativa_o != ''
+            GROUP BY mes
+        """
+        for r in conn.execute(neg_sql):
+            if r['mes']:
+                neg_by_m[r['mes']] = r['n']
 
         conn.close()
 
         historico = []
         for ym in months:
-            is_cur = (ym == cur_ym)
-            mrr_raw     = mrr_by_m.get(ym, 0)
-            cli_raw     = active_by_m.get(ym, 0)
-            novos_raw   = new_by_m.get(ym, 0)
-            churn_raw   = churn_by_m.get(ym, 0)
+            is_cur    = (ym == cur_ym)
+            mrr_raw   = mrr_by_m.get(ym, 0)
+            cli_raw   = active_by_m.get(ym, 0)
+            novos_raw = new_by_m.get(ym, 0)
+            churn_raw = churn_by_m.get(ym, 0)
+            neg_raw   = neg_by_m.get(ym, 0)
 
             # Extrapola o mês atual para o valor esperado do mês completo
             if is_cur and hoje.day < days_in_cur:
                 historico.append({
                     'periodo':     ym,
-                    'mrr':         round(mrr_raw * extrap_factor, 2),
-                    'clientes':    round(cli_raw  * extrap_factor),
-                    'novos':       round(novos_raw * extrap_factor),
-                    'churn':       round(churn_raw * extrap_factor),
+                    'mrr':         round(mrr_raw   * extrap_factor, 2),
+                    'clientes':    round(cli_raw    * extrap_factor),
+                    'novos':       round(novos_raw  * extrap_factor),
+                    'churn':       round(churn_raw  * extrap_factor),
+                    'neg':         round(neg_raw    * extrap_factor),
                     'extrapolado': True,
                     'dias_reais':  hoje.day,
                     'dias_mes':    days_in_cur,
                 })
             else:
                 historico.append({
-                    'periodo':  ym,
-                    'mrr':      mrr_raw,
-                    'clientes': cli_raw,
-                    'novos':    novos_raw,
-                    'churn':    churn_raw,
+                    'periodo':     ym,
+                    'mrr':         mrr_raw,
+                    'clientes':    cli_raw,
+                    'novos':       novos_raw,
+                    'churn':       churn_raw,
+                    'neg':         neg_raw,
                     'extrapolado': False,
                 })
+
+        # ── Estatísticas do período filtrado (para os KPI cards) ──────────────
+        periodo_stats = None
+        if filter_start or filter_end:
+            fs_ym = filter_start[:7] if filter_start else ''
+            fe_ym = filter_end[:7]   if filter_end   else ''
+            filt  = [
+                ym for ym in months
+                if (not fs_ym or ym >= fs_ym) and (not fe_ym or ym <= fe_ym)
+            ]
+            pm      = max(1, len(filt))
+            t_churn = sum(churn_by_m.get(m, 0) for m in filt)
+            t_neg   = sum(neg_by_m.get(m, 0)   for m in filt)
+            periodo_stats = {
+                'meses':       pm,
+                'churn_total': t_churn,
+                'churn_avg':   round(t_churn / pm, 1),
+                'neg_total':   t_neg,
+                'neg_avg':     round(t_neg   / pm, 1),
+            }
 
         # ── Projeção linear (últimos 12 meses) ───────────────────────────────
         hist12 = historico[-12:] if len(historico) >= 12 else historico
@@ -178,7 +240,8 @@ def api_crescimento_dados():
                 pt[f] = round(val, 2) if f == 'mrr' else round(val)
             projecao.append(pt)
 
-        return jsonify({'historico': historico, 'projecao': projecao})
+        return jsonify({'historico': historico, 'projecao': projecao,
+                        'periodo_stats': periodo_stats})
 
     except sqlite3.Error as e:
         logger.error("crescimento/dados: %s", e, exc_info=True)
@@ -239,7 +302,33 @@ def api_crescimento_mapa():
 
         if categoria == 'cancelamento':
             _contratos_points('Data_cancelamento',
-                              ["c.Status_contrato IN ('Inativo','Desistente','Negativado')"])
+                              ["c.Status_contrato IN ('Inativo','Desistente','Negativado','Cancelado')"])
+            # Contratos_Negativacao: alguns têm Data_cancelamento real (não '0000-00-00')
+            try:
+                cn_st = "Status_contrato IN ('Inativo','Negativado','Desistente','Cancelado')"
+                cn_c  = [cn_st, "Data_cancelamento IS NOT NULL", "Data_cancelamento != ''",
+                         "Data_cancelamento != '0000-00-00'"]
+                cn_p  = []
+                if start_date:
+                    cn_c.append("Date(Data_cancelamento) >= ?"); cn_p.append(start_date)
+                if end_date:
+                    cn_c.append("Date(Data_cancelamento) <= ?"); cn_p.append(end_date)
+                wn = ' AND '.join(cn_c)
+                total_in_period += conn.execute(
+                    f"SELECT COUNT(*) FROM Contratos_Negativacao WHERE {wn}", cn_p
+                ).fetchone()[0] or 0
+                coord_cn = cn_c + [
+                    "cl.Latitude IS NOT NULL", "cl.Latitude != ''", "cl.Latitude != '0'",
+                    "cl.Longitude IS NOT NULL", "cl.Longitude != ''", "cl.Longitude != '0'",
+                ]
+                _collect_rows(conn.execute(f"""
+                    SELECT cl.Latitude, cl.Longitude
+                    FROM Contratos_Negativacao c
+                    JOIN Clientes_Negativacao cl ON c.Cliente = cl.Raz_o_social
+                    WHERE {' AND '.join(coord_cn)}
+                """, cn_p).fetchall())
+            except Exception:
+                pass
 
         elif categoria == 'instalacao':
             _contratos_points('Data_ativa_o',
@@ -285,7 +374,58 @@ def api_crescimento_mapa():
             }
 
         elif categoria == 'negativacao':
-            _contratos_points('Data_negativa_o')
+            # Contratos (Filial 2): Status=Negativado + join com Clientes
+            neg_c_base = ["c.Data_negativa_o IS NOT NULL", "c.Data_negativa_o != ''",
+                          "c.Status_contrato = 'Negativado'"]
+            neg_n_base = ["c.Data_negativa_o IS NOT NULL", "c.Data_negativa_o != ''"]
+            neg_p_c, neg_p_n = [], []
+            if start_date:
+                neg_c_base.append("Date(c.Data_negativa_o) >= ?"); neg_p_c.append(start_date)
+                neg_n_base.append("Date(c.Data_negativa_o) >= ?"); neg_p_n.append(start_date)
+            if end_date:
+                neg_c_base.append("Date(c.Data_negativa_o) <= ?"); neg_p_c.append(end_date)
+                neg_n_base.append("Date(c.Data_negativa_o) <= ?"); neg_p_n.append(end_date)
+            wc = ' AND '.join(neg_c_base)
+            wn = ' AND '.join(neg_n_base)
+
+            cnt_c = conn.execute(
+                f"SELECT COUNT(*) FROM Contratos c WHERE {wc}", neg_p_c
+            ).fetchone()[0] or 0
+            cnt_n = 0
+            try:
+                cnt_n = conn.execute(
+                    f"SELECT COUNT(*) FROM Contratos_Negativacao c WHERE {wn}", neg_p_n
+                ).fetchone()[0] or 0
+            except Exception:
+                pass
+            total_in_period = cnt_c + cnt_n
+
+            # Pontos com coords: Contratos -> Clientes
+            coord_c = neg_c_base + [
+                "cl.Latitude IS NOT NULL", "cl.Latitude != ''", "cl.Latitude != '0'",
+                "cl.Longitude IS NOT NULL", "cl.Longitude != ''", "cl.Longitude != '0'",
+            ]
+            _collect_rows(conn.execute(f"""
+                SELECT cl.Latitude, cl.Longitude
+                FROM Contratos c
+                JOIN Clientes cl ON c.Cliente = cl.Raz_o_social
+                WHERE {' AND '.join(coord_c)}
+            """, neg_p_c).fetchall())
+
+            # Pontos com coords: Contratos_Negativacao -> Clientes_Negativacao
+            try:
+                coord_n = neg_n_base + [
+                    "cl.Latitude IS NOT NULL", "cl.Latitude != ''", "cl.Latitude != '0'",
+                    "cl.Longitude IS NOT NULL", "cl.Longitude != ''", "cl.Longitude != '0'",
+                ]
+                _collect_rows(conn.execute(f"""
+                    SELECT cl.Latitude, cl.Longitude
+                    FROM Contratos_Negativacao c
+                    JOIN Clientes_Negativacao cl ON c.Cliente = cl.Raz_o_social
+                    WHERE {' AND '.join(coord_n)}
+                """, neg_p_n).fetchall())
+            except Exception:
+                pass
 
         else:
             assunto_map = {

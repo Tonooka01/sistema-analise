@@ -382,39 +382,53 @@ def api_dre_auxiliar():
         # 3. Churn por mês (Contratos cancelados/inativos)
         # ------------------------------------------------------------------
         churn_c = [
-            "(Status_contrato = 'Inativo' OR Status_contrato = 'Negativado' OR Status_contrato = 'Cancelado')",
+            "(Status_contrato = 'Inativo' OR Status_contrato = 'Negativado' OR Status_contrato = 'Cancelado' OR Status_contrato = 'Desistente')",
             "Data_cancelamento IS NOT NULL", "Data_cancelamento != ''",
         ]
         churn_p = []
         if start_date: churn_c.append("Data_cancelamento >= ?"); churn_p.append(start_date)
         if end_date:   churn_c.append("Data_cancelamento <= ?"); churn_p.append(end_date)
 
+        _churn_where = ' AND '.join(churn_c)
         churn_rows = conn.execute(f"""
             SELECT STRFTIME('%Y-%m', Data_cancelamento) AS periodo, COUNT(*) AS cnt
-            FROM Contratos
-            WHERE {' AND '.join(churn_c)}
+            FROM (
+                SELECT Data_cancelamento FROM Contratos WHERE {_churn_where}
+                UNION ALL
+                SELECT Data_cancelamento FROM Contratos_Negativacao WHERE {_churn_where}
+            ) t
             GROUP BY periodo ORDER BY periodo
-        """, churn_p).fetchall()
+        """, churn_p + churn_p).fetchall()
         churn_by_p  = {r['periodo']: r['cnt'] for r in churn_rows if r['periodo']}
         total_churn = sum(churn_by_p.values())
 
         # ------------------------------------------------------------------
         # 3b. Negativações por mês (usando Data_negativa_o)
+        # Contratos: filtra Status=Negativado (evita datas históricas de Filial 2 já resolvidas)
+        # Contratos_Negativacao: sem filtro de status — todos os contratos lá são por definição
+        #   negados (Filial 4), e o status pode mudar após o pagamento sem invalidar a negativação
         # ------------------------------------------------------------------
-        neg_c = [
-            "Status_contrato = 'Negativado'",
-            "Data_negativa_o IS NOT NULL", "Data_negativa_o != ''",
-        ]
-        neg_p = []
-        if start_date: neg_c.append("Data_negativa_o >= ?"); neg_p.append(start_date)
-        if end_date:   neg_c.append("Data_negativa_o <= ?"); neg_p.append(end_date)
+        neg_c_c = ["Status_contrato = 'Negativado'", "Data_negativa_o IS NOT NULL", "Data_negativa_o != ''"]
+        neg_c_n = ["Data_negativa_o IS NOT NULL", "Data_negativa_o != ''"]
+        neg_p_c, neg_p_n = [], []
+        if start_date:
+            neg_c_c.append("Data_negativa_o >= ?"); neg_p_c.append(start_date)
+            neg_c_n.append("Data_negativa_o >= ?"); neg_p_n.append(start_date)
+        if end_date:
+            neg_c_c.append("Data_negativa_o <= ?"); neg_p_c.append(end_date)
+            neg_c_n.append("Data_negativa_o <= ?"); neg_p_n.append(end_date)
 
         neg_rows = conn.execute(f"""
             SELECT STRFTIME('%Y-%m', Data_negativa_o) AS periodo, COUNT(*) AS cnt
-            FROM Contratos
-            WHERE {' AND '.join(neg_c)}
+            FROM (
+                SELECT Data_negativa_o FROM Contratos
+                  WHERE {' AND '.join(neg_c_c)}
+                UNION ALL
+                SELECT Data_negativa_o FROM Contratos_Negativacao
+                  WHERE {' AND '.join(neg_c_n)}
+            ) t
             GROUP BY periodo ORDER BY periodo
-        """, neg_p).fetchall()
+        """, neg_p_c + neg_p_n).fetchall()
         neg_by_p  = {r['periodo']: r['cnt'] for r in neg_rows if r['periodo']}
         total_neg = sum(neg_by_p.values())
 
@@ -435,11 +449,14 @@ def api_dre_auxiliar():
             15: 'Suspensão temporária',
         }
         motivo_rows = conn.execute(f"""
-            SELECT Motivo_cancelamento AS motivo, COUNT(*) AS cnt
-            FROM Contratos
-            WHERE {' AND '.join(churn_c)}
+            SELECT motivo, COUNT(*) AS cnt
+            FROM (
+                SELECT Motivo_cancelamento AS motivo FROM Contratos WHERE {_churn_where}
+                UNION ALL
+                SELECT Motivo_cancelamento AS motivo FROM Contratos_Negativacao WHERE {_churn_where}
+            ) t
             GROUP BY motivo ORDER BY cnt DESC
-        """, churn_p).fetchall()
+        """, churn_p + churn_p).fetchall()
         def _motivo_label(raw):
             """Motivo_cancelamento é armazenado como TEXT, mas o mapa usa chaves int."""
             if raw is None:

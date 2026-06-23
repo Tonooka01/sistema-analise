@@ -72,7 +72,7 @@ function _shell() {
     </div>
 
     <!-- KPI cards -->
-    <div id="cgKpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.25rem;"></div>
+    <div id="cgKpis" style="display:grid;grid-template-columns:repeat(5,1fr);gap:.75rem;margin-bottom:1.25rem;"></div>
 
     <!-- Gráficos de crescimento -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem;">
@@ -453,10 +453,11 @@ function _renderKpis(d) {
     const el = document.getElementById('cgKpis');
     if (!el) return;
 
-    const hist  = d.historico || [];
-    const proj  = d.projecao  || [];
-    const last  = hist[hist.length - 1]  || {};
-    const lproj = proj[proj.length - 1]  || {};
+    const hist  = d.historico     || [];
+    const proj  = d.projecao      || [];
+    const ps    = d.periodo_stats || null;
+    const last  = hist[hist.length - 1] || {};
+    const lproj = proj[proj.length - 1] || {};
     const h12   = hist.slice(-12);
 
     const mrr_now  = last.mrr      || 0;
@@ -471,9 +472,15 @@ function _renderKpis(d) {
         ? ((h12[h12.length - 1].mrr / h12[0].mrr) ** (1 / (h12.length - 1)) - 1) * 100
         : 0;
 
-    const avg_churn = h12.length > 0
-        ? h12.reduce((s, h) => s + h.churn, 0) / h12.length
-        : 0;
+    // Quando filtro de data ativo usa periodo_stats; senão usa média dos últimos 12 meses
+    const churn_val  = ps ? ps.churn_avg   : (h12.length > 0 ? h12.reduce((s, h) => s + h.churn, 0) / h12.length : 0);
+    const neg_val    = ps ? ps.neg_avg     : (h12.length > 0 ? h12.reduce((s, h) => s + (h.neg || 0), 0) / h12.length : 0);
+    const churn_sub  = ps
+        ? `Total no período: ${ps.churn_total.toLocaleString('pt-BR')} (${ps.meses} ${ps.meses === 1 ? 'mês' : 'meses'})`
+        : 'Média últimos 12 meses';
+    const neg_sub    = ps
+        ? `Total no período: ${ps.neg_total.toLocaleString('pt-BR')} (${ps.meses} ${ps.meses === 1 ? 'mês' : 'meses'})`
+        : 'Média últimos 12 meses';
 
     const KPIS = [
         {
@@ -482,6 +489,7 @@ function _renderKpis(d) {
             sub:   `Projeção 6m: R$ ${(mrr_6m / 1000).toFixed(1)}k`,
             delta: mrr_delta,
             icon:  '💰',
+            color: null,
         },
         {
             label: 'Clientes Ativos',
@@ -489,6 +497,7 @@ function _renderKpis(d) {
             sub:   `Projeção 6m: ${cli_6m.toLocaleString('pt-BR')}`,
             delta: cli_delta,
             icon:  '👥',
+            color: null,
         },
         {
             label: 'Crescimento Mensal',
@@ -496,13 +505,23 @@ function _renderKpis(d) {
             sub:   'Média últimos 12 meses (MRR)',
             delta: null,
             icon:  '📊',
+            color: null,
         },
         {
-            label: 'Churn Médio/Mês',
-            value: Math.round(avg_churn).toLocaleString('pt-BR'),
-            sub:   'Média últimos 12 meses',
+            label: ps ? `Cancelamentos/mês (${ps.meses}m)` : 'Cancelamentos/Mês',
+            value: Math.round(churn_val).toLocaleString('pt-BR'),
+            sub:   churn_sub,
             delta: null,
             icon:  '🚨',
+            color: '#ef4444',
+        },
+        {
+            label: ps ? `Negativações/mês (${ps.meses}m)` : 'Negativações/Mês',
+            value: Math.round(neg_val).toLocaleString('pt-BR'),
+            sub:   neg_sub,
+            delta: null,
+            icon:  '⛔',
+            color: '#f97316',
         },
     ];
 
@@ -512,11 +531,12 @@ function _renderKpis(d) {
                 ${k.delta >= 0 ? '▲' : '▼'} ${Math.abs(k.delta).toFixed(1)}%
                </span>`
             : '';
+        const valColor = k.color ? `color:${k.color}` : 'color:#1e3a5f';
         return `
 <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;padding:.875rem;
             display:flex;flex-direction:column;gap:.25rem;">
     <p style="font-size:.65rem;color:#6b7280;margin:0;text-transform:uppercase;letter-spacing:.06em;">${k.icon} ${k.label}</p>
-    <p style="font-size:1.3rem;font-weight:700;color:#1e3a5f;margin:0;">${k.value}${dHtml}</p>
+    <p style="font-size:1.3rem;font-weight:700;${valColor};margin:0;">${k.value}${dHtml}</p>
     <p style="font-size:.7rem;color:#9ca3af;margin:0;">${k.sub}</p>
 </div>`;
     }).join('');
@@ -572,6 +592,15 @@ function _loadHeatmap(category) {
             if (cov && total > 0) {
                 cov.style.display = 'flex';
 
+                const _LAYER_META = {
+                    cancelamento: { icon: '🚫', label: 'Total cancelamentos', color: '#ef4444' },
+                    instalacao:   { icon: '📋', label: 'Total instalações',   color: '#10b981' },
+                    negativacao:  { icon: '⛔', label: 'Total negativações',  color: '#f97316' },
+                    manutencao:   { icon: '🔧', label: 'Total manutenções',   color: '#f59e0b' },
+                    visita:       { icon: '👷', label: 'Total visitas',        color: '#8b5cf6' },
+                };
+                const meta = _LAYER_META[category] || _LAYER_META.instalacao;
+
                 let breakdownHtml = '';
                 if (d.breakdown) {
                     const br = d.breakdown;
@@ -595,8 +624,8 @@ function _loadHeatmap(category) {
 
                 cov.innerHTML = `
                     <span style="color:#374151;">
-                        📋 Total instalados:
-                        <strong>${total.toLocaleString('pt-BR')}</strong>
+                        ${meta.icon} ${meta.label}:
+                        <strong style="color:${meta.color};">${total.toLocaleString('pt-BR')}</strong>
                     </span>
                     <span style="color:#374151;">
                         🗺 Plotados:
