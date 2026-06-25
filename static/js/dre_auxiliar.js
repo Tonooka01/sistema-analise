@@ -40,7 +40,10 @@ const _MOTIVO_COLOR = {
 // Entry point
 // ============================================================
 export async function renderAuxiliar(container, inheritedFilters) {
-    _auxFilters = { ...inheritedFilters };
+    _auxFilters  = { ...inheritedFilters };
+    _cbsLoaded   = false;          // re-popula checkboxes a cada render
+    _stLoaded    = false;
+    _cacSelected = new Set();      // limpa seleção; defaults são reaplicados em _populateCacCheckboxes
     container.innerHTML = _auxShell();
     _initAuxDates();
     _bindAuxEvents();
@@ -180,8 +183,9 @@ function _auxShell() {
                     <div class="aux-metric-grid" id="auxGridGestaoDRE"></div>
                 </div>
                 <div>
-                    <div style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;
-                                letter-spacing:0.04em;margin-bottom:0.4rem;">CAC — acumulado do período</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+                        <span style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.04em;">CAC — acumulado do período</span>
+                    </div>
                     <div class="aux-metric-grid" id="auxGridGestaoCAC"></div>
                 </div>
                 <div>
@@ -227,7 +231,7 @@ function _auxShell() {
             <div style="display:flex;justify-content:space-between;align-items:center;
                         margin-bottom:0.875rem;padding-bottom:0.6rem;border-bottom:2px solid #6366f1;">
                 <span style="font-size:0.875rem;font-weight:700;color:#0f2d5e;">
-                    Tendência: MRR · Novos Clientes · Cancelamentos
+                    Tendência: MRR · Novos · Cancelamentos · Negativações
                 </span>
                 <div style="display:flex;gap:0.6rem;font-size:0.75rem;color:#64748b;align-items:center;">
                     <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
@@ -308,6 +312,8 @@ async function _loadAux() {
         if (!_cbsLoaded && d.avail_subgrupos?.length) {
             _populateCacCheckboxes(d.avail_subgrupos);
             _cbsLoaded = true;
+            // Re-fetch com os subgrupos padrão já marcados
+            if (_cacSelected.size > 0) { _loadAux(); return; }
         }
         if (!_stLoaded && (d.avail_st_contrato?.length || d.avail_st_acesso?.length)) {
             _populateStatusCheckboxes(d.avail_st_contrato || [], d.avail_st_acesso || []);
@@ -344,31 +350,49 @@ function _renderKpis(d) {
     const secGestao = document.getElementById('auxSectionGestao');
     if (k.gc_has_data && secGestao) {
         secGestao.style.display = '';
-        const resSinal = (k.gc_resultado || 0) >= 0 ? '#10b981' : '#ef4444';
-        const saldoSinal = (k.gc_saldo_periodo || 0) >= 0 ? '#10b981' : '#ef4444';
+        const dbRecebido  = k.db_recebido   || 0;
+        const gcDesp      = k.gc_total_desp || 0;
+        const resultado   = dbRecebido - gcDesp;
+        const margem      = dbRecebido > 0 ? resultado / dbRecebido * 100 : 0;
+        const resSinal    = resultado >= 0 ? '#10b981' : '#ef4444';
+        const saldoSinal  = (k.gc_saldo_periodo || 0) >= 0 ? '#10b981' : '#ef4444';
         _fillGrid('auxGridGestaoDRE', [
-            { label:'Receita Bruta',   value: fmt(k.gc_receita_bruta),
-              sub: `Recebido: ${fmt(k.gc_recebido)} · A receber: ${fmt(k.gc_a_receber)}`,
+            { label:'Receita Bruta',   value: fmt(k.db_receita_bruta || k.mrr),
+              sub: `Recebido: ${fmt(k.db_recebido)} · A receber: ${fmt(k.db_a_receber)}`,
               color:'#10b981' },
-            { label:'Total Despesas',  value: fmt(k.gc_total_desp),
+            { label:'Total Despesas',  value: fmt(gcDesp),
               sub: 'CMV + DespOp + Encargos + DespFin + Outros',
               color:'#f97316' },
-            { label:'Resultado',       value: fmt(k.gc_resultado),
-              sub: `Receita − Despesas`,
+            { label:'Resultado',       value: fmt(resultado),
+              sub: 'Recebido − Despesas',
               color: resSinal },
-            { label:'Margem',          value: fPct(k.gc_margem),
-              sub: `Resultado / Receita Bruta`,
+            { label:'Margem',          value: fPct(margem),
+              sub: 'Resultado / Recebido',
               color: resSinal },
         ]);
         const n = k.gc_n_meses || 1;
-        _fillGrid('auxGridGestaoCAC', [
-            { label:'Total CAC',       value: fmt(k.gc_cac_total),
-              sub: `${fI(k.gc_instalacoes)} instalações no período`,
-              color:'#6366f1' },
-            { label:'CAC Unitário',    value: fmt(k.gc_cac_unit),
-              sub: `Média por instalação no período`,
-              color:'#6366f1' },
-        ]);
+        const cacSource = k.gc_cac_source || 'none';
+        const cacSubSel = [..._cacSelected];
+        if (cacSource === 'none' || cacSubSel.length === 0) {
+            const gCac = document.getElementById('auxGridGestaoCAC');
+            if (gCac) gCac.innerHTML = `<div style="grid-column:1/-1;padding:0.75rem;background:#fef9c3;
+                border:1px solid #fde047;border-radius:8px;font-size:0.82rem;color:#854d0e;">
+                ⚠️ Selecione os subgrupos de custo no <strong>Configurador de CAC</strong> acima
+                para calcular o CAC — investimentos em marketing e vendas ÷ OS de instalação.
+            </div>`;
+        } else {
+            const cacSubLbl = cacSubSel.join(' + ');
+            _fillGrid('auxGridGestaoCAC', [
+                { label:'Total Investido (CAC)', value: fmt(k.gc_cac_total),
+                  sub: `Σ ${cacSubLbl}`,
+                  desc: 'Soma dos custos dos subgrupos selecionados (GC_Lancamentos) no período.',
+                  color:'#6366f1' },
+                { label:'CAC Unitário', value: fmt(k.gc_cac_unit),
+                  sub: `${fI(k.gc_instalacoes)} OS instalação finalizadas`,
+                  desc: 'Total investido ÷ número de OS de instalação finalizadas no período.',
+                  color:'#6366f1' },
+            ]);
+        }
         _fillGrid('auxGridGestaoDFC', [
             { label:'Entradas / mês',  value: fmt(k.gc_entradas),
               sub: `Total: ${fmt(k.gc_entradas * n)}`,
@@ -393,14 +417,12 @@ function _renderKpis(d) {
 
     // Receita & Base
     _fillGrid('auxGridReceita', [
-        { label:'MRR' + excelBadge, value: fmt(k.mrr),
-          sub: k.gc_has_data ? 'Receita Bruta (último mês · Excel)' : 'Receita recorrente (último mês)',
-          desc: k.gc_has_data
-            ? 'Receita Bruta do mês mais recente importado da planilha Gestão Completa (DRE Completo).'
-            : 'Monthly Recurring Revenue — soma de toda a receita recebida no último mês do período selecionado.',
+        { label:'MRR', value: fmt(k.mrr),
+          sub: 'Receita Bruta — recebido + a receber (último mês)',
+          desc: 'Monthly Recurring Revenue — soma do recebido e do a receber no último mês do período, calculado pelo banco de dados de Contas a Receber.',
           color:'#10b981' },
-        { label:'ARPU' + excelBadge, value: fmt(k.arpu),
-          sub: k.gc_has_data ? `Receita Bruta ÷ ${fI(k.active_clients)} clientes ativos` : 'Receita média por cliente ativo',
+        { label:'ARPU', value: fmt(k.arpu),
+          sub: `Receita Bruta ÷ ${fI(k.active_clients)} clientes ativos`,
           desc: 'Average Revenue Per User — MRR dividido pelo total de clientes ativos. Indica o ticket médio mensal.',
           color:'#10b981' },
         { label:'Clientes Ativos', value: fI(k.active_clients),
@@ -414,25 +436,42 @@ function _renderKpis(d) {
     ]);
 
     // Churn
-    const cr    = k.churn_rate || 0;
-    const cc    = cr > 5 ? '#ef4444' : cr > 2 ? '#f59e0b' : '#10b981';
+    const ac         = k.active_clients || 0;
+    // Taxas: total do período ÷ clientes ativos (fallback frontend)
+    const negRate    = k.neg_rate      > 0 ? k.neg_rate
+                     : (k.neg_total    > 0 && ac > 0 ? +(k.neg_total    / ac * 100).toFixed(2) : 0);
+    const cancelRate = k.cancel_rate   > 0 ? k.cancel_rate
+                     : (k.churn_total  > 0 && ac > 0 ? +(k.churn_total  / ac * 100).toFixed(2) : 0);
+    const combRate   = k.combined_rate > 0 ? k.combined_rate
+                     : (k.combined_total > 0 && ac > 0 ? +(k.combined_total / ac * 100).toFixed(2) : 0);
+    const nc  = negRate    > 5 ? '#ef4444' : negRate    > 2 ? '#f59e0b' : '#10b981';
+    const cc  = cancelRate > 5 ? '#ef4444' : cancelRate > 2 ? '#f59e0b' : '#10b981';
+    const cbc = combRate   > 8 ? '#ef4444' : combRate   > 4 ? '#f59e0b' : '#10b981';
     _fillGrid('auxGridChurn', [
-        { label:'Taxa de Churn / mês', value: fN(cr, 2) + '%',
-          sub: `média do período (${fI(k.churn_total)} cancelamentos)`,
-          desc: 'Percentual de clientes que cancelaram por mês. Referência: abaixo de 2% = saudável; acima de 5% = crítico.',
+        { label:'Churn c/ Negativação', value: fN(negRate, 2) + '%',
+          sub: `${fI(k.neg_total)} neg no período ÷ ${fI(k.active_clients)} ativos`,
+          desc: 'Total de negativações no período selecionado dividido pelos clientes ativos.',
+          color: nc },
+        { label:'Churn c/ Cancelamento', value: fN(cancelRate, 2) + '%',
+          sub: `${fI(k.churn_total)} cancel no período ÷ ${fI(k.active_clients)} ativos`,
+          desc: 'Total de cancelamentos no período selecionado dividido pelos clientes ativos.',
           color: cc },
+        { label:'Churn c/ Neg + Cancel', value: fN(combRate, 2) + '%',
+          sub: `${fI(k.combined_total)} (neg + cancel) no período ÷ ${fI(k.active_clients)} ativos`,
+          desc: 'Total de negativações + cancelamentos no período selecionado dividido pelos clientes ativos.',
+          color: cbc },
         { label:'Cancelamentos / mês', value: fI(k.churn_count),
           sub: `${fI(k.churn_total)} total no período`,
-          desc: 'Quantidade média de contratos encerrados por mês. Considere sazonalidade e motivos para análise.',
+          desc: 'Quantidade média de contratos encerrados por mês.',
           color: cc },
         { label:'Negativações / mês', value: fI(k.neg_count),
           sub: `${fI(k.neg_total)} total no período`,
-          desc: 'Quantidade média de contratos negativados por mês (baseado em Data_negativa_o). Clientes com acesso suspenso por inadimplência.',
+          desc: 'Quantidade média de contratos negativados por mês.',
           color: '#f59e0b' },
-        { label:'Cancelados + Negativados / mês', value: fI(k.combined_count),
+        { label:'Cancel + Neg / mês', value: fI(k.combined_count),
           sub: `${fI(k.combined_total)} total no período`,
-          desc: 'Soma de cancelamentos e negativações por mês. Representa o total de contratos saídos ou suspensos no período.',
-          color: '#ef4444' },
+          desc: 'Soma de cancelamentos e negativações por mês.',
+          color: cbc },
     ]);
 
     // CAC note
@@ -461,13 +500,13 @@ function _renderKpis(d) {
             ? 'Custo de Aquisição de Cliente calculado pela planilha Gestão Completa (TotalCAC ÷ NInstalações).'
             : 'Custo de Aquisição de Cliente — total gasto com os subgrupos selecionados dividido pelas novas ativações no período.',
           color:'#6366f1' },
-        { label:'LTV' + excelBadge, value: k.ltv > 0 ? fmt(k.ltv) : '—',
-          sub: lifeM > 0 ? `ARPU × ${lifeM} meses de vida útil média` : 'Requer dados de churn',
-          desc: 'Lifetime Value — receita total esperada de um cliente ao longo de sua vida útil média. Calculado como ARPU ÷ Taxa de Churn mensal.',
+        { label:'LTV', value: k.ltv > 0 ? fmt(k.ltv) : '—',
+          sub: lifeM > 0 ? `ARPU × ${lifeM} meses (cancel+neg 12m: ${fN(k.ltv_churn_rate||0,2)}%)` : 'Requer dados de churn',
+          desc: 'Lifetime Value — ARPU ÷ Taxa mensal (cancelados + negativados + Filial 4, últimos 12 meses). Negativado = saída permanente: novo contrato se quiser voltar.',
           color:'#6366f1' },
         { label:'LTV / CAC' + excelBadge, value: lc > 0 ? fN(lc, 1) + 'x' : '—',
           sub: 'Ideal ≥ 3x para negócio saudável',
-          desc: 'Razão entre o retorno gerado pelo cliente e o custo para adquiri-lo. Abaixo de 1x = prejuízo; entre 1–3x = atenção; acima de 3x = saudável.',
+          desc: 'Razão entre o retorno gerado pelo cliente (LTV via BD) e o custo para adquiri-lo (CAC). Abaixo de 1x = prejuízo; entre 1–3x = atenção; acima de 3x = saudável.',
           color: lcc },
         { label:'Payback CAC' + excelBadge, value: k.payback_months > 0 ? fN(k.payback_months, 1) + ' meses' : '—',
           sub: 'Tempo para recuperar o CAC via ARPU',
@@ -543,6 +582,7 @@ function _renderKpis(d) {
           color:'#6366f1' },
     ]);
 }
+
 
 function _fillGrid(id, cards) {
     const g = document.getElementById(id);
@@ -685,14 +725,14 @@ function _renderChart(trend) {
             labels,
             datasets: [
                 {
-                    type: 'line', label: 'MRR (R$)',
+                    type: 'line', label: 'MRR',
                     data: trend.map(r => r.mrr),
                     borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.07)',
                     borderWidth: 2.5, pointRadius: 3, tension: 0.35, fill: true,
                     yAxisID: 'yMrr', order: 1,
                 },
                 {
-                    type: 'bar', label: 'Novos clientes',
+                    type: 'bar', label: 'Novos',
                     data: trend.map(r => r.novos),
                     backgroundColor: 'rgba(16,185,129,0.72)', borderColor: '#10b981',
                     borderWidth: 1, yAxisID: 'yCnt', order: 2,
@@ -702,6 +742,14 @@ function _renderChart(trend) {
                     data: trend.map(r => r.churn),
                     backgroundColor: 'rgba(239,68,68,0.72)', borderColor: '#ef4444',
                     borderWidth: 1, yAxisID: 'yCnt', order: 2,
+                    stack: 'saidas',
+                },
+                {
+                    type: 'bar', label: 'Negativações',
+                    data: trend.map(r => r.neg || 0),
+                    backgroundColor: 'rgba(245,158,11,0.72)', borderColor: '#f59e0b',
+                    borderWidth: 1, yAxisID: 'yCnt', order: 2,
+                    stack: 'saidas',
                 },
             ],
         },
@@ -709,14 +757,31 @@ function _renderChart(trend) {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { display: false },
+                legend: {
+                    display: true,
+                    position: 'top',
+                    align: 'end',
+                    labels: {
+                        boxWidth: 10, boxHeight: 10,
+                        font: { size: 11 },
+                        color: '#475569',
+                        generateLabels: chart => chart.data.datasets.map((ds, i) => ({
+                            text: ds.label,
+                            fillStyle: ds.backgroundColor,
+                            strokeStyle: ds.borderColor,
+                            lineWidth: 1,
+                            datasetIndex: i,
+                            hidden: !chart.isDatasetVisible(i),
+                            pointStyle: ds.type === 'line' ? 'circle' : 'rect',
+                        })),
+                    },
+                },
                 tooltip: {
                     callbacks: {
                         label: ctx => {
                             const v = ctx.parsed.y || 0;
-                            if (ctx.dataset.yAxisID === 'yMrr') {
+                            if (ctx.dataset.yAxisID === 'yMrr')
                                 return ' MRR: ' + v.toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
-                            }
                             return ` ${ctx.dataset.label}: ${v.toLocaleString('pt-BR')}`;
                         },
                     },
@@ -738,6 +803,7 @@ function _renderChart(trend) {
                 },
                 yCnt: {
                     position: 'right',
+                    stacked: true,
                     grid: { display:false },
                     ticks: { font:{ size:10 }, stepSize:1 },
                 },

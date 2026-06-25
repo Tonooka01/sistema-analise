@@ -333,7 +333,7 @@ def api_dre_auxiliar():
     try:
         start_date    = request.args.get('start_date', '')
         end_date      = request.args.get('end_date',   '')
-        cac_subgrupos = [s.strip() for s in request.args.get('cac_subgrupos', '').split('||') if s.strip()]
+        cac_subgrupos  = [s.strip() for s in request.args.get('cac_subgrupos', '').split('||') if s.strip()]
 
         # Filtros de status — ambos obrigatórios; padrão = Ativo/Ativo
         _raw_st_c = request.args.get('st_contrato', 'Ativo')
@@ -377,6 +377,19 @@ def api_dre_auxiliar():
             GROUP BY periodo ORDER BY periodo
         """, car_p).fetchall()
         mrr_by_p = {r['periodo']: (r['mrr'] or 0) for r in mrr_rows if r['periodo']}
+
+        # A receber por período (data de vencimento)
+        ar_c = ["Status = 'A receber'", "Vencimento IS NOT NULL", "Vencimento != ''"]
+        ar_p = []
+        if start_date: ar_c.append("Vencimento >= ?"); ar_p.append(start_date)
+        if end_date:   ar_c.append("Vencimento <= ?"); ar_p.append(end_date)
+        ar_rows = conn.execute(f"""
+            SELECT STRFTIME('%Y-%m', Vencimento) AS periodo, SUM(Valor_aberto) AS total
+            FROM Contas_a_Receber
+            WHERE {' AND '.join(ar_c)}
+            GROUP BY periodo ORDER BY periodo
+        """, ar_p).fetchall()
+        ar_by_p = {r['periodo']: (r['total'] or 0) for r in ar_rows if r['periodo']}
 
         # ------------------------------------------------------------------
         # 3. Churn por mês (Contratos cancelados/inativos)
@@ -500,18 +513,50 @@ def api_dre_auxiliar():
         # 5. Métricas derivadas do período
         # ------------------------------------------------------------------
         all_periods = sorted(
-            set(list(mrr_by_p.keys()) + list(churn_by_p.keys()) + list(new_by_p.keys()) + list(neg_by_p.keys()))
+            set(list(mrr_by_p.keys()) + list(churn_by_p.keys()) + list(new_by_p.keys())
+                + list(neg_by_p.keys()) + list(ar_by_p.keys()))
         )
         period_months = max(1, len(all_periods))
 
-        mrr_current = mrr_by_p.get(all_periods[-1], 0) if all_periods else 0
-        arpu        = mrr_current / active_q if active_q > 0 else 0
+        last_p           = all_periods[-1] if all_periods else None
+        db_recebido      = mrr_by_p.get(last_p, 0) if last_p else 0
+        db_a_receber     = ar_by_p.get(last_p, 0) if last_p else 0
+        db_receita_bruta = db_recebido + db_a_receber
+        mrr_current      = db_receita_bruta
+        arpu             = mrr_current / active_q if active_q > 0 else 0
 
         avg_monthly_churn    = total_churn / period_months
         churn_rate_pct       = (avg_monthly_churn / active_q * 100) if active_q > 0 else 0
+        cancel_rate_pct      = (total_churn / active_q * 100) if active_q > 0 else 0
         avg_monthly_neg      = total_neg / period_months
+        neg_rate_pct         = (total_neg / active_q * 100) if active_q > 0 else 0
         total_combined       = total_churn + total_neg
         avg_monthly_combined = total_combined / period_months
+        combined_rate_pct    = (total_combined / active_q * 100) if active_q > 0 else 0
+
+        # Taxa LTV (últimos 12 meses, janela fixa) — evita distorção com períodos longos.
+        # Negativado = saída permanente nesta operação (novo contrato se quiser voltar).
+        # Metodologia: cancel/inativo/desistente + negativados de Contratos
+        #              + negativações de Contratos_Negativacao (Filial 4).
+        _ltv_combined_row = conn.execute("""
+            SELECT COUNT(*) AS cnt FROM (
+                SELECT 1 FROM Contratos
+                  WHERE Status_contrato IN ('Cancelado','Inativo','Desistente')
+                    AND Data_cancelamento IS NOT NULL AND Data_cancelamento != ''
+                    AND Data_cancelamento >= DATE('now', '-12 months')
+                UNION ALL
+                SELECT 1 FROM Contratos
+                  WHERE Status_contrato = 'Negativado'
+                    AND Data_negativa_o IS NOT NULL AND Data_negativa_o != ''
+                    AND Data_negativa_o >= DATE('now', '-12 months')
+                UNION ALL
+                SELECT 1 FROM Contratos_Negativacao
+                  WHERE Data_negativa_o IS NOT NULL AND Data_negativa_o != ''
+                    AND Data_negativa_o >= DATE('now', '-12 months')
+            ) t
+        """).fetchone()
+        _ltv_combined_12 = (_ltv_combined_row['cnt'] or 0)
+        _ltv_rate_pct    = (_ltv_combined_12 / 12.0 / active_q * 100) if active_q > 0 else combined_rate_pct
 
         # ------------------------------------------------------------------
         # 6. CAC — custo dos subgrupos selecionados ÷ novas ativações
@@ -529,7 +574,7 @@ def api_dre_auxiliar():
             cac_cost = row[0] or 0.0
 
         cac      = cac_cost / total_new if total_new > 0 else 0.0
-        avg_life = 1.0 / (churn_rate_pct / 100.0) if churn_rate_pct > 0 else 0.0
+        avg_life = 1.0 / (_ltv_rate_pct / 100.0) if _ltv_rate_pct > 0 else 0.0
         ltv      = arpu * avg_life
         ltv_cac  = ltv / cac if cac > 0 else 0.0
         payback  = cac / arpu if arpu > 0 else 0.0
@@ -706,9 +751,13 @@ def api_dre_auxiliar():
         # 14. Subgrupos disponíveis para CAC e status selecionados
         # ------------------------------------------------------------------
         avail_subgrupos = [
-            r[0] for r in conn.execute(
-                "SELECT DISTINCT Subgrupo_DRE FROM DRE WHERE Subgrupo_DRE IS NOT NULL ORDER BY Subgrupo_DRE"
-            ).fetchall()
+            r[0] for r in conn.execute("""
+                SELECT DISTINCT sub FROM (
+                    SELECT Subgrupo_DRE AS sub FROM DRE WHERE Subgrupo_DRE IS NOT NULL
+                    UNION
+                    SELECT SubgrupoDRE  AS sub FROM GC_Lancamentos WHERE SubgrupoDRE IS NOT NULL
+                ) ORDER BY sub
+            """).fetchall()
         ]
 
         # ------------------------------------------------------------------
@@ -747,16 +796,42 @@ def api_dre_auxiliar():
                     'gc_n_meses':   int(dre_agg['n']),
                 })
 
-            cac_gc = conn.execute(f"""
-                SELECT SUM(TotalCAC) AS total_cac, SUM(NInstalacoes) AS total_inst,
-                       CAST(SUM(TotalCAC) AS REAL) / NULLIF(SUM(NInstalacoes), 0) AS cac_unit
-                FROM GC_CAC_Mensal WHERE 1=1{wg}
-            """, gc_params).fetchone()
-            if cac_gc and (cac_gc['total_inst'] or 0) > 0:
+            # Instalações: OS de ativação finalizadas no período (banco de dados)
+            os_inst_c = [
+                "Assunto = 'INSTALAÇÃO DE FIBRA'",
+                "Status = 'Finalizada'",
+                "Fechamento IS NOT NULL", "Fechamento != ''",
+            ]
+            os_inst_p = []
+            if start_date: os_inst_c.append("Fechamento >= ?"); os_inst_p.append(start_date)
+            if end_date:   os_inst_c.append("Fechamento <= ?"); os_inst_p.append(end_date + ' 23:59:59')
+            os_inst_row = conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM OS WHERE {' AND '.join(os_inst_c)}", os_inst_p
+            ).fetchone()
+            gc_n = int(os_inst_row['cnt'] or 0) if os_inst_row else 0
+
+            # Custo CAC: sempre via GC_Lancamentos filtrado pelos subgrupos do configurador
+            # Sem subgrupos → CAC não pode ser calculado corretamente
+            gestao.update({
+                'gc_instalacoes': gc_n,
+                'gc_cac_source':  'none',
+                'gc_cac_total':   0.0,
+                'gc_cac_unit':    0.0,
+            })
+            if cac_subgrupos:
+                ph   = ','.join(['?'] * len(cac_subgrupos))
+                lc_c = [f"SubgrupoDRE IN ({ph})"]
+                lc_p = list(cac_subgrupos)
+                if start_date: lc_c.append("AnoMes >= ?"); lc_p.append(start_date[:7])
+                if end_date:   lc_c.append("AnoMes <= ?"); lc_p.append(end_date[:7])
+                lc_row = conn.execute(
+                    f"SELECT SUM(Valor) AS total FROM GC_Lancamentos WHERE {' AND '.join(lc_c)}", lc_p
+                ).fetchone()
+                gc_t = float(lc_row['total'] or 0) if lc_row else 0.0
                 gestao.update({
-                    'gc_cac_total':  float(cac_gc['total_cac']  or 0),
-                    'gc_instalacoes': int(cac_gc['total_inst']),
-                    'gc_cac_unit':   float(cac_gc['cac_unit']   or 0),
+                    'gc_cac_total':  gc_t,
+                    'gc_cac_unit':   gc_t / gc_n if gc_n > 0 else 0.0,
+                    'gc_cac_source': 'subgrupos',
                 })
 
             dfc_last = conn.execute(f"""
@@ -780,15 +855,7 @@ def api_dre_auxiliar():
         except Exception:
             pass
 
-        # Override métricas com dados do Excel quando disponíveis
-        if gestao.get('gc_receita_bruta', 0) > 0:
-            mrr_current = gestao['gc_receita_bruta']
-            arpu        = mrr_current / active_q if active_q > 0 else 0
-            avg_life    = 1.0 / (churn_rate_pct / 100.0) if churn_rate_pct > 0 else 0.0
-            ltv         = arpu * avg_life
-            ltv_cac     = ltv / cac if cac > 0 else 0.0
-            payback     = cac / arpu if arpu > 0 else 0.0
-
+        # Receita Bruta sempre do BD (Contas_a_Receber); Excel usado apenas para Despesas/DFC
         if gestao.get('gc_cac_unit', 0) > 0:
             cac      = gestao['gc_cac_unit']
             cac_cost = gestao.get('gc_cac_total', cac_cost)
@@ -808,6 +875,7 @@ def api_dre_auxiliar():
                 'periodo':    p,
                 'mrr':        mrr_by_p.get(p, 0),
                 'churn':      churn_by_p.get(p, 0),
+                'neg':        neg_by_p.get(p, 0),
                 'novos':      new_by_p.get(p, 0),
                 'churn_rate': round(churn_by_p.get(p, 0) / active_q * 100, 2)
                               if active_q > 0 else 0.0,
@@ -822,12 +890,19 @@ def api_dre_auxiliar():
                 'active_clients':     int(active_q),
                 'total_cadastrados':  int(total_cadastrados),
                 'churn_rate':         round(churn_rate_pct, 2),
+                'cancel_rate':        round(cancel_rate_pct, 2),
                 'churn_count':        int(round(avg_monthly_churn)),
                 'churn_total':        int(total_churn),
                 'neg_count':          int(round(avg_monthly_neg)),
                 'neg_total':          int(total_neg),
+                'neg_rate':           round(neg_rate_pct, 2),
                 'combined_count':     int(round(avg_monthly_combined)),
                 'combined_total':     int(total_combined),
+                'combined_rate':      round(combined_rate_pct, 2),
+                'ltv_churn_rate':     round(_ltv_rate_pct, 2),
+                'db_receita_bruta':   round(db_receita_bruta, 2),
+                'db_recebido':        round(db_recebido, 2),
+                'db_a_receber':       round(db_a_receber, 2),
                 'new_clients':        int(total_new),
                 'cac':                round(cac, 2),
                 'cac_cost':           round(cac_cost, 2),
