@@ -6,3 +6,4 @@ __pycache__/
 Tabelas/
 *.db
 *.sqlite3logs/ 
+logs/*.log
