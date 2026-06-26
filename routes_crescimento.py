@@ -21,21 +21,29 @@ def get_db():
 
 # ── Utilitários ────────────────────────────────────────────────────────────────
 
-def _linreg(xs, ys):
-    """Regressão linear mínimos quadrados. Retorna (a, b) onde y = a*x + b."""
-    n = len(xs)
-    if n < 2:
-        return 0.0, float(ys[0]) if ys else 0.0
-    sx  = sum(xs)
-    sy  = sum(float(y) for y in ys)
-    sxx = sum(x * x for x in xs)
-    sxy = sum(x * float(y) for x, y in zip(xs, ys))
-    denom = n * sxx - sx * sx
-    if denom == 0:
-        return 0.0, sy / n
-    a = (n * sxy - sx * sy) / denom
-    b = (sy - a * sx) / n
-    return a, b
+def _cagr_monthly(hist_vals):
+    """
+    Taxa de crescimento mensal composta (CAGR) a partir de uma lista de valores.
+    Usa início e fim da série; limita a ±40% ao mês para evitar projeções absurdas.
+    Se o valor inicial for 0, usa incremento linear médio como fallback.
+    """
+    vals = [v for v in hist_vals if v is not None]
+    if len(vals) < 2:
+        return 0.0
+    start, end = vals[0], vals[-1]
+    n = len(vals) - 1
+    if start <= 0:
+        # fallback: incremento linear médio
+        inc = (end - start) / n
+        return inc / max(1, end) if end > 0 else 0.0
+    rate = (end / start) ** (1.0 / n) - 1.0
+    return max(-0.40, min(0.40, rate))
+
+
+def _mavg(hist_vals):
+    """Média aritmética de uma lista de valores (ignora None)."""
+    vals = [v for v in hist_vals if v is not None]
+    return sum(vals) / len(vals) if vals else 0.0
 
 
 def _month_end(ym):
@@ -222,23 +230,37 @@ def api_crescimento_dados():
                 'neg_avg':     round(t_neg   / pm, 1),
             }
 
-        # ── Projeção linear (últimos 12 meses) ───────────────────────────────
-        hist12 = historico[-12:] if len(historico) >= 12 else historico
-        xs     = list(range(len(hist12)))
-        regs   = {
-            f: _linreg(xs, [h[f] for h in hist12])
-            for f in ('mrr', 'clientes', 'novos', 'churn')
-        }
+        # ── Projeção: CAGR 6m (MRR/clientes) + média móvel 3m (novos/churn/neg) ──
+        # Usa apenas meses completos (exclui o mês atual se ainda extrapolado)
+        hist_complete = [h for h in historico if not h.get('extrapolado', False)]
+        hist6 = hist_complete[-6:] if len(hist_complete) >= 6 else hist_complete
+        hist3 = hist_complete[-3:] if len(hist_complete) >= 3 else hist_complete
+
+        # Ancora: último valor real de cada série
+        last_c = hist_complete[-1] if hist_complete else {}
+        anchor = {f: last_c.get(f, 0) for f in ('mrr', 'clientes', 'novos', 'churn', 'neg')}
+
+        # Taxas de crescimento mensal (CAGR) para métricas que compõem
+        rate_mrr = _cagr_monthly([h['mrr']      for h in hist6])
+        rate_cli = _cagr_monthly([h['clientes'] for h in hist6])
+
+        # Médias mensais para métricas de evento (mais voláteis)
+        avg_novos = _mavg([h['novos'] for h in hist3])
+        avg_churn = _mavg([h['churn'] for h in hist3])
+        avg_neg   = _mavg([h['neg']   for h in hist3])
 
         projecao = []
-        for i in range(6):
-            xi = len(hist12) + i
-            ym = _add_months(cur_ym, i + 1)
-            pt = {'periodo': ym, 'projetado': True}
-            for f, (a, b) in regs.items():
-                val = max(0, a * xi + b)
-                pt[f] = round(val, 2) if f == 'mrr' else round(val)
-            projecao.append(pt)
+        for i in range(1, 7):
+            ym = _add_months(cur_ym, i)
+            projecao.append({
+                'periodo':   ym,
+                'projetado': True,
+                'mrr':       round(max(0, anchor['mrr']      * (1 + rate_mrr) ** i), 2),
+                'clientes':  round(max(0, anchor['clientes'] * (1 + rate_cli) ** i)),
+                'novos':     round(max(0, avg_novos)),
+                'churn':     round(max(0, avg_churn)),
+                'neg':       round(max(0, avg_neg)),
+            })
 
         return jsonify({'historico': historico, 'projecao': projecao,
                         'periodo_stats': periodo_stats})

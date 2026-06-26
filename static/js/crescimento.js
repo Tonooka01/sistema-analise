@@ -439,7 +439,8 @@ function _renderCharts(d) {
         if (leg) {
             const parts = [];
             if (projVals.length) {
-                parts.push(`Projeção 6m: ${cfg.fmt(projVals[projVals.length - 1])}`);
+                const method = (cfg.key === 'mrr' || cfg.key === 'clientes') ? 'CAGR 6m' : 'média 3m';
+                parts.push(`Projeção 6m: ${cfg.fmt(projVals[projVals.length - 1])} (${method})`);
             }
             if (extrapInfo) {
                 parts.push(`* ${extrapInfo}`);
