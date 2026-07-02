@@ -179,32 +179,62 @@ function _auxShell() {
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
                 <div>
                     <div style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;
-                                letter-spacing:0.04em;margin-bottom:0.4rem;">DRE — último mês do período</div>
+                                letter-spacing:0.04em;margin-bottom:0.3rem;">DRE — último mês do período</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:0.4rem 0.8rem;font-size:0.7rem;color:#64748b;margin-bottom:0.5rem;">
+                        <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #10b981;border-radius:2px;display:inline-block;background:#f0fdf4;"></span>Receita / resultado positivo</span>
+                        <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #f97316;border-radius:2px;display:inline-block;background:#fff7ed;"></span>Despesas</span>
+                        <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #ef4444;border-radius:2px;display:inline-block;background:#fef2f2;"></span>Resultado negativo</span>
+                    </div>
                     <div class="aux-metric-grid" id="auxGridGestaoDRE"></div>
                 </div>
                 <div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
-                        <span style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.04em;">CAC — acumulado do período</span>
+                    <div style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.3rem;">CAC — acumulado do período</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:0.4rem 0.8rem;font-size:0.7rem;color:#64748b;margin-bottom:0.5rem;">
+                        <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #6366f1;border-radius:2px;display:inline-block;background:#eef2ff;"></span>Investimento em aquisição</span>
                     </div>
                     <div class="aux-metric-grid" id="auxGridGestaoCAC"></div>
                 </div>
                 <div>
                     <div style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;
-                                letter-spacing:0.04em;margin-bottom:0.4rem;">DFC (Demonstração do Fluxo de Caixa) — médias mensais</div>
+                                letter-spacing:0.04em;margin-bottom:0.3rem;">DFC (Demonstração do Fluxo de Caixa) — médias mensais</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:0.4rem 0.8rem;font-size:0.7rem;color:#64748b;margin-bottom:0.5rem;">
+                        <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #10b981;border-radius:2px;display:inline-block;background:#f0fdf4;"></span>Entradas / saldo positivo</span>
+                        <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #f97316;border-radius:2px;display:inline-block;background:#fff7ed;"></span>Saídas</span>
+                        <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #ef4444;border-radius:2px;display:inline-block;background:#fef2f2;"></span>Saldo negativo</span>
+                    </div>
                     <div class="aux-metric-grid" id="auxGridGestaoDFC"></div>
                 </div>
+            </div>
+            <!-- DRE Período -->
+            <div style="margin-top:0.75rem;">
+                <div style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;
+                            letter-spacing:0.04em;margin-bottom:0.3rem;">DRE — acumulado do período</div>
+                <div style="display:flex;flex-wrap:wrap;gap:0.4rem 0.8rem;font-size:0.7rem;color:#64748b;margin-bottom:0.5rem;">
+                    <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #10b981;border-radius:2px;display:inline-block;background:#f0fdf4;"></span>Receita / resultado positivo</span>
+                    <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #f97316;border-radius:2px;display:inline-block;background:#fff7ed;"></span>Despesas</span>
+                    <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #ef4444;border-radius:2px;display:inline-block;background:#fef2f2;"></span>Resultado negativo</span>
+                </div>
+                <div class="aux-metric-grid" id="auxGridGestaoDRE_periodo"></div>
             </div>
         </div>
 
         <!-- Receita & Base -->
         <div class="aux-section">
             <h3 class="aux-section-title">📈 Receita & Base de Clientes</h3>
+            <div style="display:flex;flex-wrap:wrap;gap:0.4rem 0.8rem;font-size:0.7rem;color:#64748b;margin-bottom:0.6rem;">
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #10b981;border-radius:2px;display:inline-block;background:#f0fdf4;"></span>Receita, ARPU e base de clientes</span>
+            </div>
             <div class="aux-metric-grid" id="auxGridReceita"></div>
         </div>
 
         <!-- Churn -->
         <div class="aux-section">
             <h3 class="aux-section-title">📉 Churn (Cancelamentos)</h3>
+            <div style="display:flex;flex-wrap:wrap;gap:0.4rem 0.8rem;font-size:0.7rem;color:#64748b;margin-bottom:0.6rem;">
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #ef4444;border-radius:2px;display:inline-block;background:#fef2f2;"></span>Volume de cancelamentos / negativações</span>
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #f59e0b;border-radius:2px;display:inline-block;background:#fffbeb;"></span>Taxa percentual (alerta)</span>
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #10b981;border-radius:2px;display:inline-block;background:#f0fdf4;"></span>Taxa saudável</span>
+            </div>
             <div class="aux-metric-grid" id="auxGridChurn"></div>
         </div>
 
@@ -250,6 +280,12 @@ function _auxShell() {
         <!-- CAC / LTV -->
         <div class="aux-section">
             <h3 class="aux-section-title">💰 Aquisição: CAC · LTV · Payback</h3>
+            <div style="display:flex;flex-wrap:wrap;gap:0.4rem 0.8rem;font-size:0.7rem;color:#64748b;margin-bottom:0.3rem;">
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #6366f1;border-radius:2px;display:inline-block;background:#eef2ff;"></span>CAC, LTV e Payback (neutro)</span>
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #10b981;border-radius:2px;display:inline-block;background:#f0fdf4;"></span>LTV/CAC ≥ 3x (saudável)</span>
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #f59e0b;border-radius:2px;display:inline-block;background:#fffbeb;"></span>LTV/CAC 1–3x (atenção)</span>
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #ef4444;border-radius:2px;display:inline-block;background:#fef2f2;"></span>LTV/CAC &lt; 1x (crítico)</span>
+            </div>
             <div id="auxCacNote" style="font-size:0.77rem;color:#94a3b8;margin-bottom:0.6rem;"></div>
             <div class="aux-metric-grid" id="auxGridCac"></div>
         </div>
@@ -257,18 +293,33 @@ function _auxShell() {
         <!-- Inadimplência / PMR -->
         <div class="aux-section">
             <h3 class="aux-section-title">🧾 Inadimplência & PMR</h3>
+            <div style="display:flex;flex-wrap:wrap;gap:0.4rem 0.8rem;font-size:0.7rem;color:#64748b;margin-bottom:0.6rem;">
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #ef4444;border-radius:2px;display:inline-block;background:#fef2f2;"></span>Inadimplência alta</span>
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #f59e0b;border-radius:2px;display:inline-block;background:#fffbeb;"></span>PMR / dias de atraso</span>
+            </div>
             <div class="aux-metric-grid" id="auxGridPmr"></div>
         </div>
 
         <!-- Operações de campo -->
         <div class="aux-section">
             <h3 class="aux-section-title">🔧 Operações de Campo</h3>
+            <div style="display:flex;flex-wrap:wrap;gap:0.4rem 0.8rem;font-size:0.7rem;color:#64748b;margin-bottom:0.6rem;">
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #0f2d5e;border-radius:2px;display:inline-block;background:#f0f4ff;"></span>Métrica operacional (neutro)</span>
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #10b981;border-radius:2px;display:inline-block;background:#f0fdf4;"></span>Bom desempenho</span>
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #f59e0b;border-radius:2px;display:inline-block;background:#fffbeb;"></span>Atenção</span>
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #ef4444;border-radius:2px;display:inline-block;background:#fef2f2;"></span>Crítico</span>
+            </div>
             <div class="aux-metric-grid" id="auxGridOps"></div>
         </div>
 
         <!-- Custos & Penetração -->
         <div class="aux-section">
             <h3 class="aux-section-title">🏢 Custos & Penetração</h3>
+            <div style="display:flex;flex-wrap:wrap;gap:0.4rem 0.8rem;font-size:0.7rem;color:#64748b;margin-bottom:0.6rem;">
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #6366f1;border-radius:2px;display:inline-block;background:#eef2ff;"></span>Custo / penetração (neutro)</span>
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #10b981;border-radius:2px;display:inline-block;background:#f0fdf4;"></span>Penetração &lt; 30% (mercado aberto)</span>
+                <span style="display:flex;align-items:center;gap:0.3rem;"><span style="width:10px;height:14px;border-left:3px solid #f59e0b;border-radius:2px;display:inline-block;background:#fffbeb;"></span>Penetração ≥ 30% (saturação)</span>
+            </div>
             <div class="aux-metric-grid" id="auxGridCustos"></div>
         </div>
 
@@ -420,6 +471,31 @@ function _renderKpis(d) {
               sub: 'Caixa real até o último mês do período',
               desc: 'Saldo de caixa acumulado até o último mês do período selecionado. Fonte: GC_DFC_Mensal.SaldoAcumulado (último registro do período). NÃO é uma média — é o valor real do caixa acumulado desde o início das operações até o final do período filtrado. Representa o total de recursos disponíveis em caixa.',
               color: (k.gc_saldo_acum || 0) >= 0 ? '#10b981' : '#ef4444' },
+        ]);
+
+        // DRE acumulado do período
+        const pRecebido  = k.period_db_recebido  || 0;
+        const pDesp      = k.period_gc_desp_total || 0;
+        const pResultado = k.period_resultado     || 0;
+        const pMargem    = k.period_margem        || 0;
+        const pResSinal  = pResultado >= 0 ? '#10b981' : '#ef4444';
+        _fillGrid('auxGridGestaoDRE_periodo', [
+            { label:'Receita Bruta' + _bd, value: fmt(k.period_db_receita_bruta || 0),
+              sub: `Recebido: ${fmt(pRecebido)} · A receber: ${fmt(k.period_db_a_receber || 0)}`,
+              desc: 'Soma de toda a receita gerada no período selecionado. Fonte: Contas a Receber (BD). Recebido = soma de todos os pagamentos confirmados (Status="Recebido") em todos os meses do período. A Receber = soma de todas as faturas pendentes (Status="A receber") com vencimento no período. Diferente do MRR (que é só o último mês), este valor reflete o total acumulado.',
+              color:'#10b981' },
+            { label:'Total Despesas' + _xls, value: fmt(pDesp),
+              sub: `CMV + DespOp + Encargos + DespFin + Outros`,
+              desc: 'Soma de todas as despesas em todos os meses do período. Fonte: GC_DRE_Completo (Excel). Acumula as colunas TotalDespesas de cada mês registrado na planilha Gestão Completa dentro do intervalo filtrado. Inclui todas as categorias: CMV, DespOp, Encargos, DespFin e Outros.',
+              color:'#f97316' },
+            { label:'Resultado' + _bd + _xls, value: fmt(pResultado),
+              sub: 'Recebido (BD) − Despesas (Excel)',
+              desc: 'Lucro ou prejuízo acumulado no período. Fórmula: total_recebido_BD − total_despesas_Excel. Usa fontes distintas: receitas do banco operacional (Contas a Receber) e despesas da planilha de gestão (GC_DRE_Completo). Positivo = lucro acumulado no período; negativo = prejuízo.',
+              color: pResSinal },
+            { label:'Margem' + _bd + _xls, value: fPct(pMargem),
+              sub: 'Resultado / Recebido (acumulado)',
+              desc: 'Margem de lucro sobre o total efetivamente recebido no período. Fórmula: Resultado_acumulado ÷ Recebido_acumulado × 100. Calculado sobre o que foi recebido (não sobre a Receita Bruta), para refletir a margem real do caixa no período inteiro — não apenas o último mês.',
+              color: pResSinal },
         ]);
     } else if (secGestao) {
         secGestao.style.display = 'none';

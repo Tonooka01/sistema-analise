@@ -525,6 +525,11 @@ def api_dre_auxiliar():
         mrr_current      = db_receita_bruta
         arpu             = mrr_current / active_q if active_q > 0 else 0
 
+        # Totais do período inteiro (BD)
+        period_db_recebido      = sum(mrr_by_p.values())
+        period_db_a_receber     = sum(ar_by_p.values())
+        period_db_receita_bruta = period_db_recebido + period_db_a_receber
+
         avg_monthly_churn    = total_churn / period_months
         churn_rate_pct       = (avg_monthly_churn / active_q * 100) if active_q > 0 else 0
         cancel_rate_pct      = (total_churn / active_q * 100) if active_q > 0 else 0
@@ -729,6 +734,7 @@ def api_dre_auxiliar():
                        (SELECT COUNT(*) FROM Clientes CL WHERE CL.Cidade = CO.Cidade) AS cadastrados
                 FROM Contratos CO
                 WHERE CO.Status_contrato = 'Ativo' AND CO.Cidade IS NOT NULL AND CO.Cidade != ''
+                  AND CO.Cidade NOT GLOB '[0-9]*'
                 GROUP BY CO.Cidade
                 HAVING cadastrados > 0
                 ORDER BY ativos DESC
@@ -776,7 +782,9 @@ def api_dre_auxiliar():
                 ORDER BY AnoMes DESC LIMIT 1
             """, gc_params).fetchone()
             dre_agg = conn.execute(f"""
-                SELECT SUM(ReceitaBruta) AS rb_total, SUM(Resultado) AS res_total, COUNT(*) AS n
+                SELECT SUM(ReceitaBruta) AS rb_total, SUM(Recebido) AS rec_total,
+                       SUM(AReceber) AS ar_total, SUM(TotalDespesas) AS desp_total,
+                       SUM(Resultado) AS res_total, COUNT(*) AS n
                 FROM GC_DRE_Completo WHERE 1=1{wg}
             """, gc_params).fetchone()
 
@@ -791,9 +799,12 @@ def api_dre_auxiliar():
                 })
             if dre_agg and (dre_agg['n'] or 0) > 0:
                 gestao.update({
-                    'gc_rb_total':  float(dre_agg['rb_total']  or 0),
-                    'gc_res_total': float(dre_agg['res_total'] or 0),
-                    'gc_n_meses':   int(dre_agg['n']),
+                    'gc_rb_total':   float(dre_agg['rb_total']   or 0),
+                    'gc_rec_total':  float(dre_agg['rec_total']  or 0),
+                    'gc_ar_total':   float(dre_agg['ar_total']   or 0),
+                    'gc_desp_total': float(dre_agg['desp_total'] or 0),
+                    'gc_res_total':  float(dre_agg['res_total']  or 0),
+                    'gc_n_meses':    int(dre_agg['n']),
                 })
 
             # Instalações: OS de ativação finalizadas no período (banco de dados)
@@ -867,6 +878,11 @@ def api_dre_auxiliar():
             opex_per_client = total_opex / (active_q * period_months) if (active_q * period_months) > 0 else 0.0
             custo_por_mbps  = round(total_opex / total_mbps, 4) if total_mbps > 0 else 0.0
 
+        # Resultado e margem acumulados do período (BD recebido × Excel despesas)
+        period_gc_desp_total    = gestao.get('gc_desp_total', 0)
+        period_resultado        = period_db_recebido - period_gc_desp_total
+        period_margem           = (period_resultado / period_db_recebido * 100) if period_db_recebido > 0 else 0.0
+
         # ------------------------------------------------------------------
         # 16. Dados de tendência para gráfico
         # ------------------------------------------------------------------
@@ -900,9 +916,15 @@ def api_dre_auxiliar():
                 'combined_total':     int(total_combined),
                 'combined_rate':      round(combined_rate_pct, 2),
                 'ltv_churn_rate':     round(_ltv_rate_pct, 2),
-                'db_receita_bruta':   round(db_receita_bruta, 2),
-                'db_recebido':        round(db_recebido, 2),
-                'db_a_receber':       round(db_a_receber, 2),
+                'db_receita_bruta':         round(db_receita_bruta, 2),
+                'db_recebido':              round(db_recebido, 2),
+                'db_a_receber':             round(db_a_receber, 2),
+                'period_db_recebido':       round(period_db_recebido, 2),
+                'period_db_a_receber':      round(period_db_a_receber, 2),
+                'period_db_receita_bruta':  round(period_db_receita_bruta, 2),
+                'period_gc_desp_total':     round(period_gc_desp_total, 2),
+                'period_resultado':         round(period_resultado, 2),
+                'period_margem':            round(period_margem, 2),
                 'new_clients':        int(total_new),
                 'cac':                round(cac, 2),
                 'cac_cost':           round(cac_cost, 2),

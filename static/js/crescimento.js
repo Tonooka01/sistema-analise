@@ -8,6 +8,9 @@ import * as state from './state.js';
 const API = state.API_BASE_URL;
 
 let _charts        = {};   // { mrr, clientes, churn }
+let _analiseCharts = {};   // charts da aba Análises
+let _activeTab     = 0;    // 0 = Crescimento Analítico, 1 = Análises
+let _analiseLoaded = false;
 let _map           = null;
 let _mapReady      = false;
 let _activeLayer   = 'cancelamento';
@@ -23,7 +26,11 @@ let _activeLayers  = [];          // IDs de layers do heatmap ativo
 export function renderCrescimento(container) {
     // Destrói gráficos anteriores se existirem
     Object.values(_charts).forEach(c => c?.destroy());
+    Object.values(_analiseCharts).forEach(c => c?.destroy());
     _charts        = {};
+    _analiseCharts = {};
+    _activeTab     = 0;
+    _analiseLoaded = false;
     _map           = null;
     _mapReady      = false;
     _vizMode       = 'heatmap';
@@ -71,15 +78,39 @@ function _shell() {
         </div>
     </div>
 
+    <!-- Tab bar -->
+    <div style="display:flex;gap:0;border-bottom:2px solid #e5e7eb;margin-bottom:1.25rem;">
+        <button id="cgTabBtn0"
+                style="padding:.5rem 1.25rem;font-size:.85rem;font-weight:700;cursor:pointer;border:none;
+                       background:transparent;color:#1d4ed8;border-bottom:3px solid #1d4ed8;
+                       margin-bottom:-2px;transition:.15s all;">
+            📈 Crescimento Analítico
+        </button>
+        <button id="cgTabBtn1"
+                style="padding:.5rem 1.25rem;font-size:.85rem;font-weight:700;cursor:pointer;border:none;
+                       background:transparent;color:#6b7280;border-bottom:3px solid transparent;
+                       margin-bottom:-2px;transition:.15s all;">
+            🔍 Análises
+        </button>
+    </div>
+
+    <!-- Tab 0: conteúdo existente -->
+    <div id="cgTab0">
+
     <!-- KPI cards -->
     <div id="cgKpis" style="display:grid;grid-template-columns:repeat(5,1fr);gap:.75rem;margin-bottom:1.25rem;"></div>
 
     <!-- Gráficos de crescimento -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem;">
-        ${['MRR Mensal (R$)', 'Clientes Ativos', 'Cancelamentos/Mês'].map((title, i) => `
+        ${[
+            {title:'MRR Mensal (R$)',     desc:'Evolução da receita recorrente mensal ao longo do tempo. Fonte: Contas_a_Receber (Status="Recebido"), agrupado por mês de pagamento. Permite identificar sazonalidade, aceleração ou desaceleração da receita. A linha de projeção (pontilhada) usa CAGR dos últimos 6 meses para estimar os próximos 6.'},
+            {title:'Clientes Ativos',     desc:'Quantidade de contratos únicos com pagamento confirmado a cada mês (ID_contrato_principal distintos em Contas_a_Receber, Status="Recebido"). Crescimento aqui reflete expansão da base; queda pode indicar aumento de churn mesmo com MRR estável (upsell compensando saídas).'},
+            {title:'Cancelamentos/Mês',   desc:'Comparativo mensal entre cancelamentos (Contratos com Data_cancelamento) e negativações (Contratos_Negativacao). A diferença entre as curvas indica o perfil de saída: cancelamento voluntário vs. inadimplência. O valor exibido no card é a média desses últimos meses.'},
+        ].map(({title, desc}, i) => `
         <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;">
-            <p style="font-size:.7rem;font-weight:700;color:#6b7280;margin:0 0 .5rem;
+            <p style="font-size:.7rem;font-weight:700;color:#6b7280;margin:0 0 .2rem;
                       text-transform:uppercase;letter-spacing:.06em;">${title}</p>
+            <p style="font-size:.67rem;color:#94a3b8;margin:0 0 .4rem;line-height:1.4;">${desc}</p>
             <div id="cgLegend${i}" style="font-size:.7rem;color:#9ca3af;margin-bottom:.25rem;min-height:1rem;"></div>
             <div style="position:relative;height:200px;">
                 <canvas id="cgChart${i}"></canvas>
@@ -185,6 +216,15 @@ function _shell() {
         <div id="hmapDiv" style="width:100%;height:100%;"></div>
     </div>
 
+    </div><!-- /cgTab0 -->
+
+    <!-- Tab 1: análises avançadas -->
+    <div id="cgTab1" style="display:none;">
+        <div id="cgAnalises" style="padding:.25rem 0;">
+            <p style="color:#94a3b8;font-size:.85rem;">Carregando análises…</p>
+        </div>
+    </div>
+
 </div>`;
 }
 
@@ -196,7 +236,11 @@ function _bindEvents() {
         _filters.end_date   = document.getElementById('cgEnd')?.value   || '';
         _loadGrowth();
         _loadHeatmap(_activeLayer);
+        if (_activeTab === 1) _loadAnalises();
     });
+
+    document.getElementById('cgTabBtn0')?.addEventListener('click', () => _switchTab(0));
+    document.getElementById('cgTabBtn1')?.addEventListener('click', () => _switchTab(1));
 
     document.querySelectorAll('.hmap-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -491,6 +535,7 @@ function _renderKpis(d) {
             delta: mrr_delta,
             icon:  '💰',
             color: null,
+            desc:  'Monthly Recurring Revenue — receita recorrente mensal. Fonte: tabela Contas_a_Receber (BD), soma de Valor_recebido onde Status="Recebido" no último mês do histórico. Base para calcular ARPU, LTV e taxa de crescimento. A seta mostra a variação projetada para 6 meses usando CAGR dos últimos 6 meses completos.',
         },
         {
             label: 'Clientes Ativos',
@@ -499,6 +544,7 @@ function _renderKpis(d) {
             delta: cli_delta,
             icon:  '👥',
             color: null,
+            desc:  'Contagem de contratos únicos (ID_contrato_principal) com ao menos um pagamento confirmado no último mês do histórico (Contas_a_Receber, Status="Recebido"). Divergência entre crescimento de MRR e de clientes indica mudança no ticket médio (ARPU). Projeção via CAGR dos últimos 6 meses completos.',
         },
         {
             label: 'Crescimento Mensal',
@@ -507,6 +553,7 @@ function _renderKpis(d) {
             delta: null,
             icon:  '📊',
             color: null,
+            desc:  'CAGR (taxa de crescimento mensal composta) do MRR calculada sobre os últimos 12 meses de histórico. Fórmula: (MRR_final ÷ MRR_inicial)^(1÷n) − 1. Positivo = receita crescendo mês a mês; negativo = encolhimento. Diferente da variação simples mês a mês — o CAGR representa a taxa constante equivalente ao crescimento observado no período inteiro.',
         },
         {
             label: ps ? `Cancelamentos/mês (${ps.meses}m)` : 'Cancelamentos/Mês',
@@ -515,6 +562,7 @@ function _renderKpis(d) {
             delta: null,
             icon:  '🚨',
             color: '#ef4444',
+            desc:  'Média mensal de contratos que saíram por cancelamento definitivo. Fonte: tabela Contratos (BD), Status_contrato IN ("Cancelado", "Inativo", "Desistente") com Data_cancelamento no período. Sem filtro de data = média dos últimos 12 meses do histórico; com filtro = total do período ÷ número de meses.',
         },
         {
             label: ps ? `Negativações/mês (${ps.meses}m)` : 'Negativações/Mês',
@@ -523,6 +571,7 @@ function _renderKpis(d) {
             delta: null,
             icon:  '⛔',
             color: '#f97316',
+            desc:  'Média mensal de negativações: clientes que pararam de pagar e foram marcados como inadimplentes. Fontes: Contratos (Data_negativa_o onde Status_contrato="Negativado") + Contratos_Negativacao (Filial 4, Data_negativa_o). No sistema, negativado = saída permanente — se quiser retornar, abre um novo contrato. Sem filtro = média últimos 12 meses.',
         },
     ];
 
@@ -539,6 +588,7 @@ function _renderKpis(d) {
     <p style="font-size:.65rem;color:#6b7280;margin:0;text-transform:uppercase;letter-spacing:.06em;">${k.icon} ${k.label}</p>
     <p style="font-size:1.3rem;font-weight:700;${valColor};margin:0;">${k.value}${dHtml}</p>
     <p style="font-size:.7rem;color:#9ca3af;margin:0;">${k.sub}</p>
+    ${k.desc ? `<p style="font-size:.68rem;color:#94a3b8;margin:.15rem 0 0;line-height:1.45;border-top:1px solid #f1f5f9;padding-top:.3rem;">${k.desc}</p>` : ''}
 </div>`;
     }).join('');
 }
@@ -1016,4 +1066,317 @@ function _applyClustersLayer(SRC, geojson, category) {
     });
 
     _activeLayers.push(clLYR, lblLYR, ptLYR);
+}
+
+// ─── Sistema de abas ──────────────────────────────────────────────────────────
+
+function _switchTab(idx) {
+    _activeTab = idx;
+    [0, 1].forEach(i => {
+        const tab = document.getElementById(`cgTab${i}`);
+        const btn = document.getElementById(`cgTabBtn${i}`);
+        if (tab) tab.style.display = i === idx ? '' : 'none';
+        if (btn) {
+            btn.style.color       = i === idx ? '#1d4ed8' : '#6b7280';
+            btn.style.borderBottom = i === idx ? '3px solid #1d4ed8' : '3px solid transparent';
+        }
+    });
+    if (idx === 1 && !_analiseLoaded) _loadAnalises();
+}
+
+// ─── Análises avançadas ───────────────────────────────────────────────────────
+
+function _loadAnalises() {
+    const wrap = document.getElementById('cgAnalises');
+    if (!wrap) return;
+    wrap.innerHTML = '<p style="color:#94a3b8;font-size:.85rem;">Carregando análises…</p>';
+
+    const p = new URLSearchParams(_filters);
+    fetch(`${API}/api/crescimento/analises?${p}`)
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) throw new Error(d.error);
+            _analiseLoaded = true;
+            // Net Adds e ARPU vêm de /dados já carregado; busca novamente com os filtros atuais
+            fetch(`${API}/api/crescimento/dados?${p}`)
+                .then(r2 => r2.json())
+                .then(d2 => _renderAnalises(d, d2))
+                .catch(() => _renderAnalises(d, null));
+        })
+        .catch(e => {
+            if (wrap) wrap.innerHTML = `<p style="color:#ef4444;">Erro: ${e.message}</p>`;
+        });
+}
+
+function _renderAnalises(d, d2) {
+    const wrap = document.getElementById('cgAnalises');
+    if (!wrap) return;
+
+    // Destroy previous charts
+    Object.values(_analiseCharts).forEach(c => c?.destroy());
+    _analiseCharts = {};
+
+    wrap.innerHTML = `
+        <!-- Net Adds -->
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;margin-bottom:1rem;">
+            <p style="font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin:0 0 .25rem;">
+                📊 Net Adds — Crescimento Líquido Mensal
+            </p>
+            <p style="font-size:.68rem;color:#94a3b8;margin:0 0 .5rem;line-height:1.5;">
+                Variação líquida da base de clientes a cada mês: <strong style="color:#6b7280;">Novos</strong> (primeiros pagamentos do mês em Contas_a_Receber) menos <strong style="color:#6b7280;">Churns</strong> (Data_cancelamento no mês) menos <strong style="color:#6b7280;">Negativações</strong> (Data_negativa_o no mês). Barra acima de zero = base crescendo; abaixo = encolhendo. A linha mostra o Net Add acumulado (saldo final). Importante: identifica os meses onde saídas superam entradas, mesmo que o MRR ainda pareça crescer (churn pode ser mascarado por upsell).
+            </p>
+            <div style="position:relative;height:220px;"><canvas id="anNetAdds"></canvas></div>
+        </div>
+
+        <!-- ARPU trend -->
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;margin-bottom:1rem;">
+            <p style="font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin:0 0 .25rem;">
+                💵 Evolução do ARPU (Ticket Médio)
+            </p>
+            <p style="font-size:.68rem;color:#94a3b8;margin:0 0 .5rem;line-height:1.5;">
+                ARPU (Average Revenue Per User) = MRR do mês ÷ Clientes ativos naquele mês. Fontes: Contas_a_Receber (Valor_recebido, Status="Recebido") agrupado por mês. Se o ARPU está subindo com base estável = upsell funcionando ou mix migrando para planos maiores. Se cai com base crescendo = novos clientes entram em planos mais baratos, diluindo o ticket médio. Referência: ARPU acima de R$ 80 indica boa monetização para provedores regionais.
+            </p>
+            <div style="position:relative;height:180px;"><canvas id="anArpu"></canvas></div>
+        </div>
+
+        <!-- Mix de planos -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;">
+                <p style="font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin:0 0 .25rem;">
+                    📡 Mix de Planos — Base Atual
+                </p>
+                <p style="font-size:.68rem;color:#94a3b8;margin:0 0 .5rem;line-height:1.5;">
+                    Distribuição percentual dos contratos <em>atualmente ativos</em> por velocidade contratada. Fonte: Contratos (Descri_o) filtrado por Status_contrato="Ativo" — sem filtro de datas, representa o estado atual da base. O nome do plano é extraído via regex do campo Descri_o: padrão "Xg" (fibra) ou "XMb" (rádio). Planos não identificados aparecem como "Outros". Concentração excessiva em planos baratos indica pressão sobre margens; diversificação para planos de 1G+ melhora ARPU.
+                </p>
+                <div style="position:relative;height:220px;"><canvas id="anPlanosAtual"></canvas></div>
+            </div>
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;">
+                <p style="font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin:0 0 .25rem;">
+                    📡 Mix de Planos — Ativações por Mês
+                </p>
+                <p style="font-size:.68rem;color:#94a3b8;margin:0 0 .5rem;line-height:1.5;">
+                    Ativações mensais discriminadas por plano contratado no período selecionado. Fonte: Contratos (Data_ativacao + Descri_o). Mostra qual mix de planos está sendo vendido ao longo do tempo — diferente do gráfico de base atual, que é um retrato estático. Permite identificar se a migração para planos maiores está ocorrendo nas novas vendas ou se o modelo de entrada continua em planos inferiores.
+                </p>
+                <div style="position:relative;height:220px;"><canvas id="anPlanosTrend"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Coorte -->
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;margin-bottom:1rem;">
+            <p style="font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin:0 0 .25rem;">
+                🔄 Coorte de Ativações — Retenção Atual
+            </p>
+            <p style="font-size:.68rem;color:#94a3b8;margin:0 0 .5rem;line-height:1.5;">
+                Análise de coorte: para cada mês dos últimos 18 meses, calcula quantos dos clientes ativados naquele mês ainda permanecem ativos hoje (Status_contrato="Ativo" ou pagamento recente em Contas_a_Receber). Fonte: Contratos (Data_ativacao, Status_contrato). <strong style="color:#10b981;">Verde ≥ 70%</strong> = boa retenção; <strong style="color:#f59e0b;">Amarelo 50–70%</strong> = atenção, pode indicar problemas de qualidade ou onboarding; <strong style="color:#ef4444;">Vermelho &lt; 50%</strong> = alto churn, metade ou mais dos clientes desse mês já saiu. Coortes mais recentes tendem a ter % maior por ainda estarem em contrato — compare coortes com mesma "idade" para ver tendências reais de retenção ao longo do tempo.
+            </p>
+            <div id="anCohortTable" style="overflow-x:auto;"></div>
+        </div>
+
+        <!-- Crescimento por cidade -->
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;margin-bottom:1rem;">
+            <p style="font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin:0 0 .25rem;">
+                🏙 Ativações por Cidade — Evolução Mensal
+            </p>
+            <p style="font-size:.68rem;color:#94a3b8;margin:0 0 .5rem;line-height:1.5;">
+                Novas ativações mensais segmentadas por cidade de instalação. Fonte: Contratos (Cidade + Data_ativacao), filtrado pelo período selecionado. Entradas numéricas na coluna Cidade (problemas de cadastro) são excluídas automaticamente. Cada linha representa uma cidade; picos isolados indicam expansão pontual ou campanha comercial localizada. Cidades com volume crescente sinalizam mercados em consolidação; cidades com queda podem indicar saturação de cobertura ou perda para concorrência.
+            </p>
+            <div style="position:relative;height:240px;"><canvas id="anCidades"></canvas></div>
+        </div>
+    `;
+
+    _renderNetAdds(d2);
+    _renderArpu(d2);
+    _renderPlanosAtual(d.planos_atual || []);
+    _renderPlanosTrend(d.planos_trend || []);
+    _renderCohort(d.cohort || []);
+    _renderCidades(d.cidades || [], d.city_trend || []);
+}
+
+// ── Net Adds ──────────────────────────────────────────────────────────────────
+
+function _renderNetAdds(d2) {
+    const canvas = document.getElementById('anNetAdds');
+    if (!canvas || !d2) return;
+    const hist = (d2.historico || []).filter(h => !h.extrapolado);
+    const labels    = hist.map(h => h.periodo);
+    const netVals   = hist.map(h => (h.novos || 0) - (h.churn || 0) - (h.neg || 0));
+    const colors    = netVals.map(v => v >= 0 ? '#10b981cc' : '#ef4444cc');
+    const borderC   = netVals.map(v => v >= 0 ? '#10b981'   : '#ef4444');
+    _analiseCharts.netAdds = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Novos',  data: hist.map(h => h.novos  || 0), backgroundColor: '#3b82f655', stack: 'a' },
+                { label: 'Churn',  data: hist.map(h => -(h.churn || 0)), backgroundColor: '#ef444455', stack: 'b' },
+                { label: 'Neg',    data: hist.map(h => -(h.neg   || 0)), backgroundColor: '#f9731655', stack: 'b' },
+                { type: 'line', label: 'Net', data: netVals,
+                  borderColor: borderC, backgroundColor: 'transparent',
+                  borderWidth: 2, pointRadius: 3, tension: 0.3,
+                  segment: { borderColor: ctx => netVals[ctx.p1DataIndex] >= 0 ? '#10b981' : '#ef4444' } },
+            ],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { font: { size: 10 } } } },
+            scales: {
+                x: { ticks: { font: { size: 8 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
+                y: { ticks: { font: { size: 9 } } },
+            },
+        },
+    });
+}
+
+// ── ARPU ──────────────────────────────────────────────────────────────────────
+
+function _renderArpu(d2) {
+    const canvas = document.getElementById('anArpu');
+    if (!canvas || !d2) return;
+    const hist = (d2.historico || []).filter(h => !h.extrapolado);
+    const labels = hist.map(h => h.periodo);
+    const arpu   = hist.map(h => h.clientes > 0 ? +(h.mrr / h.clientes).toFixed(2) : null);
+    _analiseCharts.arpu = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'ARPU (R$)', data: arpu,
+                borderColor: '#8b5cf6', backgroundColor: '#8b5cf622',
+                borderWidth: 2, fill: true, tension: 0.3, pointRadius: 3,
+            }],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false },
+                tooltip: { callbacks: { label: ctx => `ARPU: R$ ${ctx.parsed.y?.toFixed(2)}` } } },
+            scales: {
+                x: { ticks: { font: { size: 8 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
+                y: { beginAtZero: false, ticks: { font: { size: 9 }, callback: v => `R$${v}` } },
+            },
+        },
+    });
+}
+
+// ── Mix de planos (donut atual) ───────────────────────────────────────────────
+
+const _PLAN_COLORS = [
+    '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
+    '#06b6d4','#f97316','#84cc16','#e11d48','#6366f1',
+];
+
+function _renderPlanosAtual(planos) {
+    const canvas = document.getElementById('anPlanosAtual');
+    if (!canvas || !planos.length) return;
+    const labels = planos.map(p => `${p.plano} (${p.pct}%)`);
+    const data   = planos.map(p => p.count);
+    _analiseCharts.planosAtual = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{ data, backgroundColor: _PLAN_COLORS, borderWidth: 1 }],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 12 } },
+                tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.parsed.toLocaleString('pt-BR')} contratos` } },
+            },
+        },
+    });
+}
+
+// ── Mix de planos (trend stacked bar) ────────────────────────────────────────
+
+function _renderPlanosTrend(trend) {
+    const canvas = document.getElementById('anPlanosTrend');
+    if (!canvas || !trend.length) return;
+    const labels = trend.map(t => t.periodo);
+    const allPlanos = [...new Set(trend.flatMap(t => Object.keys(t).filter(k => k !== 'periodo')))];
+    allPlanos.sort();
+    const datasets = allPlanos.map((pl, i) => ({
+        label: pl,
+        data: trend.map(t => t[pl] || 0),
+        backgroundColor: _PLAN_COLORS[i % _PLAN_COLORS.length],
+        stack: 'planos',
+    }));
+    _analiseCharts.planosTrend = new Chart(canvas, {
+        type: 'bar',
+        data: { labels, datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { font: { size: 9 }, boxWidth: 10 } } },
+            scales: {
+                x: { stacked: true, ticks: { font: { size: 8 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
+                y: { stacked: true, ticks: { font: { size: 9 } } },
+            },
+        },
+    });
+}
+
+// ── Coorte ────────────────────────────────────────────────────────────────────
+
+function _renderCohort(cohort) {
+    const el = document.getElementById('anCohortTable');
+    if (!el || !cohort.length) {
+        if (el) el.innerHTML = '<p style="color:#9ca3af;font-size:.8rem;">Sem dados de coorte.</p>';
+        return;
+    }
+    const thS = 'padding:.35rem .6rem;text-align:left;font-size:.72rem;white-space:nowrap;' +
+                'background:#0f2d5e;color:#fff;position:sticky;top:0;';
+    const rows = cohort.map((c, i) => {
+        const ret = c.retencao;
+        const bg  = ret >= 70 ? '#f0fdf4' : ret >= 50 ? '#fffbeb' : '#fef2f2';
+        const fc  = ret >= 70 ? '#16a34a' : ret >= 50 ? '#d97706' : '#dc2626';
+        const bar = Math.round(ret);
+        return `<tr style="background:${i%2===0?'#fff':bg};">
+            <td style="padding:.35rem .6rem;font-size:.75rem;">${c.mes}</td>
+            <td style="padding:.35rem .6rem;font-size:.75rem;text-align:right;">${c.total.toLocaleString('pt-BR')}</td>
+            <td style="padding:.35rem .6rem;font-size:.75rem;text-align:right;">${c.ativos.toLocaleString('pt-BR')}</td>
+            <td style="padding:.35rem .6rem;font-size:.75rem;">
+                <div style="display:flex;align-items:center;gap:.4rem;">
+                    <div style="flex:1;background:#e5e7eb;border-radius:4px;height:8px;min-width:80px;">
+                        <div style="width:${bar}%;background:${fc};border-radius:4px;height:8px;"></div>
+                    </div>
+                    <span style="font-weight:700;color:${fc};min-width:3rem;">${ret.toFixed(1)}%</span>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+            <th style="${thS}">Mês Ativação</th>
+            <th style="${thS}text-align:right;">Ativados</th>
+            <th style="${thS}text-align:right;">Ainda Ativos</th>
+            <th style="${thS}">Retenção Atual</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ── Cidades ───────────────────────────────────────────────────────────────────
+
+function _renderCidades(cidades, trend) {
+    const canvas = document.getElementById('anCidades');
+    if (!canvas || !trend.length) return;
+    const labels = trend.map(t => t.periodo);
+    const CITY_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4'];
+    const datasets = cidades.map((cidade, i) => ({
+        label: cidade,
+        data: trend.map(t => t[cidade] || 0),
+        borderColor: CITY_COLORS[i % CITY_COLORS.length],
+        backgroundColor: CITY_COLORS[i % CITY_COLORS.length] + '22',
+        borderWidth: 2, fill: false, tension: 0.3, pointRadius: 3,
+    }));
+    _analiseCharts.cidades = new Chart(canvas, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { font: { size: 10 }, boxWidth: 12 } } },
+            scales: {
+                x: { ticks: { font: { size: 8 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
+                y: { beginAtZero: true, ticks: { font: { size: 9 } } },
+            },
+        },
+    });
 }

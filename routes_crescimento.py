@@ -669,3 +669,116 @@ def api_crescimento_kmz():
     except sqlite3.Error as e:
         logger.error("crescimento/kmz: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+# ── Análises Avançadas ─────────────────────────────────────────────────────────
+
+import re as _re
+
+def _extract_plano(desc):
+    """Extrai velocidade do plano a partir da descrição (ex: 'INTERNET 400M ...' → '400M')."""
+    if not desc:
+        return 'Outros'
+    m = _re.search(r'(\d+)\s*[Gg][Bb]?', desc)
+    if m:
+        return f"{m.group(1)}G"
+    m = _re.search(r'(\d+)\s*[Mm][Bb]?', desc)
+    if m:
+        mb = int(m.group(1))
+        return f"{mb}M"
+    return 'Outros'
+
+
+@crescimento_bp.route('/analises')
+@login_required
+def api_crescimento_analises():
+    conn = get_db()
+    try:
+        start_date = request.args.get('start_date', '')
+        end_date   = request.args.get('end_date',   '')
+
+        # ── 1. Mix de planos (ativos agora) ───────────────────────────────────
+        plano_rows = conn.execute("""
+            SELECT Descri_o, COUNT(*) AS cnt FROM Contratos
+            WHERE Status_contrato = 'Ativo'
+              AND Descri_o IS NOT NULL AND Descri_o != ''
+            GROUP BY Descri_o ORDER BY cnt DESC
+        """).fetchall()
+        plano_map = {}
+        for r in plano_rows:
+            pl = _extract_plano(r['Descri_o'])
+            plano_map[pl] = plano_map.get(pl, 0) + r['cnt']
+        total_pl = sum(plano_map.values()) or 1
+        planos_atual = [
+            {'plano': p, 'count': c, 'pct': round(c / total_pl * 100, 1)}
+            for p, c in sorted(plano_map.items(), key=lambda x: -x[1])
+        ]
+
+        # ── 2. Mix de planos (ativações por mês no período) ───────────────────
+        pt_c = ["Data_ativa_o IS NOT NULL", "Data_ativa_o != ''",
+                "Descri_o IS NOT NULL", "Descri_o != ''"]
+        pt_p = []
+        if start_date: pt_c.append("Data_ativa_o >= ?"); pt_p.append(start_date)
+        if end_date:   pt_c.append("Data_ativa_o <= ?"); pt_p.append(end_date)
+        pt_rows = conn.execute(
+            f"SELECT STRFTIME('%Y-%m', Data_ativa_o) AS per, Descri_o, COUNT(*) AS cnt "
+            f"FROM Contratos WHERE {' AND '.join(pt_c)} GROUP BY per, Descri_o ORDER BY per",
+            pt_p
+        ).fetchall()
+        pt_dict = {}
+        for r in pt_rows:
+            if not r['per']: continue
+            pl = _extract_plano(r['Descri_o'])
+            pt_dict.setdefault(r['per'], {})[pl] = pt_dict.get(r['per'], {}).get(pl, 0) + r['cnt']
+        planos_trend = [{'periodo': p, **data} for p, data in sorted(pt_dict.items())]
+
+        # ── 3. Coorte de ativações (últimos 18 meses) ─────────────────────────
+        cohort_rows = conn.execute("""
+            SELECT STRFTIME('%Y-%m', Data_ativa_o) AS mes,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN Status_contrato = 'Ativo' THEN 1 ELSE 0 END) AS ativos
+            FROM Contratos
+            WHERE Data_ativa_o IS NOT NULL AND Data_ativa_o != ''
+              AND Data_ativa_o >= DATE('now', '-18 months')
+            GROUP BY mes ORDER BY mes
+        """).fetchall()
+        cohort = [
+            {
+                'mes': r['mes'], 'total': r['total'], 'ativos': r['ativos'],
+                'retencao': round(r['ativos'] / r['total'] * 100, 1) if r['total'] else 0,
+            }
+            for r in cohort_rows if r['mes']
+        ]
+
+        # ── 4. Crescimento por cidade (ativações mensais) ─────────────────────
+        cc_c = ["Data_ativa_o IS NOT NULL", "Data_ativa_o != ''",
+                "Cidade IS NOT NULL", "Cidade != ''",
+                "Cidade NOT GLOB '[0-9]*'"]
+        cc_p = []
+        if start_date: cc_c.append("Data_ativa_o >= ?"); cc_p.append(start_date)
+        if end_date:   cc_c.append("Data_ativa_o <= ?"); cc_p.append(end_date)
+        cc_rows = conn.execute(
+            f"SELECT STRFTIME('%Y-%m', Data_ativa_o) AS per, Cidade, COUNT(*) AS novos "
+            f"FROM Contratos WHERE {' AND '.join(cc_c)} GROUP BY per, Cidade ORDER BY per",
+            cc_p
+        ).fetchall()
+        cidades = sorted({r['Cidade'] for r in cc_rows if r['Cidade']})
+        city_dict = {}
+        for r in cc_rows:
+            if not r['per']: continue
+            city_dict.setdefault(r['per'], {})[r['Cidade']] = r['novos']
+        city_trend = [{'periodo': p, **data} for p, data in sorted(city_dict.items())]
+
+        return jsonify({
+            'planos_atual':  planos_atual,
+            'planos_trend':  planos_trend,
+            'cohort':        cohort,
+            'cidades':       cidades,
+            'city_trend':    city_trend,
+        })
+
+    except Exception as e:
+        logger.error("crescimento/analises: %s", e, exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
