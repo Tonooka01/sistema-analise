@@ -584,6 +584,25 @@ function _renderKpis(d) {
     };
     const _ibge_total = Object.values(_ibge).reduce((a, b) => a + b, 0); // 27.238
     const penetracao_mercado = _ibge_total > 0 ? (k.active_clients / _ibge_total * 100) : 0;
+
+    // Cards por cidade — cruza ativos do BD com DPP urbanos do IBGE
+    const cityRows = d.city_penetracao || [];
+    const cityByName = {};
+    cityRows.forEach(r => { cityByName[r.cidade] = r.ativos; });
+
+    const cityCards = Object.entries(_ibge).map(([cidade, dpp]) => {
+        const ativos = cityByName[cidade] || 0;
+        const pct    = dpp > 0 ? (ativos / dpp * 100) : 0;
+        const cor    = pct >= 30 ? '#f59e0b' : pct >= 15 ? '#6366f1' : '#10b981';
+        return {
+            label: `Penetração ${cidade}` + _bd,
+            value: fN(pct, 1) + '%',
+            sub: `${fI(ativos)} ativos / ${dpp.toLocaleString('pt-BR')} dom. urbanos`,
+            desc: `Taxa de penetração de mercado em ${cidade}. Fórmula: contratos_ativos ÷ ${dpp.toLocaleString('pt-BR')} domicílios particulares permanentes urbanos (IBGE Censo 2022) × 100. Abaixo de 15% = mercado ainda aberto; 15–30% = crescimento saudável; acima de 30% = saturação — expansão requer novos bairros ou zona rural.`,
+            color: cor,
+        };
+    });
+
     _fillGrid('auxGridCustos', [
         { label:'OPEX / Cliente / Mês' + opexBadge, value: fmt(k.opex_per_client),
           sub: k.gc_has_data
@@ -605,8 +624,9 @@ function _renderKpis(d) {
         { label:'Taxa de Penetração (mercado)' + _bd,
           value: fN(penetracao_mercado, 1) + '%',
           sub: `${fI(k.active_clients)} ativos / 27.238 dom. urbanos (IBGE 2022)`,
-          desc: 'Penetração no mercado endereçável real. Fórmula: contratos_ativos ÷ total_de_domicílios_particulares_permanentes_urbanos × 100. Base IBGE Censo 2022 (DPP urbanos): Dom Pedro 5.262 · Presidente Dutra 10.410 · São Domingos do Maranhão 5.936 · Tuntum 5.630 = 27.238 domicílios urbanos. ISPs regionais ficam tipicamente entre 5% e 30%. Acima de 30% indica saturação do mercado urbano — expansão depende de novos bairros ou área rural.',
+          desc: 'Penetração consolidada no mercado endereçável de todas as cidades atendidas. Fórmula: contratos_ativos ÷ total_DPP_urbanos × 100. Base IBGE Censo 2022 (DPP urbanos): Dom Pedro 5.262 · Presidente Dutra 10.410 · São Domingos do Maranhão 5.936 · Tuntum 5.630 = 27.238 domicílios urbanos. ISPs regionais ficam tipicamente entre 5% e 30%. Acima de 30% indica saturação — expansão depende de novos bairros ou área rural.',
           color: penetracao_mercado >= 30 ? '#f59e0b' : '#10b981' },
+        ...cityCards,
     ]);
 }
 
