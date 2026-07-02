@@ -190,7 +190,7 @@ function _auxShell() {
                 </div>
                 <div>
                     <div style="font-size:0.72rem;font-weight:600;color:#64748b;text-transform:uppercase;
-                                letter-spacing:0.04em;margin-bottom:0.4rem;">DFC — médias mensais</div>
+                                letter-spacing:0.04em;margin-bottom:0.4rem;">DFC (Demonstração do Fluxo de Caixa) — médias mensais</div>
                     <div class="aux-metric-grid" id="auxGridGestaoDFC"></div>
                 </div>
             </div>
@@ -346,6 +346,12 @@ function _renderKpis(d) {
     const fI  = v => (v || 0).toLocaleString('pt-BR');
     const fPct = v => fN(v, 1) + '%';
 
+    // Badges de fonte de dados (definidos antes para uso em todos os grids)
+    const _xls = ' <span style="font-size:0.6rem;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:4px;padding:0 4px;vertical-align:middle;font-weight:600;">Excel</span>';
+    const _bd  = ' <span style="font-size:0.6rem;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;padding:0 4px;vertical-align:middle;font-weight:600;">BD</span>';
+    const cacFromExcel = (k.gc_cac_unit || 0) > 0;
+    const excelBadge = k.gc_has_data ? _xls : '';
+
     // Gestão Financeira (Excel)
     const secGestao = document.getElementById('auxSectionGestao');
     if (k.gc_has_data && secGestao) {
@@ -357,17 +363,21 @@ function _renderKpis(d) {
         const resSinal    = resultado >= 0 ? '#10b981' : '#ef4444';
         const saldoSinal  = (k.gc_saldo_periodo || 0) >= 0 ? '#10b981' : '#ef4444';
         _fillGrid('auxGridGestaoDRE', [
-            { label:'Receita Bruta',   value: fmt(k.db_receita_bruta || k.mrr),
+            { label:'Receita Bruta' + _bd,   value: fmt(k.db_receita_bruta || k.mrr),
               sub: `Recebido: ${fmt(k.db_recebido)} · A receber: ${fmt(k.db_a_receber)}`,
+              desc: 'Total faturado no último mês do período. Fonte: Contas a Receber (BD). Composto por Recebido (Status="Recebido", pagamentos confirmados no mês) + A Receber (Status="A receber", faturas com vencimento no mês ainda não pagas). Reflete a receita total gerada — independente de quando será efetivamente recebida.',
               color:'#10b981' },
-            { label:'Total Despesas',  value: fmt(gcDesp),
+            { label:'Total Despesas' + _xls,  value: fmt(gcDesp),
               sub: 'CMV + DespOp + Encargos + DespFin + Outros',
+              desc: 'Soma de todas as categorias de despesa do mês mais recente do período. Fonte: planilha Gestão Completa (GC_DRE_Completo). Categorias: CMV = Custo da Mercadoria Vendida (infraestrutura/produtos); DespOp = Despesas Operacionais (pessoal, aluguel, etc.); Encargos = tributos e encargos sociais; DespFin = Despesas Financeiras (juros, taxas bancárias); Outros = demais custos.',
               color:'#f97316' },
-            { label:'Resultado',       value: fmt(resultado),
-              sub: 'Recebido − Despesas',
+            { label:'Resultado' + _bd + _xls, value: fmt(resultado),
+              sub: 'Recebido (BD) − Despesas (Excel)',
+              desc: 'Lucro ou prejuízo do mês. Fórmula: Recebido (BD, Contas a Receber) − Total Despesas (Excel, GC_DRE_Completo). Atenção: usa fontes distintas — receita do banco de dados operacional e despesas da planilha de gestão. Positivo = lucro; negativo = prejuízo.',
               color: resSinal },
-            { label:'Margem',          value: fPct(margem),
+            { label:'Margem' + _bd + _xls,    value: fPct(margem),
               sub: 'Resultado / Recebido',
+              desc: 'Percentual de lucratividade sobre o que foi efetivamente recebido. Fórmula: Resultado ÷ Recebido × 100. Ex: 15% significa que a cada R$100 recebidos, R$15 sobram após todas as despesas. Calculado sobre o Recebido (não sobre a Receita Bruta total) para refletir a margem real do caixa.',
               color: resSinal },
         ]);
         const n = k.gc_n_meses || 1;
@@ -383,55 +393,55 @@ function _renderKpis(d) {
         } else {
             const cacSubLbl = cacSubSel.join(' + ');
             _fillGrid('auxGridGestaoCAC', [
-                { label:'Total Investido (CAC)', value: fmt(k.gc_cac_total),
+                { label:'Total Investido (CAC)' + _xls, value: fmt(k.gc_cac_total),
                   sub: `Σ ${cacSubLbl}`,
-                  desc: 'Soma dos custos dos subgrupos selecionados (GC_Lancamentos) no período.',
+                  desc: 'Soma dos valores lançados nos subgrupos selecionados no Configurador de CAC, filtrado pelo período. Fonte: tabela GC_Lancamentos (planilha Gestão Completa). Representa o investimento total em aquisição de clientes no período — selecione os subgrupos de marketing, comissões, materiais e mão de obra para um CAC completo.',
                   color:'#6366f1' },
-                { label:'CAC Unitário', value: fmt(k.gc_cac_unit),
+                { label:'CAC Unitário' + _xls + _bd, value: fmt(k.gc_cac_unit),
                   sub: `${fI(k.gc_instalacoes)} OS instalação finalizadas`,
-                  desc: 'Total investido ÷ número de OS de instalação finalizadas no período.',
+                  desc: 'Custo de Aquisição por Cliente. Fórmula: Total Investido (Excel, GC_Lancamentos) ÷ OS de Instalação de Fibra finalizadas no período (BD, tabela OS, Assunto="INSTALAÇÃO DE FIBRA", Status="Finalizada"). Indica quanto foi gasto em média para instalar e ativar cada novo cliente.',
                   color:'#6366f1' },
             ]);
         }
         _fillGrid('auxGridGestaoDFC', [
-            { label:'Entradas / mês',  value: fmt(k.gc_entradas),
-              sub: `Total: ${fmt(k.gc_entradas * n)}`,
+            { label:'Entradas / mês' + _xls,      value: fmt(k.gc_entradas),
+              sub: `Total no período: ${fmt(k.gc_entradas * n)}`,
+              desc: 'Média mensal das entradas de caixa no período selecionado. Fonte: GC_DFC_Mensal.Entradas (planilha Gestão Completa). Fórmula: soma total das entradas de todos os meses do período ÷ número de meses. Inclui recebimentos de clientes, aportes de sócios e demais receitas de caixa. É uma MÉDIA — o valor real de cada mês pode variar.',
               color:'#10b981' },
-            { label:'Saídas / mês',    value: fmt(k.gc_saidas),
-              sub: `Total: ${fmt(k.gc_saidas_total)}`,
+            { label:'Saídas / mês' + _xls,        value: fmt(k.gc_saidas),
+              sub: `Total no período: ${fmt(k.gc_saidas_total)}`,
+              desc: 'Média mensal das saídas de caixa no período selecionado. Fonte: GC_DFC_Mensal.TotalSaidas (planilha Gestão Completa). Fórmula: soma total das saídas ÷ número de meses. Inclui pagamentos a fornecedores, folha de pagamento, impostos, aluguel e todos os demais desembolsos operacionais. É uma MÉDIA — o valor real de cada mês pode variar.',
               color:'#f97316' },
-            { label:'Saldo Período / mês', value: fmt(k.gc_saldo_periodo),
-              sub: 'Entradas − Saídas',
+            { label:'Saldo Período / mês' + _xls, value: fmt(k.gc_saldo_periodo),
+              sub: 'Média de: Entradas − Saídas por mês',
+              desc: 'Média mensal do saldo gerado no período (Entradas − Saídas de cada mês). Fonte: GC_DFC_Mensal.SaldoPeriodo. Positivo = empresa gerou mais caixa do que gastou em média no período. Negativo = consumo de caixa (empresa desembolsou mais do que recebeu). É uma MÉDIA dos saldos mensais.',
               color: saldoSinal },
-            { label:'Saldo Acumulado', value: fmt(k.gc_saldo_acum),
-              sub: 'Caixa acumulado até o último mês',
+            { label:'Saldo Acumulado' + _xls,     value: fmt(k.gc_saldo_acum),
+              sub: 'Caixa real até o último mês do período',
+              desc: 'Saldo de caixa acumulado até o último mês do período selecionado. Fonte: GC_DFC_Mensal.SaldoAcumulado (último registro do período). NÃO é uma média — é o valor real do caixa acumulado desde o início das operações até o final do período filtrado. Representa o total de recursos disponíveis em caixa.',
               color: (k.gc_saldo_acum || 0) >= 0 ? '#10b981' : '#ef4444' },
         ]);
     } else if (secGestao) {
         secGestao.style.display = 'none';
     }
 
-    const excelBadge = k.gc_has_data
-        ? ' <span style="font-size:0.6rem;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:4px;padding:0 4px;vertical-align:middle;">Excel</span>'
-        : '';
-
     // Receita & Base
     _fillGrid('auxGridReceita', [
-        { label:'MRR', value: fmt(k.mrr),
+        { label:'MRR' + _bd, value: fmt(k.mrr),
           sub: 'Receita Bruta — recebido + a receber (último mês)',
-          desc: 'Monthly Recurring Revenue — soma do recebido e do a receber no último mês do período, calculado pelo banco de dados de Contas a Receber.',
+          desc: 'Monthly Recurring Revenue (Receita Recorrente Mensal). Calculado pelo banco de dados de Contas a Receber: soma dos pagamentos com Status="Recebido" (Data_pagamento no mês) + faturas com Status="A receber" (Vencimento no mês) do último mês do período filtrado. Representa a receita total esperada daquele mês — o que foi pago mais o que ainda será pago.',
           color:'#10b981' },
-        { label:'ARPU', value: fmt(k.arpu),
-          sub: `Receita Bruta ÷ ${fI(k.active_clients)} clientes ativos`,
-          desc: 'Average Revenue Per User — MRR dividido pelo total de clientes ativos. Indica o ticket médio mensal.',
+        { label:'ARPU' + _bd, value: fmt(k.arpu),
+          sub: `MRR ÷ ${fI(k.active_clients)} clientes ativos`,
+          desc: 'Average Revenue Per User (Receita Média por Cliente). Fórmula: MRR do último mês ÷ total de clientes ativos. Clientes ativos = contratos com Status_contrato e Status_acesso conforme configurado no painel "Definição de Clientes Ativos" (padrão: Ativo/Ativo). Indica o ticket médio mensal de cada cliente.',
           color:'#10b981' },
-        { label:'Clientes Ativos', value: fI(k.active_clients),
-          sub: `de ${fI(k.total_cadastrados)} cadastrados`,
-          desc: 'Contratos com Status "Ativo" e acesso ativo. Total cadastrados inclui todos os clientes já registrados.',
+        { label:'Clientes Ativos' + _bd, value: fI(k.active_clients),
+          sub: `de ${fI(k.total_cadastrados)} já cadastrados`,
+          desc: 'Total de contratos que atendem simultaneamente aos filtros de Status_contrato E Status_acesso configurados no painel "Definição de Clientes Ativos" (padrão: Ativo/Ativo). Fonte: tabela Contratos. Não é filtrado por período — representa a situação atual dos contratos (ou no momento da data fim, se filtrado). "Cadastrados" = todos que já entraram no sistema, incluindo inativos e cancelados.',
           color:'#6366f1' },
-        { label:'Novas Ativações', value: fI(k.new_clients),
+        { label:'Novas Ativações' + _bd, value: fI(k.new_clients),
           sub: `em ${d.period_months} mes(es) analisados`,
-          desc: 'Contratos ativados (Data de ativação) dentro do período filtrado.',
+          desc: 'Contratos com Data_ativa_o dentro do período filtrado (tabela Contratos, excluindo Status="Pendente"). Conta todas as ativações — novas instalações, reativações e migrações de plano. Se não houver filtro de datas, soma todas as ativações do histórico disponível.',
           color:'#0ea5e9' },
     ]);
 
@@ -448,27 +458,27 @@ function _renderKpis(d) {
     const cc  = cancelRate > 5 ? '#ef4444' : cancelRate > 2 ? '#f59e0b' : '#10b981';
     const cbc = combRate   > 8 ? '#ef4444' : combRate   > 4 ? '#f59e0b' : '#10b981';
     _fillGrid('auxGridChurn', [
-        { label:'Churn c/ Negativação', value: fN(negRate, 2) + '%',
+        { label:'Churn c/ Negativação' + _bd, value: fN(negRate, 2) + '%',
           sub: `${fI(k.neg_total)} neg no período ÷ ${fI(k.active_clients)} ativos`,
           desc: 'Total de negativações no período selecionado dividido pelos clientes ativos.',
           color: nc },
-        { label:'Churn c/ Cancelamento', value: fN(cancelRate, 2) + '%',
+        { label:'Churn c/ Cancelamento' + _bd, value: fN(cancelRate, 2) + '%',
           sub: `${fI(k.churn_total)} cancel no período ÷ ${fI(k.active_clients)} ativos`,
           desc: 'Total de cancelamentos no período selecionado dividido pelos clientes ativos.',
           color: cc },
-        { label:'Churn c/ Neg + Cancel', value: fN(combRate, 2) + '%',
+        { label:'Churn c/ Neg + Cancel' + _bd, value: fN(combRate, 2) + '%',
           sub: `${fI(k.combined_total)} (neg + cancel) no período ÷ ${fI(k.active_clients)} ativos`,
           desc: 'Total de negativações + cancelamentos no período selecionado dividido pelos clientes ativos.',
           color: cbc },
-        { label:'Cancelamentos / mês', value: fI(k.churn_count),
+        { label:'Cancelamentos / mês' + _bd, value: fI(k.churn_count),
           sub: `${fI(k.churn_total)} total no período`,
           desc: 'Quantidade média de contratos encerrados por mês.',
           color: cc },
-        { label:'Negativações / mês', value: fI(k.neg_count),
+        { label:'Negativações / mês' + _bd, value: fI(k.neg_count),
           sub: `${fI(k.neg_total)} total no período`,
           desc: 'Quantidade média de contratos negativados por mês.',
           color: '#f59e0b' },
-        { label:'Cancel + Neg / mês', value: fI(k.combined_count),
+        { label:'Cancel + Neg / mês' + _bd, value: fI(k.combined_count),
           sub: `${fI(k.combined_total)} total no período`,
           desc: 'Soma de cancelamentos e negativações por mês.',
           color: cbc },
@@ -493,40 +503,42 @@ function _renderKpis(d) {
     const cacSub = k.gc_has_data
         ? `${fmt(k.cac_cost)} ÷ ${fI(k.gc_instalacoes || k.new_clients)} instalações (Excel)`
         : `${fmt(k.cac_cost)} ÷ ${fI(k.new_clients)} ativações`;
+    const cacBadge     = cacFromExcel ? _xls : _bd;
+    const ltvcacBadge  = cacFromExcel ? _xls : _bd;
     _fillGrid('auxGridCac', [
-        { label:'CAC' + excelBadge, value: k.cac > 0 ? fmt(k.cac) : '—',
+        { label:'CAC' + cacBadge, value: k.cac > 0 ? fmt(k.cac) : '—',
           sub: cacSub,
-          desc: k.gc_has_data
-            ? 'Custo de Aquisição de Cliente calculado pela planilha Gestão Completa (TotalCAC ÷ NInstalações).'
-            : 'Custo de Aquisição de Cliente — total gasto com os subgrupos selecionados dividido pelas novas ativações no período.',
+          desc: cacFromExcel
+            ? 'Custo de Aquisição de Cliente (CAC). Fórmula: Total Investido nos subgrupos selecionados (GC_Lancamentos, Excel) ÷ OS de Instalação de Fibra finalizadas no período (BD, tabela OS). Para um CAC completo, selecione no Configurador: comissões de vendas, marketing, materiais de campo e mão de obra de instalação.'
+            : 'Custo de Aquisição de Cliente (CAC). Fórmula: soma dos subgrupos selecionados na tabela DRE ÷ novas ativações (Contratos.Data_ativa_o) no período. Configure os subgrupos no painel acima para incluir todos os custos de aquisição.',
           color:'#6366f1' },
-        { label:'LTV', value: k.ltv > 0 ? fmt(k.ltv) : '—',
+        { label:'LTV' + _bd, value: k.ltv > 0 ? fmt(k.ltv) : '—',
           sub: lifeM > 0 ? `ARPU × ${lifeM} meses (cancel+neg 12m: ${fN(k.ltv_churn_rate||0,2)}%)` : 'Requer dados de churn',
-          desc: 'Lifetime Value — ARPU ÷ Taxa mensal (cancelados + negativados + Filial 4, últimos 12 meses). Negativado = saída permanente: novo contrato se quiser voltar.',
+          desc: 'Lifetime Value (Valor do Tempo de Vida do Cliente). Fórmula: ARPU × (1 ÷ Taxa_Churn_Mensal). A taxa de churn é sempre calculada nos últimos 12 meses (janela fixa, independente do filtro de período) para evitar distorção. Taxa mensal = (cancelamentos definitivos [Status=Cancelado/Inativo/Desistente] + negativados [Data_negativa_o, Contratos] + negativações Filial 4 [Contratos_Negativacao]) ÷ 12 ÷ clientes ativos. Nesta operação, Negativado = saída permanente (novo contrato se quiser voltar).',
           color:'#6366f1' },
-        { label:'LTV / CAC' + excelBadge, value: lc > 0 ? fN(lc, 1) + 'x' : '—',
-          sub: 'Ideal ≥ 3x para negócio saudável',
-          desc: 'Razão entre o retorno gerado pelo cliente (LTV via BD) e o custo para adquiri-lo (CAC). Abaixo de 1x = prejuízo; entre 1–3x = atenção; acima de 3x = saudável.',
+        { label:'LTV / CAC' + ltvcacBadge, value: lc > 0 ? fN(lc, 1) + 'x' : '—',
+          sub: 'Referência: ≥ 3x saudável · ≥ 5x excelente',
+          desc: 'Razão entre o retorno total gerado por um cliente ao longo da vida (LTV) e o custo para adquiri-lo (CAC). Referência de mercado para ISP: abaixo de 1x = prejuízo por cliente; 1–3x = atenção, revisar custos; 3–5x = saudável; acima de 5x = excelente. LTV calculado via BD; CAC via fonte indicada pelo badge.',
           color: lcc },
-        { label:'Payback CAC' + excelBadge, value: k.payback_months > 0 ? fN(k.payback_months, 1) + ' meses' : '—',
-          sub: 'Tempo para recuperar o CAC via ARPU',
-          desc: 'Quantos meses de ARPU são necessários para cobrir o CAC. Quanto menor, mais rápido o retorno sobre o investimento em aquisição.',
+        { label:'Payback CAC' + ltvcacBadge, value: k.payback_months > 0 ? fN(k.payback_months, 1) + ' meses' : '—',
+          sub: 'Meses de ARPU para recuperar o CAC',
+          desc: 'Tempo em meses para recuperar o investimento feito na aquisição de um cliente. Fórmula: CAC ÷ ARPU. Ex: CAC=R$200, ARPU=R$100 → Payback=2 meses. Quanto menor, mais rápido o retorno. Para ISPs em crescimento, Payback abaixo de 12 meses é considerado bom.',
           color:'#94a3b8' },
     ]);
 
     // PMR / Inadimplência
     _fillGrid('auxGridPmr', [
-        { label:'Inadimplência', value: fN(k.inadimplencia_pct, 1) + '%',
+        { label:'Inadimplência' + _bd, value: fN(k.inadimplencia_pct, 1) + '%',
           sub: `${fmt(k.inadimplencia_valor)} em aberto vencido`,
-          desc: 'Percentual de faturas vencidas e não pagas sobre o total em aberto. Inclui todas as contas com vencimento já ultrapassado.',
+          desc: 'Percentual de faturas vencidas e não pagas. Fonte: tabela Contas_a_Receber. Critério: Status="A receber" E Vencimento < data de hoje. Percentual = quantidade de faturas vencidas ÷ total de faturas "A receber" × 100. Valor monetário = soma de Valor_aberto dessas faturas. Não inclui cancelados nem parcialmente pagos — apenas o saldo devedor pendente de clientes ainda ativos no sistema.',
           color:'#ef4444' },
-        { label:'PMR (geral)', value: fN(k.pmr_days, 0) + ' dias',
-          sub: 'Prazo médio de recebimento (todos)',
-          desc: 'Prazo Médio de Recebimento — média de dias entre o vencimento e o pagamento. Valor negativo indica pagamento antecipado ao vencimento.',
+        { label:'PMR (geral)' + _bd, value: fN(k.pmr_days, 0) + ' dias',
+          sub: 'Média de dias: vencimento → pagamento (todos)',
+          desc: 'Prazo Médio de Recebimento geral. Fórmula: média de (Data_pagamento − Vencimento) em dias para todos os pagamentos com Status="Recebido" no período. Valor negativo = clientes estão pagando ANTES do vencimento (bom sinal). Valor positivo = dias médios de atraso entre o vencimento e o pagamento. Inclui tanto os pontuais quanto os atrasados.',
           color:'#f59e0b' },
-        { label:'PMR (em atraso)', value: fN(k.pmr_late_days, 0) + ' dias',
-          sub: 'Média apenas dos pagamentos atrasados',
-          desc: 'PMR calculado somente para os pagamentos realizados após o vencimento. Indica o atraso médio dos inadimplentes que eventualmente pagam.',
+        { label:'PMR (em atraso)' + _bd, value: fN(k.pmr_late_days, 0) + ' dias',
+          sub: 'Média de atraso — somente pagamentos após vencimento',
+          desc: 'PMR calculado EXCLUSIVAMENTE para pagamentos realizados após o vencimento (Data_pagamento > Vencimento). Filtra apenas os inadimplentes que eventualmente pagaram, mostrando quantos dias em média eles atrasaram. Não inclui quem pagou em dia nem quem ainda não pagou. Indica o comportamento real dos clientes que atrasam.',
           color:'#f59e0b' },
     ]);
 
@@ -536,50 +548,65 @@ function _renderKpis(d) {
     const rc  = k.resolucao_1c || 0;
     const rcc = rc >= 70 ? '#10b981' : rc >= 50 ? '#f59e0b' : '#ef4444';
     _fillGrid('auxGridOps', [
-        { label:'Truck Rolls / cliente', value: fN(k.truck_per_client, 2),
+        { label:'Truck Rolls / cliente' + _bd, value: fN(k.truck_per_client, 2),
           sub: `${fI(k.truck_rolls)} OS no período`,
-          desc: 'Quantidade de visitas técnicas (Ordens de Serviço) por cliente ativo no período. Alto índice pode indicar problemas de qualidade na rede.',
+          desc: 'Conta TODAS as Ordens de Serviço abertas na tabela OS no período, sem filtro de tipo (instalações, manutenções, oscilações, visitas técnicas, etc.). Fórmula: total de OS ÷ clientes ativos atualmente. ISPs eficientes ficam abaixo de 0,5 OS/cliente no período. Valor alto sugere problemas de qualidade de rede ou retrabalho em instalações.',
           color:'#0f2d5e' },
-        { label:'MTTR', value: fN(k.mttr_hours, 1) + 'h',
-          sub: 'Tempo médio de reparo (OS manutenção)',
-          desc: 'Mean Time To Repair — horas em média para resolver uma OS de manutenção, oscilação ou falha. Meta comum: abaixo de 4h.',
+        { label:'MTTR' + _bd, value: fN(k.mttr_hours, 1) + 'h',
+          sub: 'Tempo médio de reparo (OS manutenção/falha)',
+          desc: 'Mean Time To Repair — tempo médio em horas entre abertura e fechamento de OS de falha/manutenção. Filtro aplicado: Assunto da OS contém "MANUT", "OSCILA", "SEM CONEX", "SEM INTERNET" ou "FALHA". OS sem data de fechamento são excluídas. Meta recomendada para ISP: abaixo de 4h. Valores altos indicam gargalo de equipe ou complexidade técnica.',
           color:'#0f2d5e' },
-        { label:'Uptime estimado', value: fN(up, 2) + '%',
+        { label:'Uptime estimado' + _bd, value: fN(up, 2) + '%',
           sub: 'Proxy via horas de manutenção',
-          desc: 'Disponibilidade estimada da rede. Calculado como: 1 - (MTTR × nº de manutenções) / total de horas no período. Proxy, não uptime real medido.',
+          desc: 'Estimativa de disponibilidade da rede. Fórmula: (1 − MTTR × qtd_OS_manutenção ÷ horas_do_período) × 100. Horas totais = meses × 30 × 24h. NÃO é uptime medido por NOC/SNMP — é uma estimativa indireta baseada nas OS. Para uptime real, use ferramenta de monitoramento de rede. Meta ISP: acima de 99,5%.',
           color: upc },
-        { label:'Tempo de Instalação', value: fN(k.tempo_instalacao, 1) + 'h',
+        { label:'Tempo de Instalação' + _bd, value: fN(k.tempo_instalacao, 1) + 'h',
           sub: 'Média abertura → fechamento OS instalação',
-          desc: 'Horas médias entre abertura e fechamento de Ordens de Serviço de instalação de fibra. Impacta diretamente na experiência do novo cliente.',
+          desc: 'Tempo médio em horas entre abertura e fechamento de OS cujo campo Assunto contém "INSTALA". Inclui instalações residenciais, empresariais e migrações de plano. OS sem data de fechamento são excluídas. Meta recomendada: abaixo de 48h. Impacta diretamente a experiência do novo cliente e a velocidade de geração de receita.',
           color:'#0f2d5e' },
-        { label:'Resolução 1º Contato',
+        { label:'Resolução 1º Contato' + _bd,
           value: (k.resolucao_com_dados || 0) > 0 ? fN(rc, 1) + '%' : 'N/D',
           sub: (k.resolucao_com_dados || 0) > 0
             ? `de ${fI(k.resolucao_com_dados)} atendimentos c/ dados`
             : `${fI(k.total_atendimentos)} atendimentos (sem dados de msg)`,
-          desc: 'First Contact Resolution — percentual de atendimentos encerrados com 1 ou menos mensagens enviadas pelo cliente. N/D quando o campo Msgs_cliente não foi preenchido.',
+          desc: 'FCR (First Contact Resolution) — percentual de atendimentos resolvidos com 0 ou 1 mensagens enviadas pelo cliente. Fonte: tabela Atendimentos, campo Msgs_cliente. Fórmula: atendimentos com Msgs_cliente ≤ 1 ÷ total com Msgs_cliente preenchido × 100. Exibe "N/D" quando o campo não foi registrado. Meta ideal: acima de 70%. Indica eficiência do suporte — cliente resolveu sem precisar insistir.',
           color: (k.resolucao_com_dados || 0) > 0 ? rcc : '#94a3b8' },
     ]);
 
     // Custos & Penetração
+    const opexBadge = k.gc_has_data ? _xls : _bd;
+    // IBGE Censo 2022 — Domicílios Particulares Permanentes Urbanos das cidades atendidas
+    const _ibge = {
+        'Dom Pedro':                   5262,
+        'Presidente Dutra':           10410,
+        'São Domingos do Maranhão':    5936,
+        'Tuntum':                      5630,
+    };
+    const _ibge_total = Object.values(_ibge).reduce((a, b) => a + b, 0); // 27.238
+    const penetracao_mercado = _ibge_total > 0 ? (k.active_clients / _ibge_total * 100) : 0;
     _fillGrid('auxGridCustos', [
-        { label:'OPEX / Cliente / Mês' + excelBadge, value: fmt(k.opex_per_client),
+        { label:'OPEX / Cliente / Mês' + opexBadge, value: fmt(k.opex_per_client),
           sub: k.gc_has_data
             ? `${fmt(k.total_opex)} total saídas DFC no período`
-            : `${fmt(k.total_opex)} total no período`,
+            : `${fmt(k.total_opex)} total DRE no período`,
           desc: k.gc_has_data
-            ? 'Total de Saídas do DFC (planilha Gestão Completa) dividido por clientes ativos e meses do período.'
-            : 'Custo operacional total (OPEX da DRE) dividido por clientes ativos e meses do período. Indica o custo médio para manter cada cliente.',
+            ? 'Custo operacional por cliente ao mês. Fonte Excel: soma de TODAS as Saídas da DFC (GC_DFC_Mensal — planilha Gestão Completa), que engloba todos os subgrupos de despesa sem filtro. Fórmula: total_saídas_DFC ÷ (clientes_ativos_atualmente × meses_do_período). Os "clientes ativos" usados no divisor são os contratos ativos NO MOMENTO da consulta (Status_contrato + Status_acesso conforme filtros), não a média do período.'
+            : 'Custo operacional por cliente ao mês. Fonte BD: soma de TODOS os lançamentos da tabela DRE no período, sem filtro de grupo ou subgrupo (inclui todas as despesas registradas). Fórmula: total_DRE ÷ (clientes_ativos_atualmente × meses_do_período). Os "clientes ativos" são os contratos ativos NO MOMENTO da consulta.',
           color:'#6366f1' },
-        { label:'Custo / Mbps' + excelBadge, value: k.custo_por_mbps > 0
+        { label:'Custo / Mbps' + opexBadge, value: k.custo_por_mbps > 0
             ? 'R$ ' + Number(k.custo_por_mbps).toFixed(4).replace('.', ',') : '—',
           sub: `${fI(k.total_mbps)} Mbps em contratos ativos`,
-          desc: 'OPEX total dividido pela soma de Mbps de todos os contratos ativos. A velocidade é extraída do campo de descrição do plano (ex: "200M").',
+          desc: 'Custo por megabit por segundo contratado. Fórmula: OPEX_total ÷ soma_de_Mbps_dos_contratos_ativos. A velocidade de cada plano é extraída do campo Descri_o do contrato (ex: "Fibra 200M" → 200 Mbps). Indica eficiência de custos em relação à capacidade vendida — quanto menor, melhor a escala da operação.',
           color:'#6366f1' },
-        { label:'Taxa de Penetração', value: fN(k.taxa_penetracao, 1) + '%',
+        { label:'Taxa de Penetração (base)' + _bd, value: fN(k.taxa_penetracao, 1) + '%',
           sub: `${fI(k.active_clients)} ativos / ${fI(k.total_cadastrados)} cadastrados`,
-          desc: 'Percentual de clientes com contrato ativo sobre o total de clientes já cadastrados na base. Indica o aproveitamento da base de prospects.',
+          desc: 'Percentual de contratos ATIVOS sobre o total de clientes já cadastrados na base (independente de status). Fórmula: contratos_ativos ÷ total_cadastrado_Contratos × 100. Indica o aproveitamento do cadastro de leads/prospects — um cliente cadastrado mas não ativo pode ter cancelado, desistido ou nunca ter sido instalado.',
           color:'#6366f1' },
+        { label:'Taxa de Penetração (mercado)' + _bd,
+          value: fN(penetracao_mercado, 1) + '%',
+          sub: `${fI(k.active_clients)} ativos / 27.238 dom. urbanos (IBGE 2022)`,
+          desc: 'Penetração no mercado endereçável real. Fórmula: contratos_ativos ÷ total_de_domicílios_particulares_permanentes_urbanos × 100. Base IBGE Censo 2022 (DPP urbanos): Dom Pedro 5.262 · Presidente Dutra 10.410 · São Domingos do Maranhão 5.936 · Tuntum 5.630 = 27.238 domicílios urbanos. ISPs regionais ficam tipicamente entre 5% e 30%. Acima de 30% indica saturação do mercado urbano — expansão depende de novos bairros ou área rural.',
+          color: penetracao_mercado >= 30 ? '#f59e0b' : '#10b981' },
     ]);
 }
 
