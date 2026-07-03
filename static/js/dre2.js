@@ -32,6 +32,18 @@ function _mesOpts(selectedVal) {
 export async function renderDre2Dashboard(container) {
     if (!container) return;
     container.innerHTML = _shell();
+
+    const now   = new Date();
+    const start = new Date(now.getFullYear(), 0, 1);
+    const end   = new Date(now.getFullYear(), now.getMonth(), 0);
+    const fmt   = d => d.toISOString().slice(0, 10);
+    _dateFrom = fmt(start);
+    _dateTo   = fmt(end);
+    const inpFrom = document.getElementById('d2DateFrom');
+    const inpTo   = document.getElementById('d2DateTo');
+    if (inpFrom) inpFrom.value = _dateFrom;
+    if (inpTo)   inpTo.value   = _dateTo;
+
     _bindEvents();
     await _loadTab('dre');
 }

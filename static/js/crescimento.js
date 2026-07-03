@@ -37,14 +37,15 @@ export function renderCrescimento(container) {
     _hmapRadius    = 15;
     _activeLayers  = [];
     _searchMarker  = null;
+    _activeLayer   = 'cancelamento';
 
     container.innerHTML = _shell();
 
     // Pré-preenche datas se ainda não definidas (primeira carga)
     if (!_filters.start_date) {
         const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth() - 12, 1);
-        const end   = new Date(now.getFullYear(), now.getMonth(), 0);      // último dia do mês anterior
+        const start = new Date(now.getFullYear(), 0, 1);
+        const end   = new Date(now.getFullYear(), now.getMonth(), 0);
         _filters.start_date = start.toISOString().slice(0, 10);
         _filters.end_date   = end.toISOString().slice(0, 10);
     }
@@ -258,6 +259,8 @@ function _bindEvents() {
 
     document.querySelectorAll('.hmap-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+            _filters.start_date = document.getElementById('cgStart')?.value || _filters.start_date;
+            _filters.end_date   = document.getElementById('cgEnd')?.value   || _filters.end_date;
             _activeLayer = btn.dataset.cat;
             _highlightBtn(_activeLayer);
             _loadHeatmap(_activeLayer);
@@ -633,9 +636,9 @@ function _initMap() {
 
     _map.on('load', () => {
         _mapReady = true;
-        _highlightBtn('cancelamento');
-        _highlightVizBtn('heatmap');
-        _loadHeatmap('cancelamento');
+        _highlightBtn(_activeLayer);
+        _highlightVizBtn(_vizMode);
+        _loadHeatmap(_activeLayer);
     });
 }
 

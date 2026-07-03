@@ -215,17 +215,16 @@ function _shell() {
 // Init default dates (last 12 months)
 // ============================================================
 function _initDates() {
-    const today = new Date();
-    const start = new Date(today);
-    start.setFullYear(start.getFullYear() - 1);
-    start.setDate(1);
+    const now   = new Date();
+    const start = new Date(now.getFullYear(), 0, 1);
+    const end   = new Date(now.getFullYear(), now.getMonth(), 0);
 
     const fmt = d => d.toISOString().slice(0, 10);
 
     const se = document.getElementById('dreStartDate');
     const ee = document.getElementById('dreEndDate');
     if (se) se.value = fmt(start);
-    if (ee) ee.value = fmt(today);
+    if (ee) ee.value = fmt(end);
 
     _filters.start_date = se?.value || '';
     _filters.end_date   = ee?.value || '';

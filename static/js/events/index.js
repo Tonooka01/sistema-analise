@@ -53,6 +53,7 @@ export function initializeEventListeners() {
         utils.setActiveControl(e.target);
         if (dom.customAnalysisSelector) dom.customAnalysisSelector.value = '';
         utils.hideAllCustomFilters();
+        if (dom.viewTableBtn) dom.viewTableBtn.classList.add('hidden');
         if (dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
         if (dom.dashboardContentDiv) {
             dom.dashboardContentDiv.classList.remove('hidden');
@@ -66,6 +67,7 @@ export function initializeEventListeners() {
         utils.setActiveControl(e.target);
         if (dom.customAnalysisSelector) dom.customAnalysisSelector.value = '';
         utils.hideAllCustomFilters();
+        if (dom.viewTableBtn) dom.viewTableBtn.classList.add('hidden');
         if (dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
         if (dom.dashboardContentDiv) {
             dom.dashboardContentDiv.classList.remove('hidden');
@@ -79,6 +81,7 @@ export function initializeEventListeners() {
         utils.setActiveControl(e.target);
         if (dom.customAnalysisSelector) dom.customAnalysisSelector.value = '';
         utils.hideAllCustomFilters();
+        if (dom.viewTableBtn) dom.viewTableBtn.classList.add('hidden');
         if (dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
         if (dom.dashboardContentDiv) {
             dom.dashboardContentDiv.classList.remove('hidden');
