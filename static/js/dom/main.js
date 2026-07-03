@@ -14,6 +14,7 @@ export let collectionSelectorButtons;
 export let customAnalysisSelector;
 export let saveLayoutBtn;
 export let viewTableBtn;
+export let btnContratos;
 
 export function initMainDom() {
     dashboardContentWrapper = document.getElementById('dashboard-content-wrapper');
@@ -27,4 +28,5 @@ export function initMainDom() {
     customAnalysisSelector    = document.getElementById('customAnalysisSelector');
     saveLayoutBtn             = document.getElementById('saveLayoutBtn');
     viewTableBtn              = document.getElementById('viewTableBtn');
+    btnContratos              = document.getElementById('btnContratos');
 }

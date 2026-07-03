@@ -585,6 +585,29 @@ def api_dre_auxiliar():
         payback  = cac / arpu if arpu > 0 else 0.0
 
         # ------------------------------------------------------------------
+        # 6b. LTV Real — permanência e receita real por contrato
+        #     Conta apenas os meses em que o contrato efetivamente pagou
+        #     (Contas_a_Receber, Status='Recebido'). Janela: histórico completo,
+        #     sem filtro de data (queremos o total real de permanência de cada cliente).
+        # ------------------------------------------------------------------
+        _ltv_real_row = conn.execute("""
+            SELECT AVG(months_count)   AS avg_months,
+                   AVG(contract_total) AS avg_revenue
+            FROM (
+                SELECT ID_contrato_principal,
+                       COUNT(DISTINCT STRFTIME('%Y-%m', Data_pagamento)) AS months_count,
+                       SUM(Valor_recebido)                               AS contract_total
+                FROM Contas_a_Receber
+                WHERE Status = 'Recebido'
+                  AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
+                  AND ID_contrato_principal IS NOT NULL AND ID_contrato_principal > 0
+                GROUP BY ID_contrato_principal
+            )
+        """).fetchone()
+        ltv_real_months  = float(_ltv_real_row['avg_months']  or 0) if _ltv_real_row else 0.0
+        ltv_real         = float(_ltv_real_row['avg_revenue'] or 0) if _ltv_real_row else 0.0
+
+        # ------------------------------------------------------------------
         # 7. PMR (Prazo Médio de Recebimento)
         # ------------------------------------------------------------------
         pmr_c = [
@@ -676,6 +699,7 @@ def api_dre_auxiliar():
         # ------------------------------------------------------------------
         resolucao_1c   = 0.0
         total_aten     = 0
+        com_dados      = 0
         try:
             aten_c, aten_p = [], []
             if start_date: aten_c.append("Criado_em >= ?"); aten_p.append(start_date)
@@ -929,6 +953,8 @@ def api_dre_auxiliar():
                 'cac':                round(cac, 2),
                 'cac_cost':           round(cac_cost, 2),
                 'ltv':                round(ltv, 2),
+                'ltv_real':           round(ltv_real, 2),
+                'ltv_real_months':    round(ltv_real_months, 1),
                 'ltv_cac':            round(ltv_cac, 2),
                 'payback_months':     round(payback, 2),
                 'pmr_days':           pmr_days,

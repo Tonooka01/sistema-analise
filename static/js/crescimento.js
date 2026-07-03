@@ -39,6 +39,20 @@ export function renderCrescimento(container) {
     _searchMarker  = null;
 
     container.innerHTML = _shell();
+
+    // Pré-preenche datas se ainda não definidas (primeira carga)
+    if (!_filters.start_date) {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth() - 12, 1);
+        const end   = new Date(now.getFullYear(), now.getMonth(), 0);      // último dia do mês anterior
+        _filters.start_date = start.toISOString().slice(0, 10);
+        _filters.end_date   = end.toISOString().slice(0, 10);
+    }
+    const _cgS = document.getElementById('cgStart');
+    const _cgE = document.getElementById('cgEnd');
+    if (_cgS) _cgS.value = _filters.start_date;
+    if (_cgE) _cgE.value = _filters.end_date;
+
     _bindEvents();
     _loadGrowth();
     // Mapa inicia após um tick para garantir que o DOM está pronto
@@ -501,7 +515,9 @@ function _renderKpis(d) {
     const hist  = d.historico     || [];
     const proj  = d.projecao      || [];
     const ps    = d.periodo_stats || null;
-    const last  = hist[hist.length - 1] || {};
+    // Usa o último mês completo (não extrapolado) para os KPIs de MRR/Clientes
+    const completedHist = hist.filter(h => !h.extrapolado);
+    const last  = completedHist[completedHist.length - 1] || hist[hist.length - 1] || {};
     const lproj = proj[proj.length - 1] || {};
     const h12   = hist.slice(-12);
 

@@ -39,14 +39,25 @@ const _MOTIVO_COLOR = {
 // ============================================================
 // Entry point
 // ============================================================
-export async function renderAuxiliar(container, inheritedFilters) {
-    _auxFilters  = { ...inheritedFilters };
-    _cbsLoaded   = false;          // re-popula checkboxes a cada render
+export async function renderAuxiliar(container, filters) {
+    _cbsLoaded   = false;
     _stLoaded    = false;
-    _cacSelected = new Set();      // limpa seleção; defaults são reaplicados em _populateCacCheckboxes
+    _cacSelected = new Set();
+    if (filters) {
+        _auxFilters.start_date = filters.start_date || '';
+        _auxFilters.end_date   = filters.end_date   || '';
+    }
     container.innerHTML = _auxShell();
-    _initAuxDates();
     _bindAuxEvents();
+    await _loadAux();
+}
+
+// Chamado pelo dre.js quando o filtro global muda enquanto a aba Métricas está ativa
+export async function reloadAuxiliar(filters) {
+    if (filters) {
+        _auxFilters.start_date = filters.start_date || '';
+        _auxFilters.end_date   = filters.end_date   || '';
+    }
     await _loadAux();
 }
 
@@ -76,23 +87,6 @@ function _auxShell() {
                                       line-height:1.35;font-style:italic;
                                       border-top:1px solid #f1f5f9;padding-top:0.3rem; }
 </style>
-
-    <!-- Filtros de data -->
-    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1.25rem;">
-        <input type="date" id="auxStartDate"
-            style="background:#f8fafc;border:1.5px solid #dde3ec;border-radius:7px;
-                   padding:0.42rem 0.7rem;font-size:0.82rem;color:#1e293b;height:34px;">
-        <span style="color:#94a3b8;font-size:0.85rem;">até</span>
-        <input type="date" id="auxEndDate"
-            style="background:#f8fafc;border:1.5px solid #dde3ec;border-radius:7px;
-                   padding:0.42rem 0.7rem;font-size:0.82rem;color:#1e293b;height:34px;">
-        <button id="auxFilterBtn"
-            style="background:#6366f1;color:#fff;border:none;border-radius:7px;
-                   padding:0.42rem 1.1rem;font-size:0.82rem;font-weight:600;
-                   cursor:pointer;height:34px;">
-            Filtrar
-        </button>
-    </div>
 
     <!-- Painel CAC -->
     <div style="background:#f8fafc;border:1.5px solid #dde3ec;border-radius:10px;
@@ -579,8 +573,15 @@ function _renderKpis(d) {
     const cacSub = k.gc_has_data
         ? `${fmt(k.cac_cost)} ÷ ${fI(k.gc_instalacoes || k.new_clients)} instalações (Excel)`
         : `${fmt(k.cac_cost)} ÷ ${fI(k.new_clients)} ativações`;
-    const cacBadge     = cacFromExcel ? _xls : _bd;
-    const ltvcacBadge  = cacFromExcel ? _xls : _bd;
+    const cacBadge    = cacFromExcel ? _xls : _bd;
+    const ltvcacBadge = cacFromExcel ? _xls : _bd;
+
+    // LTV(Real) derivados
+    const arpu_real       = (k.ltv_real > 0 && k.ltv_real_months > 0) ? k.ltv_real / k.ltv_real_months : 0;
+    const lc_real         = (k.ltv_real > 0 && k.cac > 0) ? k.ltv_real / k.cac : 0;
+    const lcc_real        = lc_real >= 3 ? '#10b981' : lc_real >= 1 ? '#f59e0b' : '#ef4444';
+    const payback_real    = (arpu_real > 0 && k.cac > 0) ? k.cac / arpu_real : 0;
+
     _fillGrid('auxGridCac', [
         { label:'CAC' + cacBadge, value: k.cac > 0 ? fmt(k.cac) : '—',
           sub: cacSub,
@@ -592,13 +593,27 @@ function _renderKpis(d) {
           sub: lifeM > 0 ? `ARPU × ${lifeM} meses (cancel+neg 12m: ${fN(k.ltv_churn_rate||0,2)}%)` : 'Requer dados de churn',
           desc: 'Lifetime Value (Valor do Tempo de Vida do Cliente). Fórmula: ARPU × (1 ÷ Taxa_Churn_Mensal). A taxa de churn é sempre calculada nos últimos 12 meses (janela fixa, independente do filtro de período) para evitar distorção. Taxa mensal = (cancelamentos definitivos [Status=Cancelado/Inativo/Desistente] + negativados [Data_negativa_o, Contratos] + negativações Filial 4 [Contratos_Negativacao]) ÷ 12 ÷ clientes ativos. Nesta operação, Negativado = saída permanente (novo contrato se quiser voltar).',
           color:'#6366f1' },
+        { label:'LTV (Real)' + _bd,
+          value: k.ltv_real > 0 ? fmt(k.ltv_real) : '—',
+          sub: k.ltv_real_months > 0 ? `Média de ${fN(k.ltv_real_months, 1)} meses pagos por contrato` : 'Sem dados de pagamento',
+          desc: 'LTV calculado com base no histórico real de pagamentos. Para cada contrato ativo ou encerrado, conta apenas os meses distintos em que houve pagamento confirmado (Contas_a_Receber, Status=Recebido). O valor é a média da receita total acumulada por contrato. Diferente do LTV estatístico, não depende de taxa de churn — reflete o que a operação efetivamente recebeu por cliente ao longo de sua permanência real.',
+          color:'#6366f1' },
         { label:'LTV / CAC' + ltvcacBadge, value: lc > 0 ? fN(lc, 1) + 'x' : '—',
           sub: 'Referência: ≥ 3x saudável · ≥ 5x excelente',
           desc: 'Razão entre o retorno total gerado por um cliente ao longo da vida (LTV) e o custo para adquiri-lo (CAC). Referência de mercado para ISP: abaixo de 1x = prejuízo por cliente; 1–3x = atenção, revisar custos; 3–5x = saudável; acima de 5x = excelente. LTV calculado via BD; CAC via fonte indicada pelo badge.',
           color: lcc },
+        { label:'LTV(Real) / CAC' + ltvcacBadge, value: lc_real > 0 ? fN(lc_real, 1) + 'x' : '—',
+          sub: 'Referência: ≥ 3x saudável · ≥ 5x excelente',
+          desc: 'Razão entre o LTV Real (receita efetivamente recebida por contrato, histórico de pagamentos confirmados) e o CAC. Mais conservador que o LTV/CAC estatístico pois usa apenas o que o cliente pagou de fato, sem projeção. Referência: abaixo de 1x = prejuízo; 1–3x = atenção; 3–5x = saudável; acima de 5x = excelente.',
+          color: lcc_real },
         { label:'Payback CAC' + ltvcacBadge, value: k.payback_months > 0 ? fN(k.payback_months, 1) + ' meses' : '—',
           sub: 'Meses de ARPU para recuperar o CAC',
           desc: 'Tempo em meses para recuperar o investimento feito na aquisição de um cliente. Fórmula: CAC ÷ ARPU. Ex: CAC=R$200, ARPU=R$100 → Payback=2 meses. Quanto menor, mais rápido o retorno. Para ISPs em crescimento, Payback abaixo de 12 meses é considerado bom.',
+          color:'#94a3b8' },
+        { label:'Payback CAC (Real)' + ltvcacBadge,
+          value: payback_real > 0 ? fN(payback_real, 1) + ' meses' : '—',
+          sub: arpu_real > 0 ? `ARPU real = ${fmt(arpu_real)}/mês` : 'Sem dados de pagamento',
+          desc: 'Tempo em meses para recuperar o CAC usando o ticket médio real por mês pago (ARPU Real = LTV Real ÷ Meses Pagos por contrato). Mais preciso que o Payback estatístico pois o ARPU Real reflete o que o cliente efetivamente pagou mês a mês, incluindo variações de plano, descontos e ajustes ao longo da permanência.',
           color:'#94a3b8' },
     ]);
 
@@ -1055,26 +1070,17 @@ function _updateActiveLabel(kpis) {
 // Date init
 // ============================================================
 function _initAuxDates() {
-    if (_auxFilters.start_date) {
-        const el = document.getElementById('auxStartDate');
-        if (el) el.value = _auxFilters.start_date;
-    }
-    if (_auxFilters.end_date) {
-        const el = document.getElementById('auxEndDate');
-        if (el) el.value = _auxFilters.end_date;
-    }
+    // Lê sempre do filtro global do cabeçalho (dreStartDate/dreEndDate)
+    const s = document.getElementById('dreStartDate')?.value || '';
+    const e = document.getElementById('dreEndDate')?.value   || '';
+    _auxFilters.start_date = s;
+    _auxFilters.end_date   = e;
 }
 
 // ============================================================
 // Events
 // ============================================================
 function _bindAuxEvents() {
-    document.getElementById('auxFilterBtn')?.addEventListener('click', () => {
-        _auxFilters.start_date = document.getElementById('auxStartDate')?.value || '';
-        _auxFilters.end_date   = document.getElementById('auxEndDate')?.value   || '';
-        _loadAux();
-    });
-
     document.getElementById('auxCacToggle')?.addEventListener('click', () => {
         const c = document.getElementById('auxCacContent');
         const a = document.getElementById('auxCacArrow');

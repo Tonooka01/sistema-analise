@@ -6,7 +6,7 @@
 
 import * as state from './state.js';
 import { formatCurrency } from './utils.js';
-import { renderAuxiliar } from './dre_auxiliar.js';
+import { renderAuxiliar, reloadAuxiliar } from './dre_auxiliar.js';
 
 const API = state.API_BASE_URL;
 
@@ -659,6 +659,8 @@ function _bindEvents() {
         _detPage = 1;
         _loadReport();
         if (_activeTab === 'lancamentos') _loadDetail();
+        // Recarrega aba Métricas se estiver ativa
+        if (_mainTab === 'auxiliar') reloadAuxiliar(_filters);
     });
 
     // Delegation on #dre-root: main tabs, inner tabs, pagination, search
@@ -731,7 +733,7 @@ function _switchMainTab(tab) {
 
     if (tab === 'auxiliar') {
         const c = document.getElementById('dreAuxContainer');
-        if (c && !c.hasChildNodes()) renderAuxiliar(c, { ..._filters });
+        if (c) { c.innerHTML = ''; renderAuxiliar(c, _filters); }
     }
 }
 
