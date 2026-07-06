@@ -58,6 +58,20 @@ def _ensure_tables(conn):
             Situacao TEXT, DataCompetencia TEXT, DataVencimento TEXT, DataConfirmacao TEXT,
             Valor REAL, NFe TEXT, CodLancamento INTEGER, Loja TEXT, Descricao TEXT
         );
+        CREATE TABLE IF NOT EXISTS GC_DRE_Estruturado (
+            Ano     INTEGER,
+            Campo   TEXT,
+            Valor   REAL,
+            PRIMARY KEY (Ano, Campo)
+        );
+        CREATE TABLE IF NOT EXISTS GC_CAPEX_OPEX_Sheet (
+            Secao    TEXT,
+            Categoria TEXT,
+            Ordem    INTEGER DEFAULT 0,
+            Ano      INTEGER,
+            Valor    REAL,
+            PRIMARY KEY (Secao, Categoria, Ano)
+        );
     """)
     conn.commit()
     # Migrations — novas colunas do v9
@@ -96,6 +110,8 @@ def _import_excel(conn, file_bytes):
     conn.execute("DELETE FROM GC_DFC_Mensal")
     conn.execute("DELETE FROM GC_CAC_Mensal")
     conn.execute("DELETE FROM GC_Lancamentos")
+    conn.execute("DELETE FROM GC_DRE_Estruturado")
+    conn.execute("DELETE FROM GC_CAPEX_OPEX_Sheet")
 
     # --- DRE Completo ---
     ws = wb['📈 DRE Completo']
@@ -179,6 +195,123 @@ def _import_excel(conn, file_bytes):
          CodLancamento, Loja, Descricao, CategoriaEstruturada, CapexOpex)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, batch)
+
+    # --- DRE Estruturado (fonte direta para api_dre2_dre_anual) ---
+    _LABEL_MAP = {
+        'RECEITA BRUTA':               'receita_bruta',
+        'Impostos sobre Vendas':       'impostos_vendas',
+        'RECEITA LÍQUIDA':             'receita_liq',
+        'Compras / Materiais':         'cmv',
+        'LUCRO BRUTO':                 'lucro_bruto',
+        'Pessoal + Pró-labore':        'pessoal',
+        'Encargos Trabalhistas':       'enc_trabalh',
+        'Marketing e Publicidade':     'marketing',
+        'Infraestrutura':              'infraestrutura',
+        'Tecnologia e Conectividade':  'tecnologia',
+        'Frota e Combustível':         'frota',
+        'Atendimento ao Cliente':      'atendimento',
+        'Demais Despesas Administrativas': 'desp_admin',
+        'EBITDA':                      'ebitda',
+        'EBIT':                        'ebit',
+        'Despesas Financeiras':        'desp_fin',
+        'Outros / Extraordinários':    'outros',
+        'LUCRO ANTES DO IR':           'resultado',
+        'IRPJ / CSLL':                 'irpj_csll',
+        'LUCRO LÍQUIDO':               'lucro_liq',
+    }
+    ws_est = wb['📋 DRE Estruturado']
+    est_rows = list(ws_est.iter_rows(min_row=1, values_only=True))
+    # detecta colunas de ano na linha 3 (index 2)
+    year_cols = {}
+    if len(est_rows) > 2:
+        for ci, hv in enumerate(est_rows[2]):
+            if hv:
+                try:
+                    yr = int(str(hv).strip().split('\n')[0].strip().split('(')[0].strip())
+                    if 2000 <= yr <= 2100:
+                        year_cols[ci] = yr
+                except (ValueError, AttributeError):
+                    pass
+    for row in est_rows[3:]:
+        label = None
+        for cell_val in row[:3]:
+            if cell_val and str(cell_val).strip():
+                label = str(cell_val).strip().lstrip('▶').lstrip('–').lstrip('-').strip()
+                break
+        if not label or label.startswith('%'):
+            continue
+        campo = None
+        for key, fld in _LABEL_MAP.items():
+            if key.lower() in label.lower():
+                campo = fld
+                break
+        if not campo:
+            continue
+        for ci, yr in year_cols.items():
+            raw = row[ci] if ci < len(row) else None
+            val_f = None if raw is None else _f(raw)
+            conn.execute(
+                "INSERT OR REPLACE INTO GC_DRE_Estruturado (Ano, Campo, Valor) VALUES (?,?,?)",
+                (yr, campo, val_f)
+            )
+
+    # --- CAPEX vs OPEX ---
+    ws_co = wb['📊 CAPEX vs OPEX']
+    co_rows = list(ws_co.iter_rows(min_row=1, values_only=True))
+    # detecta linha de cabeçalho de anos (procura a linha com pelo menos 2 anos válidos)
+    year_cols_co = {}
+    header_row_idx = 0
+    for ri, row in enumerate(co_rows):
+        found = {}
+        for ci, hv in enumerate(row):
+            if hv:
+                try:
+                    yr = int(str(hv).strip().split('\n')[0].strip().split('(')[0].strip())
+                    if 2000 <= yr <= 2100:
+                        found[ci] = yr
+                except (ValueError, AttributeError):
+                    pass
+        if len(found) >= 2:
+            year_cols_co = found
+            header_row_idx = ri
+            break
+    current_secao = 'OPEX'
+    ordem_co      = 0
+    rb_count      = 0
+    for row in co_rows[header_row_idx + 1:]:
+        label = None
+        for cv in row[:2]:
+            if cv and str(cv).strip():
+                label = str(cv).strip()
+                break
+        if not label:
+            continue
+        clean = label.lstrip('►').lstrip('–').lstrip('-').strip()
+        cu = clean.upper()
+        # detecta seção
+        if 'CAPEX' in cu and 'TOTAL' not in cu and 'OPEX' not in cu:
+            current_secao = 'CAPEX'; continue
+        if 'OPEX' in cu and 'TOTAL' not in cu and 'CAPEX' not in cu:
+            current_secao = 'OPEX'; continue
+        if 'TOTAL GERAL' in cu:
+            current_secao = 'TOTAL_GERAL'; rb_count = 0; continue
+        # determina secao da linha
+        if 'TOTAL CAPEX' in cu:
+            secao = 'TOTAL_CAPEX'
+        elif 'TOTAL OPEX' in cu:
+            secao = 'TOTAL_OPEX'
+        elif current_secao == 'TOTAL_GERAL':
+            secao = 'RB_LANCAMENTOS' if rb_count == 0 else 'RB_DRE'
+            rb_count += 1
+        else:
+            secao = current_secao
+        for ci, yr in year_cols_co.items():
+            raw = row[ci] if ci < len(row) else None
+            conn.execute(
+                "INSERT OR REPLACE INTO GC_CAPEX_OPEX_Sheet (Secao, Categoria, Ordem, Ano, Valor) VALUES (?,?,?,?,?)",
+                (secao, clean, ordem_co, yr, None if raw is None else _f(raw))
+            )
+        ordem_co += 1
 
     conn.commit()
     wb.close()
@@ -436,6 +569,185 @@ def api_dre2_lancamentos():
             'page':     page,
             'per_page': per_page,
             'filters':  {'grupos': grupos, 'situacoes': situacoes, 'anos': anos, 'capex_opts': capex_opts},
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# DRE Estruturado Anual
+# ---------------------------------------------------------------------------
+@dre2_bp.route('/api/dre2/dre_anual')
+@login_required
+def api_dre2_dre_anual():
+    conn = get_db()
+    try:
+        _ensure_tables(conn)
+        # Lê diretamente da tabela importada da aba "📋 DRE Estruturado" do Excel
+        est_rows = conn.execute(
+            "SELECT Ano, Campo, Valor FROM GC_DRE_Estruturado ORDER BY Ano"
+        ).fetchall()
+
+        # pivot: {ano: {campo: valor}}
+        est = {}
+        for r in est_rows:
+            est.setdefault(r['Ano'], {})[r['Campo']] = r['Valor']
+
+        def g(d, k): return d.get(k) or 0
+
+        years = []
+        for ano in sorted(est.keys()):
+            d   = est[ano]
+            rb  = g(d, 'receita_bruta')
+            iss = g(d, 'impostos_vendas')
+            rl  = g(d, 'receita_liq')
+            cmv = g(d, 'cmv')
+            lb  = g(d, 'lucro_bruto')
+            pessoal  = g(d, 'pessoal')
+            enc_trab = g(d, 'enc_trabalh')
+            mkt      = g(d, 'marketing')
+            infra    = g(d, 'infraestrutura')
+            tec      = g(d, 'tecnologia')
+            frota    = g(d, 'frota')
+            atend    = g(d, 'atendimento')
+            desp_adm = g(d, 'desp_admin')
+            do_sum   = pessoal + enc_trab + mkt + infra + tec + frota + atend + desp_adm
+            ebitda   = g(d, 'ebitda')
+            df       = g(d, 'desp_fin')
+            ot       = g(d, 'outros')
+            ir       = g(d, 'irpj_csll')
+            lair     = g(d, 'resultado')
+            ll       = g(d, 'lucro_liq')
+            def pct(n, base=rb): return round(n / base * 100, 1) if base else 0
+            years.append({
+                'ano': ano,
+                'receita_bruta':  round(rb,  2), 'impostos_vendas': round(iss, 2),
+                'receita_liq':    round(rl,  2), 'pct_rl':  pct(rl),
+                'cmv':            round(cmv, 2),
+                'lucro_bruto':    round(lb,  2), 'pct_lb':  pct(lb),
+                'pessoal':        round(pessoal,  2),
+                'enc_trabalh':    round(enc_trab, 2),
+                'marketing':      round(mkt,      2),
+                'infraestrutura': round(infra,    2),
+                'tecnologia':     round(tec,      2),
+                'frota':          round(frota,    2),
+                'atendimento':    round(atend,    2),
+                'desp_admin':     round(desp_adm, 2),
+                'desp_op':        round(do_sum,   2),
+                'ebitda':         round(ebitda, 2), 'pct_ebitda': pct(ebitda),
+                'desp_fin':       round(df,  2),
+                'outros':         round(ot,  2),
+                'resultado':      round(lair, 2), 'pct_res':  pct(lair),
+                'irpj_csll':      round(ir,  2),
+                'lucro_liq':      round(ll,  2), 'pct_ll':   pct(ll),
+            })
+        return jsonify({'anos': years})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# DFC Anual
+# ---------------------------------------------------------------------------
+@dre2_bp.route('/api/dre2/dfc_anual')
+@login_required
+def api_dre2_dfc_anual():
+    conn = get_db()
+    try:
+        _ensure_tables(conn)
+        rows = conn.execute("""
+            SELECT Ano,
+                   SUM(Entradas)                    AS entradas,
+                   SUM(COALESCE(CMV,0))             AS cmv,
+                   SUM(COALESCE(Pessoal,0))         AS pessoal,
+                   SUM(COALESCE(EncargosTrabalh,0))  AS enc_trabalh,
+                   SUM(COALESCE(Marketing_DFC,0))    AS marketing,
+                   SUM(COALESCE(Infraestrutura,0))   AS infraestrutura,
+                   SUM(COALESCE(Tecnologia,0))       AS tecnologia,
+                   SUM(COALESCE(Frota,0))            AS frota,
+                   SUM(COALESCE(DespAdmin,0))        AS desp_admin,
+                   SUM(COALESCE(Atendimento,0))      AS atendimento,
+                   SUM(COALESCE(Impostos,0))         AS impostos,
+                   SUM(COALESCE(IRPJCSLL,0))         AS irpj_csll,
+                   SUM(COALESCE(DespFin,0))          AS desp_fin,
+                   SUM(COALESCE(Outros,0))           AS outros,
+                   SUM(TotalSaidas)                  AS total_saidas,
+                   SUM(SaldoPeriodo)                 AS saldo_periodo,
+                   MAX(SaldoAcumulado)               AS saldo_acumulado
+            FROM GC_DFC_Mensal
+            GROUP BY Ano ORDER BY Ano
+        """).fetchall()
+        return jsonify({'anos': [dict(r) for r in rows]})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# CAPEX vs OPEX Anual
+# ---------------------------------------------------------------------------
+@dre2_bp.route('/api/dre2/capex_opex')
+@login_required
+def api_dre2_capex_opex():
+    conn = get_db()
+    try:
+        _ensure_tables(conn)
+        sheet_rows = conn.execute("""
+            SELECT Secao, Categoria, Ordem, Ano, Valor
+            FROM GC_CAPEX_OPEX_Sheet
+            ORDER BY Secao, Ordem, Ano
+        """).fetchall()
+
+        anos_set = sorted(set(r['Ano'] for r in sheet_rows))
+
+        def _pivot(secao):
+            cats_ord = {}
+            for r in sheet_rows:
+                if r['Secao'] != secao: continue
+                cat = r['Categoria']
+                if cat not in cats_ord:
+                    cats_ord[cat] = {'cat': cat, 'ordem': r['Ordem'], 'vals': {}}
+                cats_ord[cat]['vals'][r['Ano']] = round(r['Valor'] or 0, 2)
+            items = sorted(cats_ord.values(), key=lambda x: x['ordem'])
+            rb_dre_total = sum(
+                r['Valor'] or 0 for r in sheet_rows
+                if r['Secao'] == 'RB_DRE'
+            )
+            for item in items:
+                tot = sum(item['vals'].values())
+                item['total'] = round(tot, 2)
+                item['pct']   = round(tot / rb_dre_total * 100, 1) if rb_dre_total else 0
+            return items
+
+        def _total_row(secao):
+            vals = {}
+            for r in sheet_rows:
+                if r['Secao'] != secao: continue
+                vals[r['Ano']] = round(r['Valor'] or 0, 2)
+            rb_dre_total = sum(
+                r['Valor'] or 0 for r in sheet_rows
+                if r['Secao'] == 'RB_DRE'
+            )
+            tot = sum(vals.values())
+            return {'vals': vals, 'total': round(tot, 2),
+                    'pct': round(tot / rb_dre_total * 100, 1) if rb_dre_total else 0}
+
+        return jsonify({
+            'anos':           anos_set,
+            'capex':          _pivot('CAPEX'),
+            'opex':           _pivot('OPEX'),
+            'total_capex':    _total_row('TOTAL_CAPEX'),
+            'total_opex':     _total_row('TOTAL_OPEX'),
+            'rb_lancamentos': _total_row('RB_LANCAMENTOS'),
+            'rb_dre':         _total_row('RB_DRE'),
         })
     except Exception as e:
         traceback.print_exc()

@@ -16,7 +16,7 @@ let _dateFrom  = '';
 let _dateTo    = '';
 let _lancPage  = 1;
 let _lancTotal = 0;
-let _lancFilters = { ano: '', grupo: '', situacao: '', search: '', date_from: '', date_to: '' };
+let _lancFilters = { ano: '', mes: '', grupo: '', situacao: '', capex_opex: '', search: '', date_from: '', date_to: '' };
 const PER_PAGE   = 50;
 
 const _MESES = [
@@ -122,6 +122,9 @@ ${isAdmin ? `
   <button class="d2-tab" data-tab="cac">🎯 CAC</button>
   <button class="d2-tab" data-tab="lancamentos">📋 Lançamentos</button>
   <button class="d2-tab" data-tab="metricas">📊 Métricas</button>
+  <button class="d2-tab" data-tab="dre_anual">📊 DRE Estruturado</button>
+  <button class="d2-tab" data-tab="dfc_anual">💹 DFC Anual</button>
+  <button class="d2-tab" data-tab="capex_opex">📉 CAPEX vs OPEX</button>
 </div>
 
 <div id="d2Content"><div class="d2-load">Carregando…</div></div>
@@ -171,7 +174,9 @@ function _bindEvents() {
                 msg.textContent = `✓ DRE:${c.dre} DFC:${c.dfc} CAC:${c.cac} Lanç:${c.lancamentos}`;
                 msg.style.color = '#10b981';
                 document.getElementById('d2ImportStatus').textContent = `${c.dre} meses importados`;
-                _loadTab(_activeTab);
+                _activeTab = 'dre_anual';
+                document.querySelectorAll('.d2-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'dre_anual'));
+                _loadTab('dre_anual');
             }
         } catch (e) {
             msg.textContent = `Erro: ${e}`; msg.style.color = '#ef4444';
@@ -199,6 +204,9 @@ async function _loadTab(tab) {
     else if (tab === 'dfc')         await _renderDfc(root);
     else if (tab === 'cac')         await _renderCac(root);
     else if (tab === 'metricas')    await _renderMetricas(root);
+    else if (tab === 'dre_anual')   await _renderDreAnual(root);
+    else if (tab === 'dfc_anual')   await _renderDfcAnual(root);
+    else if (tab === 'capex_opex')  await _renderCapexOpex(root);
     else if (tab === 'lancamentos') { _lancPage = 1; _lancFilters = { ano: '', grupo: '', situacao: '', search: '', date_from: _dateFrom, date_to: _dateTo }; await _renderLancamentos(root, true); }
 }
 
@@ -562,6 +570,234 @@ async function _renderLancTable() {
 // ─── Tab Métricas — reutiliza renderAuxiliar com período do filtro ─────────────
 async function _renderMetricas(root) {
     await renderAuxiliar(root, { start_date: _dateFrom, end_date: _dateTo });
+}
+
+// ─── DRE Estruturado Anual ───────────────────────────────────────────────────
+async function _renderDreAnual(root) {
+    try {
+        const d = await fetch(`${API}/api/dre2/dre_anual`).then(r => r.json());
+        if (d.error) { root.innerHTML = `<div class="d2-load">Erro: ${d.error}</div>`; return; }
+        const anos = d.anos || [];
+        if (!anos.length) { root.innerHTML = '<div class="d2-load">Sem dados importados.</div>'; return; }
+
+        const R = v => v == null ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2}).format(v);
+        const P = v => v == null ? '' : `${v.toFixed(1)}%`;
+
+        // Totals
+        const T = k => anos.reduce((s,a) => s + (a[k] || 0), 0);
+        const rb_tot = T('receita_bruta');
+        const pT = v => rb_tot ? `${(v/rb_tot*100).toFixed(1)}%` : '';
+
+        const yCols = anos.map(a => `<th class="r">${a.ano}<br><span style="font-size:.66rem;font-weight:400;color:#94a3b8;">(Jan–Dez)</span></th>`).join('');
+        const yVals = (k, cls='') => anos.map(a => `<td class="r ${cls}">${R(a[k])}</td>`).join('');
+        const yPct  = (pk) => anos.map(a => `<td class="r" style="color:#64748b;font-size:.72rem;">${P(a[pk])}</td>`).join('');
+        const yNeg  = (k) => anos.map(a => `<td class="r neg">${a[k] ? R(a[k]) : '—'}</td>`).join('');
+        const ySig  = (k) => anos.map(a => { const v=a[k]||0; return `<td class="r ${v>=0?'pos':'neg'}">${R(v)}</td>`; }).join('');
+
+        const HDR = (label, bg='#1e3a5f', fg='#fff', bold=true) =>
+            `<tr style="background:${bg};"><td colspan="${anos.length+2}" style="color:${fg};font-weight:${bold?700:600};padding:.5rem .7rem;font-size:.8rem;">${label}</td></tr>`;
+        const ROW = (label, vals, tot, indent=false) =>
+            `<tr><td style="${indent?'padding-left:1.6rem;':''}">${label}</td>${vals}<td class="r" style="font-weight:700;">${R(tot)}</td></tr>`;
+        // yPctOf gera células de % para cada ano (sub-linha abaixo do TOTROW)
+        const yPctOf = k => anos.map(a => `<td class="r" style="color:rgba(255,255,255,.6);font-size:.7rem;padding-bottom:.3rem;">${P(a[k])}</td>`).join('');
+        // TOTROW: linha de valor + sub-linha com % da Receita Bruta abaixo
+        const TOTROW = (label, vals, pctCells, tot, totPct, bg='#0f2d5e', fg='#fff') =>
+            `<tr style="background:${bg};font-weight:800;color:${fg};">
+               <td style="padding:.5rem .7rem .2rem;">${label}</td>${vals}
+               <td class="r" style="padding-bottom:.2rem;">${R(tot)}</td>
+             </tr>
+             <tr style="background:${bg};">
+               <td style="padding:.0rem .7rem .4rem 1.3rem;color:rgba(255,255,255,.55);font-size:.68rem;font-style:italic;">% da Receita Bruta</td>${pctCells}
+               <td class="r" style="color:rgba(255,255,255,.6);font-size:.7rem;padding-bottom:.4rem;">${totPct}</td>
+             </tr>`;
+
+        root.innerHTML = `
+<div class="d2-card" style="overflow-x:auto;">
+  <div class="d2-ctitle">📊 DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO (DRE) | Estruturado por Ano <span style="font-size:.72rem;font-weight:400;color:#94a3b8;">— Regime de Competência · Fonte: Excel importado</span></div>
+  <table>
+    <thead>
+      <tr style="background:#0f2d5e;">
+        <th style="color:#fff;min-width:240px;">DESCRIÇÃO</th>
+        ${yCols}
+        <th class="r" style="color:#fff;background:#1e3a5f;">TOTAL</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${HDR('➤ RECEITA BRUTA', '#166534', '#dcfce7')}
+      ${ROW('&nbsp;', yVals('receita_bruta','pos'), T('receita_bruta'))}
+      ${HDR('DEDUÇÕES DA RECEITA', '#374151', '#f9fafb')}
+      ${ROW('&nbsp;&nbsp;– Impostos sobre Vendas (ISS/DAS)', yNeg('impostos_vendas'), T('impostos_vendas'), true)}
+      ${TOTROW('➤ RECEITA LÍQUIDA', yVals('receita_liq'), yPctOf('pct_rl'), T('receita_liq'), pT(T('receita_liq')), '#1e40af', '#ffffff')}
+      ${HDR('CUSTOS DIRETOS (CMV)', '#374151', '#f9fafb')}
+      ${ROW('&nbsp;&nbsp;– Compras / Materiais / Equipamentos / Comissões', yNeg('cmv'), T('cmv'), true)}
+      ${TOTROW('➤ LUCRO BRUTO', yVals('lucro_bruto'), yPctOf('pct_lb'), T('lucro_bruto'), pT(T('lucro_bruto')), '#0369a1', '#e0f2fe')}
+      ${HDR('DESPESAS OPERACIONAIS (OPEX)', '#374151', '#f9fafb')}
+      ${ROW('&nbsp;&nbsp;– Pessoal + Pró-labore (Salários, Remunerações)', yNeg('pessoal'), T('pessoal'), true)}
+      ${ROW('&nbsp;&nbsp;– Encargos Trabalhistas', yNeg('enc_trabalh'), T('enc_trabalh'), true)}
+      ${ROW('&nbsp;&nbsp;– Marketing e Publicidade', yNeg('marketing'), T('marketing'), true)}
+      ${ROW('&nbsp;&nbsp;– Infraestrutura (Aluguel/Postes/Energia)', yNeg('infraestrutura'), T('infraestrutura'), true)}
+      ${ROW('&nbsp;&nbsp;– Tecnologia e Conectividade (TI)', yNeg('tecnologia'), T('tecnologia'), true)}
+      ${ROW('&nbsp;&nbsp;– Frota e Combustível', yNeg('frota'), T('frota'), true)}
+      ${ROW('&nbsp;&nbsp;– Atendimento ao Cliente (Call Center)', yNeg('atendimento'), T('atendimento'), true)}
+      ${ROW('&nbsp;&nbsp;– Demais Despesas Administrativas', yNeg('desp_admin'), T('desp_admin'), true)}
+      ${TOTROW('➤ EBITDA (LAJIDA)', anos.map(a=>{const v=a.ebitda||0;return`<td class="r ${v>=0?'':'neg'}" style="color:${v>=0?'#dcfce7':'#fecaca'};">${R(v)}</td>`;}).join(''), yPctOf('pct_ebitda'), T('ebitda'), pT(T('ebitda')), '#1e3a5f', '#e0e7ff')}
+      ${HDR('DEPRECIAÇÃO E AMORTIZAÇÃO', '#374151', '#f9fafb')}
+      ${ROW('&nbsp;&nbsp;– Depreciação de Ativos (não disponível)', anos.map(()=>'<td class="r" style="color:#94a3b8;font-style:italic;">—</td>').join(''), null, true)}
+      ${TOTROW('➤ EBIT (LAJIR)', anos.map(a=>{const v=a.ebitda||0;return`<td class="r" style="color:${v>=0?'#dcfce7':'#fecaca'};">${R(v)}</td>`;}).join(''), yPctOf('pct_ebitda'), T('ebitda'), pT(T('ebitda')), '#1e3a5f', '#e0e7ff')}
+      ${HDR('RESULTADO FINANCEIRO', '#374151', '#f9fafb')}
+      ${ROW('&nbsp;&nbsp;– Despesas Financeiras (Dívidas/Tarifas)', yNeg('desp_fin'), T('desp_fin'), true)}
+      ${ROW('&nbsp;&nbsp;– Outros / Extraordinários', yNeg('outros'), T('outros'), true)}
+      ${TOTROW('➤ LUCRO ANTES DO IR (LAIR)', anos.map(a=>{const v=a.resultado||0;return`<td class="r ${v>=0?'':'neg'}" style="color:${v>=0?'#dcfce7':'#fecaca'};">${R(v)}</td>`;}).join(''), yPctOf('pct_res'), T('resultado'), pT(T('resultado')), '#92400e', '#fef3c7')}
+      ${HDR('IMPOSTO DE RENDA E CONTRIBUIÇÃO SOCIAL', '#374151', '#f9fafb')}
+      ${ROW('&nbsp;&nbsp;– IRPJ / CSLL', anos.map(a=>`<td class="r">${a.irpj_csll ? R(a.irpj_csll) : '—'}</td>`).join(''), T('irpj_csll') || null, true)}
+      ${TOTROW('➤ LUCRO LÍQUIDO', anos.map(a=>{const v=a.lucro_liq||0;return`<td class="r" style="color:${v>=0?'#dcfce7':'#fecaca'};">${R(v)}</td>`;}).join(''), yPctOf('pct_ll'), T('lucro_liq'), pT(T('lucro_liq')), '#166534', '#dcfce7')}
+    </tbody>
+  </table>
+  <p style="font-size:.68rem;color:#94a3b8;margin-top:.6rem;">Fonte: aba 📋 DRE Estruturado do Excel importado. Regime de competência.</p>
+</div>`;
+    } catch(e) { root.innerHTML = `<div class="d2-load">Erro: ${e}</div>`; }
+}
+
+// ─── DFC Anual ───────────────────────────────────────────────────────────────
+async function _renderDfcAnual(root) {
+    try {
+        const d = await fetch(`${API}/api/dre2/dfc_anual`).then(r => r.json());
+        if (d.error) { root.innerHTML = `<div class="d2-load">Erro: ${d.error}</div>`; return; }
+        const anos = d.anos || [];
+        if (!anos.length) { root.innerHTML = '<div class="d2-load">Sem dados importados.</div>'; return; }
+
+        const R = v => v == null ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2}).format(v);
+        const T = k => anos.reduce((s,a) => s + (a[k] || 0), 0);
+
+        const yCols = anos.map(a => `<th class="r">${a.Ano}</th>`).join('');
+        const yR    = k => anos.map(a => `<td class="r">${R(a[k] || 0)}</td>`).join('');
+        const yNeg  = k => anos.map(a => `<td class="r neg">${R(a[k] || 0)}</td>`).join('');
+        const yPos  = k => anos.map(a => `<td class="r pos">${R(a[k] || 0)}</td>`).join('');
+        const ySig  = k => anos.map(a => { const v=a[k]||0; return `<td class="r ${v>=0?'pos':'neg'}">${R(v)}</td>`; }).join('');
+
+        const HDR = (label, bg='#1e3a5f', fg='#fff') =>
+            `<tr style="background:${bg};"><td colspan="${anos.length+2}" style="color:${fg};font-weight:700;padding:.5rem .7rem;font-size:.8rem;">${label}</td></tr>`;
+        const ROW = (num, label, vals, tot) =>
+            `<tr><td><span style="color:#64748b;font-size:.72rem;margin-right:.4rem;">${num}</span>${label}</td>${vals}<td class="r" style="font-weight:700;">${R(tot)}</td></tr>`;
+        const TOTROW = (label, vals, tot, bg, fg='#fff') =>
+            `<tr style="background:${bg};font-weight:800;"><td style="color:${fg};padding:.5rem .7rem;">${label}</td>${vals}<td class="r" style="color:${fg};">${R(tot)}</td></tr>`;
+
+        root.innerHTML = `
+<div class="d2-card" style="overflow-x:auto;">
+  <div class="d2-ctitle">💹 FLUXO DE CAIXA ANUAL | Regime de Caixa <span style="font-size:.72rem;font-weight:400;color:#94a3b8;">— Fonte: Excel importado · Entradas: Data Pagamento | Saídas: Data Confirmação</span></div>
+  <table>
+    <thead>
+      <tr style="background:#0f2d5e;">
+        <th style="color:#fff;min-width:260px;">DESCRIÇÃO</th>
+        ${yCols}
+        <th class="r" style="color:#fff;background:#1e3a5f;">TOTAL</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${HDR('⬆ ENTRADAS', '#166534', '#dcfce7')}
+      <tr><td style="padding-left:1rem;font-weight:700;color:#10b981;">Entradas de Caixa</td>${yPos('entradas')}<td class="r pos" style="font-weight:800;">${R(T('entradas'))}</td></tr>
+      ${HDR('⬇ SAÍDAS POR CATEGORIA', '#1e3a5f', '#e0e7ff')}
+      ${ROW('1.',  'Custos Diretos (CMV)',             yNeg('cmv'),           T('cmv'))}
+      ${ROW('2.',  'Pessoal',                          yNeg('pessoal'),       T('pessoal'))}
+      ${ROW('3.',  'Encargos Trabalhistas',             yNeg('enc_trabalh'),   T('enc_trabalh'))}
+      ${ROW('4.',  'Marketing e Publicidade',           yNeg('marketing'),     T('marketing'))}
+      ${ROW('5.',  'Infraestrutura',                    yNeg('infraestrutura'),T('infraestrutura'))}
+      ${ROW('6.',  'Tecnologia e Conectividade',        yNeg('tecnologia'),    T('tecnologia'))}
+      ${ROW('7.',  'Frota e Combustível',               yNeg('frota'),         T('frota'))}
+      ${ROW('8.',  'Despesas Administrativas',          yNeg('desp_admin'),    T('desp_admin'))}
+      ${ROW('9.',  'Atendimento ao Cliente',            yNeg('atendimento'),   T('atendimento'))}
+      ${ROW('10.', 'Impostos e Taxas',                  yNeg('impostos'),      T('impostos'))}
+      ${ROW('11.', 'IRPJ / CSLL',                      yNeg('irpj_csll'),     T('irpj_csll'))}
+      ${ROW('12.', 'Despesas Financeiras',              yNeg('desp_fin'),      T('desp_fin'))}
+      ${ROW('13.', 'Outros / Extraordinários',          yNeg('outros'),        T('outros'))}
+      ${TOTROW('TOTAL SAÍDAS', anos.map(a=>`<td class="r neg" style="color:#fecaca;">${R(a.total_saidas||0)}</td>`).join(''), T('total_saidas'), '#7f1d1d', '#fecaca')}
+      ${HDR('RESULTADO', '#374151', '#f9fafb')}
+      <tr><td style="padding-left:1rem;">Saldo do Período</td>${ySig('saldo_periodo')}<td class="r ${T('saldo_periodo')>=0?'pos':'neg'}" style="font-weight:700;">${R(T('saldo_periodo'))}</td></tr>
+      <tr style="background:#fffbeb;font-weight:800;">
+        <td style="color:#92400e;padding:.5rem .7rem;">SALDO ACUMULADO (fim do ano)</td>
+        ${anos.map(a=>`<td class="r" style="color:#92400e;">${R(a.saldo_acumulado||0)}</td>`).join('')}
+        <td class="r" style="color:#92400e;">${R(anos[anos.length-1]?.saldo_acumulado||0)}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>`;
+    } catch(e) { root.innerHTML = `<div class="d2-load">Erro: ${e}</div>`; }
+}
+
+// ─── CAPEX vs OPEX Anual ─────────────────────────────────────────────────────
+async function _renderCapexOpex(root) {
+    try {
+        const d = await fetch(`${API}/api/dre2/capex_opex`).then(r => r.json());
+        if (d.error) { root.innerHTML = `<div class="d2-load">Erro: ${d.error}</div>`; return; }
+        const { anos, capex, opex, total_capex, total_opex, rb_lancamentos, rb_dre } = d;
+        if (!anos || !anos.length) { root.innerHTML = '<div class="d2-load">Sem dados importados.</div>'; return; }
+
+        const R  = v => (v == null || v === 0) ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2}).format(v);
+        const Rv = v => v == null ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2}).format(v);
+
+        const nCols = anos.length + 2; // descrição + anos + total + %receita = anos+3, mas colspan usa anos+3
+
+        const yCols = anos.map(a => `<th class="r" style="color:#fff;">${a}<br><span style="font-size:.64rem;font-weight:400;color:#94a3b8;">(Jan–Dez)</span></th>`).join('');
+
+        const HDR = (label, bg, fg='#fff') =>
+            `<tr style="background:${bg};"><td colspan="${anos.length+3}" style="color:${fg};font-weight:700;padding:.55rem .8rem;font-size:.84rem;">${label}</td></tr>`;
+
+        const CAT_ROW = (item, fg='#1e293b') =>
+            `<tr>
+               <td style="padding-left:1.3rem;color:${fg};">${item.cat}</td>
+               ${anos.map(a => `<td class="r" style="color:${fg};">${R(item.vals[a])}</td>`).join('')}
+               <td class="r" style="font-weight:700;color:${fg};">${Rv(item.total)}</td>
+               <td class="r" style="color:#64748b;font-size:.72rem;">${item.pct.toFixed(1)}%</td>
+             </tr>`;
+
+        const TOT_ROW = (label, tdata, bg, fg='#fff') =>
+            `<tr style="background:${bg};font-weight:800;">
+               <td style="color:${fg};padding:.5rem .8rem;">${label}</td>
+               ${anos.map(a => `<td class="r" style="color:${fg};">${Rv(tdata.vals[a])}</td>`).join('')}
+               <td class="r" style="color:${fg};">${Rv(tdata.total)}</td>
+               <td class="r" style="color:${fg};font-size:.72rem;">${tdata.pct.toFixed(1)}%</td>
+             </tr>`;
+
+        root.innerHTML = `
+<div class="d2-card" style="overflow-x:auto;">
+  <div class="d2-ctitle" style="font-size:1rem;">RESUMO CAPEX vs OPEX | <span style="font-size:.72rem;font-weight:400;">Jan/2022 – Mai/2026</span></div>
+  <div style="font-size:.7rem;color:#94a3b8;margin-bottom:.8rem;">📌 CAPEX = investimento em ativos (não entra no DRE) | OPEX = despesa operacional (entra no DRE) | Base: Data de Competência</div>
+  <table>
+    <thead>
+      <tr style="background:#0f2d5e;">
+        <th style="color:#fff;min-width:220px;"></th>
+        ${yCols}
+        <th class="r" style="color:#fff;background:#1e3a5f;">TOTAL<br><span style="font-size:.64rem;font-weight:400;">2022–2026</span></th>
+        <th class="r" style="color:#94a3b8;font-size:.72rem;">% RECEITA<br><span style="font-weight:400;">(total)</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      ${HDR('CAPEX — INVESTIMENTOS', '#166534', '#dcfce7')}
+      ${(capex||[]).map(item => CAT_ROW(item, '#166534')).join('')}
+      ${total_capex ? TOT_ROW('TOTAL CAPEX', total_capex, '#14532d', '#dcfce7') : ''}
+
+      ${HDR('OPEX — DESPESAS OPERACIONAIS', '#312e81', '#e0e7ff')}
+      ${(opex||[]).map(item => CAT_ROW(item, '#1e1b4b')).join('')}
+      ${total_opex ? TOT_ROW('TOTAL OPEX', total_opex, '#1e1b4b', '#e0e7ff') : ''}
+
+      ${HDR('TOTAL GERAL (CAPEX + OPEX)', '#1f2937', '#f9fafb')}
+      ${rb_lancamentos ? `<tr style="background:#f8fafc;">
+        <td style="padding-left:1rem;color:#374151;">Receita Bruta</td>
+        ${anos.map(a => `<td class="r" style="color:#374151;">${Rv(rb_lancamentos.vals[a])}</td>`).join('')}
+        <td class="r" style="font-weight:700;color:#374151;">${Rv(rb_lancamentos.total)}</td>
+        <td class="r" style="color:#64748b;font-size:.72rem;">${rb_lancamentos.pct.toFixed(1)}%</td>
+      </tr>` : ''}
+      ${rb_dre ? `<tr style="background:#dcfce7;font-weight:700;">
+        <td style="padding-left:1rem;color:#166534;">Receita Bruta</td>
+        ${anos.map(a => `<td class="r" style="color:#166534;">${Rv(rb_dre.vals[a])}</td>`).join('')}
+        <td class="r" style="color:#166534;">${Rv(rb_dre.total)}</td>
+        <td class="r" style="color:#166534;font-size:.72rem;">100,0%</td>
+      </tr>` : ''}
+    </tbody>
+  </table>
+  <p style="font-size:.68rem;color:#94a3b8;margin-top:.6rem;">Fonte: aba 📊 CAPEX vs OPEX do Excel importado.</p>
+</div>`;
+    } catch(e) { root.innerHTML = `<div class="d2-load">Erro: ${e}</div>`; }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
