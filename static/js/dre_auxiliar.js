@@ -527,7 +527,16 @@ function _renderKpis(d) {
     const nc  = negRate    > 5 ? '#ef4444' : negRate    > 2 ? '#f59e0b' : '#10b981';
     const cc  = cancelRate > 5 ? '#ef4444' : cancelRate > 2 ? '#f59e0b' : '#10b981';
     const cbc = combRate   > 8 ? '#ef4444' : combRate   > 4 ? '#f59e0b' : '#10b981';
+    const _novos  = k.new_clients    || 0;
+    const _saidas = k.combined_total || 0;
+    const _saidaPct = _novos > 0 ? +(_saidas / _novos * 100).toFixed(1) : 0;
+    const _saidaColor = _saidaPct > 70 ? '#ef4444' : _saidaPct > 40 ? '#f59e0b' : '#10b981';
+
     _fillGrid('auxGridChurn', [
+        { label:'Cancel+Neg / Ativações' + _bd, value: fN(_saidaPct, 1) + '%',
+          sub: `${fI(_saidas)} saídas · ${fI(_novos)} novas ativações`,
+          desc: 'Percentual de saídas (cancelamentos + negativações) sobre as novas ativações no período. Fórmula: (cancel + neg) ÷ novas ativações × 100. Abaixo de 40% = crescimento saudável; 40–70% = atenção; acima de 70% = retenção crítica.',
+          color: _saidaColor },
         { label:'Churn c/ Negativação' + _bd, value: fN(negRate, 2) + '%',
           sub: `${fI(k.neg_total)} neg no período ÷ ${fI(k.active_clients)} ativos`,
           desc: 'Total de negativações no período selecionado dividido pelos clientes ativos.',
@@ -998,7 +1007,7 @@ function _populateCacCheckboxes(subgrupos) {
     if (!container) return;
 
     // Pré-selecionar subgrupos típicos de aquisição
-    const defaultKeywords = ['3.7','4.7','4.1','comissão','comissoes','marketing','prestação','prestacao'];
+    const defaultKeywords = ['3.2','3.3','3.4','3.5','3.6','3.7','4.7'];
     subgrupos.forEach(s => {
         const sl = s.toLowerCase();
         if (defaultKeywords.some(k => sl.includes(k))) _cacSelected.add(s);
