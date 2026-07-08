@@ -736,7 +736,7 @@ def api_crescimento_analises():
         cohort_rows = conn.execute("""
             SELECT STRFTIME('%Y-%m', Data_ativa_o) AS mes,
                    COUNT(*) AS total,
-                   SUM(CASE WHEN Status_contrato = 'Ativo' THEN 1 ELSE 0 END) AS ativos
+                   SUM(CASE WHEN Status_acesso IN ('Ativo', 'Financeiro em atraso') THEN 1 ELSE 0 END) AS ativos
             FROM Contratos
             WHERE Data_ativa_o IS NOT NULL AND Data_ativa_o != ''
               AND Data_ativa_o >= DATE('now', '-18 months')

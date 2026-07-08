@@ -660,8 +660,16 @@ def api_dre_auxiliar():
         if end_date:   os_c.append("Abertura <= ?"); os_p.append(end_date)
         where_os = ' AND '.join(os_c)
 
+        _truck_types = (
+            "UPPER(Assunto) LIKE '%MUDAN%PONTO%'"
+            " OR UPPER(Assunto) LIKE '%MANUTEN%FIBRA%'"
+            " OR UPPER(Assunto) LIKE '%VISITA%TECNI%'"
+            " OR UPPER(Assunto) LIKE '%VISITA%TÉCNI%'"
+            " OR UPPER(Assunto) LIKE '%RETORNO%MANUTEN%'"
+            " OR UPPER(Assunto) LIKE '%REATIVA%CLIENTE%'"
+        )
         os_total = conn.execute(
-            f"SELECT COUNT(*) FROM OS WHERE {where_os}", os_p
+            f"SELECT COUNT(*) FROM OS WHERE ({_truck_types}) AND {where_os}", os_p
         ).fetchone()[0] or 0
         truck_per_client = os_total / active_q if active_q > 0 else 0.0
 

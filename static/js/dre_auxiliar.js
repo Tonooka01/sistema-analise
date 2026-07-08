@@ -650,7 +650,7 @@ function _renderKpis(d) {
     _fillGrid('auxGridOps', [
         { label:'Truck Rolls / cliente' + _bd, value: fN(k.truck_per_client, 2),
           sub: `${fI(k.truck_rolls)} OS no período`,
-          desc: 'Conta TODAS as Ordens de Serviço abertas na tabela OS no período, sem filtro de tipo (instalações, manutenções, oscilações, visitas técnicas, etc.). Fórmula: total de OS ÷ clientes ativos atualmente. ISPs eficientes ficam abaixo de 0,5 OS/cliente no período. Valor alto sugere problemas de qualidade de rede ou retrabalho em instalações.',
+          desc: 'Conta OS dos tipos: Mudança de Ponto, Manutenção de Fibra, Visita Técnica, Retorno Manutenção e Reativação Cliente. Fórmula: total dessas OS ÷ clientes ativos atualmente. Exclui instalações e outros tipos operacionais. ISPs eficientes ficam abaixo de 0,5 OS/cliente no período. Valor alto sugere problemas de rede recorrentes ou retrabalho.',
           color:'#0f2d5e' },
         { label:'MTTR' + _bd, value: fN(k.mttr_hours, 1) + 'h',
           sub: 'Tempo médio de reparo (OS manutenção/falha)',
