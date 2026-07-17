@@ -1200,7 +1200,8 @@ def api_inadimplencia_mensal():
                 SUM(CASE WHEN Status = 'Cancelado'  THEN Valor ELSE 0 END) AS cancelados
             FROM Contas_a_Receber
             WHERE Vencimento IS NOT NULL
-              AND Vencimento >= DATE('now', '-13 months')
+              AND STRFTIME('%Y-%m', Vencimento) >= STRFTIME('%Y-%m', DATE('now', '-12 months'))
+              AND STRFTIME('%Y-%m', Vencimento) <= STRFTIME('%Y-%m', 'now')
             GROUP BY mes
             ORDER BY mes
         """).fetchall()
