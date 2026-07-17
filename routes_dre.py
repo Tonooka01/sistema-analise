@@ -1182,6 +1182,53 @@ def _make_tuple(v):
     )
 
 
+# ---------------------------------------------------------------------------
+# GET /api/dre/inadimplencia_mensal
+# Retorna os últimos 13 meses de Contas_a_Receber agrupados por Vencimento
+# com breakdown: Baixados (Recebido) / Abertos (A receber) / C.vencidos (Cancelado)
+# ---------------------------------------------------------------------------
+@dre_bp.route('/inadimplencia_mensal')
+@login_required
+def api_inadimplencia_mensal():
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT
+                STRFTIME('%Y-%m', Vencimento) AS mes,
+                SUM(CASE WHEN Status = 'Recebido'   THEN Valor ELSE 0 END) AS baixados,
+                SUM(CASE WHEN Status = 'A receber'  THEN Valor ELSE 0 END) AS abertos,
+                SUM(CASE WHEN Status = 'Cancelado'  THEN Valor ELSE 0 END) AS cancelados
+            FROM Contas_a_Receber
+            WHERE Vencimento IS NOT NULL
+              AND Vencimento >= DATE('now', '-13 months')
+            GROUP BY mes
+            ORDER BY mes
+        """).fetchall()
+
+        result = []
+        for r in rows:
+            b = r['baixados']  or 0.0
+            a = r['abertos']   or 0.0
+            c = r['cancelados'] or 0.0
+            total = b + a + c
+            if total == 0:
+                continue
+            inadimpl = round((a + c) / total * 100, 1)
+            result.append({
+                'mes':           r['mes'],
+                'baixados_pct':  round(b / total * 100, 1),
+                'abertos_pct':   round(a / total * 100, 1),
+                'cancelados_pct': round(c / total * 100, 1),
+                'inadimpl':      inadimpl,
+            })
+        return jsonify(result)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
 def _str(v):
     if v is None:
         return None
