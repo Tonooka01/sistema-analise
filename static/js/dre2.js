@@ -768,7 +768,7 @@ async function _renderCapexOpex(root) {
         <th style="color:#fff;min-width:220px;"></th>
         ${yCols}
         <th class="r" style="color:#fff;background:#1e3a5f;">TOTAL<br><span style="font-size:.64rem;font-weight:400;">2022–2026</span></th>
-        <th class="r" style="color:#94a3b8;font-size:.72rem;">% RECEITA<br><span style="font-weight:400;">(total)</span></th>
+        <th class="r" style="color:#94a3b8;font-size:.72rem;">% DESPESAS<br><span style="font-weight:400;">(total)</span></th>
       </tr>
     </thead>
     <tbody>
