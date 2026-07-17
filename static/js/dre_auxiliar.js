@@ -10,8 +10,9 @@ import { formatCurrency } from './utils.js';
 const API          = state.API_BASE_URL;
 const MONTHS_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
-let _auxChart     = null;
-let _motivoChart  = null;
+let _auxChart       = null;
+let _motivoChart    = null;
+let _inadimplChart  = null;
 let _cacSelected  = new Set();
 let _stContrato   = new Set(['Ativo']);
 let _stAcesso     = new Set(['Ativo']);
@@ -271,6 +272,26 @@ function _auxShell() {
             </div>
         </div>
 
+        <!-- Inadimplência mensal -->
+        <div style="background:#fff;border-radius:12px;padding:1.25rem;
+                    box-shadow:0 2px 8px rgba(15,45,94,0.08);border:1px solid #dde3ec;
+                    margin-bottom:1.5rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;
+                        margin-bottom:0.875rem;padding-bottom:0.6rem;border-bottom:2px solid #ef4444;">
+                <span style="font-size:0.875rem;font-weight:700;color:#0f2d5e;">
+                    Inadimplência Mensal
+                </span>
+                <div style="display:flex;gap:0.75rem;font-size:0.72rem;color:#64748b;align-items:center;">
+                    <span><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;margin-right:3px;"></span>Baixados</span>
+                    <span><span style="display:inline-block;width:9px;height:9px;background:#f59e0b;border-radius:2px;margin-right:3px;"></span>Abertos</span>
+                    <span><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:3px;"></span>C.vencidos</span>
+                </div>
+            </div>
+            <div style="position:relative;height:200px;">
+                <canvas id="auxInadimplChart"></canvas>
+            </div>
+        </div>
+
         <!-- CAC / LTV -->
         <div class="aux-section">
             <h3 class="aux-section-title">💰 Aquisição: CAC · LTV · Payback</h3>
@@ -370,6 +391,12 @@ async function _loadAux() {
         _renderMotivoChart(d.churn_by_motivo || []);
         _renderChart(d.trend);
         _renderCityTable(d.city_penetracao);
+
+        // Gráfico de inadimplência (endpoint separado — série temporal fixa 13 meses)
+        fetch(`${API}/api/dre/inadimplencia_mensal`)
+            .then(r => r.ok ? r.json() : null)
+            .then(inad => { if (inad && !inad.error) _renderInadimplChart(inad); })
+            .catch(() => {});
 
         if (loading) loading.style.display = 'none';
         if (content) content.style.display = '';
@@ -953,6 +980,74 @@ function _renderChart(trend) {
                     stacked: true,
                     grid: { display:false },
                     ticks: { font:{ size:10 }, stepSize:1 },
+                },
+            },
+        },
+    });
+}
+
+// ============================================================
+// Inadimplência mensal (stacked 100% bar)
+// ============================================================
+function _renderInadimplChart(data) {
+    const canvas = document.getElementById('auxInadimplChart');
+    if (!canvas) return;
+    if (_inadimplChart) { _inadimplChart.destroy(); _inadimplChart = null; }
+    if (!data?.length) return;
+
+    const labels = data.map(d => {
+        const [y, m] = d.mes.split('-');
+        return `${d.inadimpl}% ${m}/${y.slice(2)}`;
+    });
+
+    _inadimplChart = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Baixados',
+                    data: data.map(d => d.baixados_pct),
+                    backgroundColor: '#10b981',
+                    stack: 's',
+                },
+                {
+                    label: 'Abertos',
+                    data: data.map(d => d.abertos_pct),
+                    backgroundColor: '#f59e0b',
+                    stack: 's',
+                },
+                {
+                    label: 'C.vencidos',
+                    data: data.map(d => d.cancelados_pct),
+                    backgroundColor: '#ef4444',
+                    stack: 's',
+                },
+            ],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: items => items[0]?.label || '',
+                        label: ctx => ` ${ctx.dataset.label}: ${(ctx.parsed.y || 0).toFixed(1)}%`,
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    grid: { display: false },
+                    ticks: { font: { size: 9 }, maxRotation: 30, color: '#64748b' },
+                },
+                y: {
+                    stacked: true,
+                    min: 0, max: 100,
+                    ticks: { callback: v => v + '%', font: { size: 10 }, color: '#64748b' },
+                    grid: { color: 'rgba(0,0,0,0.05)' },
                 },
             },
         },
