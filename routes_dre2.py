@@ -740,12 +740,21 @@ def api_dre2_capex_opex():
             return {'vals': vals, 'total': round(tot, 2),
                     'pct': round(tot / rb_dre_total * 100, 1) if rb_dre_total else 0}
 
+        tc = _total_row('TOTAL_CAPEX')
+        to = _total_row('TOTAL_OPEX')
+        rb_dre_total = sum(r['Valor'] or 0 for r in sheet_rows if r['Secao'] == 'RB_DRE')
+        tg_vals = {a: round((tc['vals'].get(a, 0) or 0) + (to['vals'].get(a, 0) or 0), 2)
+                   for a in anos_set}
+        tg_tot = round(sum(tg_vals.values()), 2)
+
         return jsonify({
             'anos':           anos_set,
             'capex':          _pivot('CAPEX'),
             'opex':           _pivot('OPEX'),
-            'total_capex':    _total_row('TOTAL_CAPEX'),
-            'total_opex':     _total_row('TOTAL_OPEX'),
+            'total_capex':    tc,
+            'total_opex':     to,
+            'total_geral':    {'vals': tg_vals, 'total': tg_tot,
+                               'pct': round(tg_tot / rb_dre_total * 100, 1) if rb_dre_total else 0},
             'rb_lancamentos': _total_row('RB_LANCAMENTOS'),
             'rb_dre':         _total_row('RB_DRE'),
         })

@@ -729,7 +729,7 @@ async function _renderCapexOpex(root) {
     try {
         const d = await fetch(`${API}/api/dre2/capex_opex`).then(r => r.json());
         if (d.error) { root.innerHTML = `<div class="d2-load">Erro: ${d.error}</div>`; return; }
-        const { anos, capex, opex, total_capex, total_opex, rb_lancamentos, rb_dre } = d;
+        const { anos, capex, opex, total_capex, total_opex, total_geral, rb_lancamentos, rb_dre } = d;
         if (!anos || !anos.length) { root.innerHTML = '<div class="d2-load">Sem dados importados.</div>'; return; }
 
         const R  = v => (v == null || v === 0) ? '—' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2}).format(v);
@@ -781,14 +781,15 @@ async function _renderCapexOpex(root) {
       ${total_opex ? TOT_ROW('TOTAL OPEX', total_opex, '#1e1b4b', '#e0e7ff') : ''}
 
       ${HDR('TOTAL GERAL (CAPEX + OPEX)', '#1f2937', '#f9fafb')}
-      ${rb_lancamentos ? `<tr style="background:#f8fafc;">
-        <td style="padding-left:1rem;color:#374151;">Receita Bruta</td>
+      ${total_geral ? TOT_ROW('TOTAL GERAL', total_geral, '#374151', '#f1f5f9') : ''}
+      ${rb_lancamentos && rb_lancamentos.total ? `<tr style="background:#f8fafc;">
+        <td style="padding-left:1rem;color:#374151;font-size:.82rem;">📋 Receita Bruta (Lançamentos)</td>
         ${anos.map(a => `<td class="r" style="color:#374151;">${Rv(rb_lancamentos.vals[a])}</td>`).join('')}
         <td class="r" style="font-weight:700;color:#374151;">${Rv(rb_lancamentos.total)}</td>
         <td class="r" style="color:#64748b;font-size:.72rem;">${rb_lancamentos.pct.toFixed(1)}%</td>
       </tr>` : ''}
-      ${rb_dre ? `<tr style="background:#dcfce7;font-weight:700;">
-        <td style="padding-left:1rem;color:#166534;">Receita Bruta</td>
+      ${rb_dre && rb_dre.total ? `<tr style="background:#dcfce7;font-weight:700;">
+        <td style="padding-left:1rem;color:#166534;font-size:.82rem;">📊 Receita Bruta (DRE)</td>
         ${anos.map(a => `<td class="r" style="color:#166534;">${Rv(rb_dre.vals[a])}</td>`).join('')}
         <td class="r" style="color:#166534;">${Rv(rb_dre.total)}</td>
         <td class="r" style="color:#166534;font-size:.72rem;">100,0%</td>
