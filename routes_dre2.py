@@ -252,7 +252,9 @@ def _import_excel(conn, file_bytes):
             continue
         for ci, yr in year_cols.items():
             raw = row[ci] if ci < len(row) else None
-            val_f = None if raw is None else _f(raw)
+            if raw is None:
+                continue  # nunca sobrescreve com None (ex: notas de rodapé que batem no label)
+            val_f = _f(raw)
             conn.execute(
                 "INSERT OR REPLACE INTO GC_DRE_Estruturado (Ano, Campo, Valor) VALUES (?,?,?)",
                 (yr, campo, val_f)
@@ -605,7 +607,7 @@ def api_dre2_dre_anual():
         for ano in sorted(est.keys()):
             d   = est[ano]
             rb  = g(d, 'receita_bruta')
-            rr  = g(d, 'receita_real')
+            rr  = g(d, 'receita_real') or rb  # fallback: se receita_real não importada ainda
             inadimpl = g(d, 'inadimplencia_est')
             iss = g(d, 'impostos_vendas')
             rl  = g(d, 'receita_liq')
