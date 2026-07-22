@@ -331,7 +331,9 @@ def build_active_clients_evolution_query(
 
     sql = f"""
         WITH AllContracts AS (
-            SELECT ID, Data_ativa_o, Data_cancelamento AS End_Date,
+            SELECT ID, Data_ativa_o,
+                   CASE WHEN Data_cancelamento IS NULL OR Data_cancelamento = '0000-00-00' OR Data_cancelamento = ''
+                        THEN NULL ELSE Data_cancelamento END AS End_Date,
                    Status_contrato, Status_acesso, Cidade
             FROM Contratos
             WHERE Data_ativa_o IS NOT NULL
