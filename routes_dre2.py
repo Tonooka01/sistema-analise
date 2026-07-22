@@ -200,6 +200,8 @@ def _import_excel(conn, file_bytes):
     _LABEL_MAP = {
         'RECEITA BRUTA':               'receita_bruta',
         'FATURAMENTO BRUTO':           'receita_bruta',
+        'RECEITA REAL':                'receita_real',
+        'Inadimplência':               'inadimplencia_est',
         'Impostos sobre Vendas':       'impostos_vendas',
         'RECEITA LÍQUIDA':             'receita_liq',
         'Compras / Materiais':         'cmv',
@@ -410,7 +412,7 @@ def api_dre2_dre():
         """, params).fetchall()
 
         data = [dict(r) for r in rows]
-        r_total   = sum(r['ReceitaBruta']  or 0 for r in data)
+        r_total   = sum(r['AReceber']  or 0 for r in data)
         d_total   = sum(r['TotalDespesas'] or 0 for r in data)
         res_total = sum(r['Resultado']     or 0 for r in data)
 
@@ -603,6 +605,8 @@ def api_dre2_dre_anual():
         for ano in sorted(est.keys()):
             d   = est[ano]
             rb  = g(d, 'receita_bruta')
+            rr  = g(d, 'receita_real')
+            inadimpl = g(d, 'inadimplencia_est')
             iss = g(d, 'impostos_vendas')
             rl  = g(d, 'receita_liq')
             cmv = g(d, 'cmv')
@@ -622,10 +626,15 @@ def api_dre2_dre_anual():
             ir       = g(d, 'irpj_csll')
             lair     = g(d, 'resultado')
             ll       = g(d, 'lucro_liq')
-            def pct(n, base=rb): return round(n / base * 100, 1) if base else 0
+            def pct(n, base=rr): return round(n / base * 100, 1) if base else 0
+            def pct_of_rb(n): return round(n / rb * 100, 1) if rb else 0
             years.append({
                 'ano': ano,
-                'receita_bruta':  round(rb,  2), 'impostos_vendas': round(iss, 2),
+                'receita_bruta':  round(rb,  2),
+                'receita_real':   round(rr,  2),
+                'inadimplencia_est': round(inadimpl, 2),
+                'pct_rr':         pct_of_rb(rr),
+                'impostos_vendas': round(iss, 2),
                 'receita_liq':    round(rl,  2), 'pct_rl':  pct(rl),
                 'cmv':            round(cmv, 2),
                 'lucro_bruto':    round(lb,  2), 'pct_lb':  pct(lb),

@@ -220,7 +220,7 @@ async function _renderDre(root) {
         root.innerHTML = `
 <div class="d2-kpis">
   <div class="d2-kpi" style="border-left:4px solid #3b82f6;">
-    <div class="d2-kpi-lbl">Receita Bruta</div>
+    <div class="d2-kpi-lbl">Receita Real</div>
     <div class="d2-kpi-val">${_brl(k.receita)}</div>
   </div>
   <div class="d2-kpi" style="border-left:4px solid #ef4444;">
@@ -245,13 +245,13 @@ async function _renderDre(root) {
   <div style="overflow-x:auto;">
   <table>
     <thead><tr>
-      <th>Mês</th><th class="r">Receita Bruta</th><th class="r">CMV</th>
+      <th>Mês</th><th class="r">Receita Real</th><th class="r">CMV</th>
       <th class="r">Desp. Oper.</th><th class="r">Encargos</th><th class="r">Desp. Fin.</th>
       <th class="r">Total Desp.</th><th class="r">Resultado</th><th class="r">Margem</th>
     </tr></thead>
     <tbody>${d.data.map(r => `<tr>
       <td>${r.AnoMes}</td>
-      <td class="r">${_brl(r.ReceitaBruta)}</td>
+      <td class="r">${_brl(r.AReceber)}</td>
       <td class="r">${_brl(r.CMV)}</td>
       <td class="r">${_brl(r.DespOp)}</td>
       <td class="r">${_brl(r.Encargos)}</td>
@@ -269,7 +269,7 @@ async function _renderDre(root) {
             data: {
                 labels: d.data.map(r => r.AnoMes),
                 datasets: [
-                    { label: 'Receita Bruta',  data: d.data.map(r => r.ReceitaBruta  || 0), backgroundColor: 'rgba(59,130,246,.55)', yAxisID: 'y' },
+                    { label: 'Receita Real',  data: d.data.map(r => r.AReceber  || 0), backgroundColor: 'rgba(59,130,246,.55)', yAxisID: 'y' },
                     { label: 'Total Despesas', data: d.data.map(r => r.TotalDespesas || 0), backgroundColor: 'rgba(239,68,68,.55)',   yAxisID: 'y' },
                     { label: 'Resultado',      data: d.data.map(r => r.Resultado     || 0), type: 'line', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.1)', tension: .3, pointRadius: 3, borderWidth: 2, yAxisID: 'y' },
                     { label: 'Margem %',       data: d.data.map(r => (r.Margem || 0) * 100), type: 'line', borderColor: '#8b5cf6', borderDash: [5,3], tension: .3, pointRadius: 0, borderWidth: 1.5, yAxisID: 'y2' },
@@ -586,7 +586,9 @@ async function _renderDreAnual(root) {
         // Totals
         const T = k => anos.reduce((s,a) => s + (a[k] || 0), 0);
         const rb_tot = T('receita_bruta');
-        const pT = v => rb_tot ? `${(v/rb_tot*100).toFixed(1)}%` : '';
+        const rr_tot = T('receita_real');
+        const pT     = v => rr_tot ? `${(v/rr_tot*100).toFixed(1)}%` : '';    // base = Receita Real
+        const pT_rb  = v => rb_tot ? `${(v/rb_tot*100).toFixed(1)}%` : '';    // base = Faturamento
 
         const yCols = anos.map(a => `<th class="r">${a.ano}<br><span style="font-size:.66rem;font-weight:400;color:#94a3b8;">(Jan–Dez)</span></th>`).join('');
         const yVals = (k, cls='') => anos.map(a => `<td class="r ${cls}">${R(a[k])}</td>`).join('');
@@ -607,7 +609,7 @@ async function _renderDreAnual(root) {
                <td class="r" style="padding-bottom:.2rem;">${R(tot)}</td>
              </tr>
              <tr style="background:${bg};">
-               <td style="padding:.0rem .7rem .4rem 1.3rem;color:rgba(255,255,255,.55);font-size:.68rem;font-style:italic;">% da Receita Bruta</td>${pctCells}
+               <td style="padding:.0rem .7rem .4rem 1.3rem;color:rgba(255,255,255,.55);font-size:.68rem;font-style:italic;">% da Receita Real</td>${pctCells}
                <td class="r" style="color:rgba(255,255,255,.6);font-size:.7rem;padding-bottom:.4rem;">${totPct}</td>
              </tr>`;
 
@@ -623,8 +625,11 @@ async function _renderDreAnual(root) {
       </tr>
     </thead>
     <tbody>
-      ${HDR('➤ RECEITA BRUTA', '#166534', '#dcfce7')}
+      ${HDR('➤ FATURAMENTO BRUTO (s/ cancelados)', '#166534', '#dcfce7')}
       ${ROW('&nbsp;', yVals('receita_bruta','pos'), T('receita_bruta'))}
+      ${HDR('DEDUÇÕES DO FATURAMENTO', '#374151', '#f9fafb')}
+      ${ROW('&nbsp;&nbsp;– Inadimplência (A receber vencido)', yNeg('inadimplencia_est'), T('inadimplencia_est'), true)}
+      ${TOTROW('➤ RECEITA REAL (Valor Recebido)', yVals('receita_real','pos'), yPctOf('pct_rr'), T('receita_real'), pT_rb(T('receita_real')), '#065f46', '#d1fae5')}
       ${HDR('DEDUÇÕES DA RECEITA', '#374151', '#f9fafb')}
       ${ROW('&nbsp;&nbsp;– Impostos sobre Vendas (ISS/DAS)', yNeg('impostos_vendas'), T('impostos_vendas'), true)}
       ${TOTROW('➤ RECEITA LÍQUIDA', yVals('receita_liq'), yPctOf('pct_rl'), T('receita_liq'), pT(T('receita_liq')), '#1e40af', '#ffffff')}
@@ -653,7 +658,7 @@ async function _renderDreAnual(root) {
       ${TOTROW('➤ LUCRO LÍQUIDO', anos.map(a=>{const v=a.lucro_liq||0;return`<td class="r" style="color:${v>=0?'#dcfce7':'#fecaca'};">${R(v)}</td>`;}).join(''), yPctOf('pct_ll'), T('lucro_liq'), pT(T('lucro_liq')), '#166534', '#dcfce7')}
     </tbody>
   </table>
-  <p style="font-size:.68rem;color:#94a3b8;margin-top:.6rem;">Fonte: aba 📋 DRE Estruturado do Excel importado. Regime de competência.</p>
+  <p style="font-size:.68rem;color:#94a3b8;margin-top:.6rem;">Fonte: aba 📋 DRE Estruturado do Excel importado. Regime de competência. % calculados sobre Receita Real (Valor Recebido).</p>
 </div>`;
     } catch(e) { root.innerHTML = `<div class="d2-load">Erro: ${e}</div>`; }
 }
