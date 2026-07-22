@@ -602,11 +602,19 @@ async function _renderDreAnual(root) {
             `<tr><td style="${indent?'padding-left:1.6rem;':''}">${label}</td>${vals}<td class="r" style="font-weight:700;">${R(tot)}</td></tr>`;
         // yPctOf gera células de % para cada ano (sub-linha abaixo do TOTROW)
         const yPctOf = k => anos.map(a => `<td class="r" style="color:rgba(255,255,255,.9);font-size:.7rem;padding-bottom:.3rem;">${P(a[k])}</td>`).join('');
+        // yValsOnDark: células com cor explícita para usar em linhas de fundo escuro
+        const yValsOnDark = (k) => anos.map(a => {
+            const v = a[k];
+            const c = (v != null && v < 0) ? '#fecaca' : '#fff';
+            return `<td class="r" style="color:${c};font-weight:800;">${v != null ? R(v) : '—'}</td>`;
+        }).join('');
         // TOTROW: linha de valor + sub-linha com % da Receita Real abaixo
+        // IMPORTANTE: td herdado do tr não recebe cor via CSS (regra #dre2-root td sobrescreve),
+        // por isso cada td de TOTROW precisa de color explícito no inline style
         const TOTROW = (label, vals, pctCells, tot, totPct, bg='#0f2d5e', fg='#fff') =>
-            `<tr style="background:${bg};font-weight:800;color:${fg};">
-               <td style="padding:.5rem .7rem .2rem;">${label}</td>${vals}
-               <td class="r" style="padding-bottom:.2rem;">${R(tot)}</td>
+            `<tr style="background:${bg};font-weight:800;">
+               <td style="padding:.5rem .7rem .2rem;color:${fg};">${label}</td>${vals}
+               <td class="r" style="padding-bottom:.2rem;color:${fg};font-weight:800;">${R(tot)}</td>
              </tr>
              <tr style="background:${bg};">
                <td style="padding:.0rem .7rem .4rem 1.3rem;color:rgba(255,255,255,.85);font-size:.68rem;font-style:italic;">% da Receita Real</td>${pctCells}
@@ -629,13 +637,13 @@ async function _renderDreAnual(root) {
       ${ROW('&nbsp;', yVals('receita_bruta','pos'), T('receita_bruta'))}
       ${HDR('DEDUÇÕES DO FATURAMENTO', '#374151', '#f9fafb')}
       ${ROW('&nbsp;&nbsp;– Inadimplência (A receber vencido)', yNeg('inadimplencia_est'), T('inadimplencia_est'), true)}
-      ${TOTROW('➤ RECEITA REAL (Valor Recebido)', yVals('receita_real','pos'), yPctOf('pct_rr'), T('receita_real'), pT_rb(T('receita_real')), '#065f46', '#ffffff')}
+      ${TOTROW('➤ RECEITA REAL (Valor Recebido)', yValsOnDark('receita_real'), yPctOf('pct_rr'), T('receita_real'), pT_rb(T('receita_real')), '#065f46', '#ffffff')}
       ${HDR('DEDUÇÕES DA RECEITA', '#374151', '#f9fafb')}
       ${ROW('&nbsp;&nbsp;– Impostos sobre Vendas (ISS/DAS)', yNeg('impostos_vendas'), T('impostos_vendas'), true)}
-      ${TOTROW('➤ RECEITA LÍQUIDA', yVals('receita_liq'), yPctOf('pct_rl'), T('receita_liq'), pT(T('receita_liq')), '#1e40af', '#ffffff')}
+      ${TOTROW('➤ RECEITA LÍQUIDA', yValsOnDark('receita_liq'), yPctOf('pct_rl'), T('receita_liq'), pT(T('receita_liq')), '#1e40af', '#ffffff')}
       ${HDR('CUSTOS DIRETOS (CMV)', '#374151', '#f9fafb')}
       ${ROW('&nbsp;&nbsp;– Compras / Materiais / Equipamentos / Comissões', yNeg('cmv'), T('cmv'), true)}
-      ${TOTROW('➤ LUCRO BRUTO', yVals('lucro_bruto'), yPctOf('pct_lb'), T('lucro_bruto'), pT(T('lucro_bruto')), '#0369a1', '#ffffff')}
+      ${TOTROW('➤ LUCRO BRUTO', yValsOnDark('lucro_bruto'), yPctOf('pct_lb'), T('lucro_bruto'), pT(T('lucro_bruto')), '#0369a1', '#ffffff')}
       ${HDR('DESPESAS OPERACIONAIS (OPEX)', '#374151', '#f9fafb')}
       ${ROW('&nbsp;&nbsp;– Pessoal + Pró-labore (Salários, Remunerações)', yNeg('pessoal'), T('pessoal'), true)}
       ${ROW('&nbsp;&nbsp;– Encargos Trabalhistas', yNeg('enc_trabalh'), T('enc_trabalh'), true)}
