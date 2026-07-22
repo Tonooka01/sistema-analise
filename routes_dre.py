@@ -763,7 +763,9 @@ def api_dre_auxiliar():
         try:
             city_rows = conn.execute("""
                 SELECT CO.Cidade AS cidade, COUNT(*) AS ativos,
-                       (SELECT COUNT(*) FROM Clientes CL WHERE CL.Cidade = CO.Cidade) AS cadastrados
+                       (SELECT COUNT(*) FROM Contratos C2
+                        WHERE C2.Cidade = CO.Cidade
+                          AND C2.Cidade NOT GLOB '[0-9]*') AS cadastrados
                 FROM Contratos CO
                 WHERE CO.Status_contrato = 'Ativo' AND CO.Cidade IS NOT NULL AND CO.Cidade != ''
                   AND CO.Cidade NOT GLOB '[0-9]*'

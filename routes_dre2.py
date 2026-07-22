@@ -199,6 +199,7 @@ def _import_excel(conn, file_bytes):
     # --- DRE Estruturado (fonte direta para api_dre2_dre_anual) ---
     _LABEL_MAP = {
         'RECEITA BRUTA':               'receita_bruta',
+        'FATURAMENTO BRUTO':           'receita_bruta',
         'Impostos sobre Vendas':       'impostos_vendas',
         'RECEITA LÍQUIDA':             'receita_liq',
         'Compras / Materiais':         'cmv',
