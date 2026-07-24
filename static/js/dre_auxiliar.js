@@ -281,10 +281,12 @@ function _auxShell() {
                 <span style="font-size:0.875rem;font-weight:700;color:#0f2d5e;">
                     Inadimplência Mensal
                 </span>
-                <div style="display:flex;gap:0.75rem;font-size:0.72rem;color:#64748b;align-items:center;">
+                <div style="display:flex;gap:0.75rem;font-size:0.72rem;color:#64748b;align-items:center;flex-wrap:wrap;">
                     <span><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;margin-right:3px;"></span>Baixados</span>
-                    <span><span style="display:inline-block;width:9px;height:9px;background:#f59e0b;border-radius:2px;margin-right:3px;"></span>Abertos</span>
-                    <span><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:3px;"></span>C.vencidos</span>
+                    <span><span style="display:inline-block;width:9px;height:9px;background:#3b82f6;border-radius:2px;margin-right:3px;"></span>Abertos</span>
+                    <span><span style="display:inline-block;width:9px;height:9px;background:#a855f7;border-radius:2px;margin-right:3px;"></span>Renegociados</span>
+                    <span><span style="display:inline-block;width:9px;height:9px;background:#f59e0b;border-radius:2px;margin-right:3px;"></span>Canc. Vencidos</span>
+                    <span><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:3px;"></span>Cancelados</span>
                 </div>
             </div>
             <div style="position:relative;height:200px;">
@@ -1021,11 +1023,25 @@ function _renderInadimplChart(data) {
                     label: 'Abertos',
                     data: data.map(d => d.abertos_pct),
                     rawValues: data.map(d => d.abertos),
+                    backgroundColor: '#3b82f6',
+                    stack: 's',
+                },
+                {
+                    label: 'Renegociados',
+                    data: data.map(d => d.renegociados_pct),
+                    rawValues: data.map(d => d.renegociados),
+                    backgroundColor: '#a855f7',
+                    stack: 's',
+                },
+                {
+                    label: 'Canc. Vencidos',
+                    data: data.map(d => d.canc_vencidos_pct),
+                    rawValues: data.map(d => d.canc_vencidos),
                     backgroundColor: '#f59e0b',
                     stack: 's',
                 },
                 {
-                    label: 'C.vencidos',
+                    label: 'Cancelados',
                     data: data.map(d => d.cancelados_pct),
                     rawValues: data.map(d => d.cancelados),
                     backgroundColor: '#ef4444',
@@ -1043,7 +1059,8 @@ function _renderInadimplChart(data) {
                         title: items => {
                             const i = items[0]?.dataIndex;
                             const total = data[i]?.total;
-                            return `${items[0]?.label || ''}   Total: ${total != null ? fmtBRL(total) : ''}`;
+                            const inadimpl = data[i]?.inadimpl;
+                            return `${items[0]?.label || ''}   Total: ${total != null ? fmtBRL(total) : ''}   Inadimpl: ${inadimpl ?? ''}%`;
                         },
                         label: ctx => {
                             const raw = ctx.dataset.rawValues?.[ctx.dataIndex];

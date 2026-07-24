@@ -1211,9 +1211,11 @@ def api_inadimplencia_mensal():
         rows = conn.execute(f"""
             SELECT
                 STRFTIME('%Y-%m', Vencimento) AS mes,
-                SUM(CASE WHEN Status = 'Recebido'   THEN Valor ELSE 0 END) AS baixados,
-                SUM(CASE WHEN Status = 'A receber'  THEN Valor ELSE 0 END) AS abertos,
-                SUM(CASE WHEN Status = 'Cancelado'  THEN Valor ELSE 0 END) AS cancelados
+                SUM(CASE WHEN Status = 'Recebido' THEN Valor ELSE 0 END)                                                                         AS baixados,
+                SUM(CASE WHEN Status = 'A receber' AND DATE(Vencimento) >= DATE('now') THEN Valor ELSE 0 END)                                     AS abertos,
+                SUM(CASE WHEN Status = 'Cancelado' AND CAST(Motivo_cancelamento AS TEXT) = '2' THEN Valor ELSE 0 END)                             AS renegociados,
+                SUM(CASE WHEN Status = 'A receber' AND DATE(Vencimento) < DATE('now') THEN Valor ELSE 0 END)                                      AS canc_vencidos,
+                SUM(CASE WHEN Status = 'Cancelado' AND (Motivo_cancelamento IS NULL OR CAST(Motivo_cancelamento AS TEXT) != '2') THEN Valor ELSE 0 END) AS cancelados
             FROM Contas_a_Receber
             WHERE {' AND '.join(where)}
             GROUP BY mes
@@ -1222,23 +1224,29 @@ def api_inadimplencia_mensal():
 
         result = []
         for r in rows:
-            b = r['baixados']  or 0.0
-            a = r['abertos']   or 0.0
-            c = r['cancelados'] or 0.0
-            total = b + a + c
+            b  = r['baixados']     or 0.0
+            ab = r['abertos']      or 0.0
+            rn = r['renegociados'] or 0.0
+            cv = r['canc_vencidos'] or 0.0
+            ca = r['cancelados']   or 0.0
+            total = b + ab + rn + cv + ca
             if total == 0:
                 continue
-            inadimpl = round((a + c) / total * 100, 1)
+            inadimpl = round((ab + cv + ca) / total * 100, 1)
             result.append({
-                'mes':            r['mes'],
-                'baixados_pct':   round(b / total * 100, 1),
-                'abertos_pct':    round(a / total * 100, 1),
-                'cancelados_pct': round(c / total * 100, 1),
-                'inadimpl':       inadimpl,
-                'baixados':       round(b, 2),
-                'abertos':        round(a, 2),
-                'cancelados':     round(c, 2),
-                'total':          round(total, 2),
+                'mes':              r['mes'],
+                'baixados_pct':     round(b  / total * 100, 1),
+                'abertos_pct':      round(ab / total * 100, 1),
+                'renegociados_pct': round(rn / total * 100, 1),
+                'canc_vencidos_pct':round(cv / total * 100, 1),
+                'cancelados_pct':   round(ca / total * 100, 1),
+                'inadimpl':         inadimpl,
+                'baixados':         round(b,  2),
+                'abertos':          round(ab, 2),
+                'renegociados':     round(rn, 2),
+                'canc_vencidos':    round(cv, 2),
+                'cancelados':       round(ca, 2),
+                'total':            round(total, 2),
             })
         return jsonify(result)
     except Exception as e:
