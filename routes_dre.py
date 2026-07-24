@@ -1215,7 +1215,7 @@ def api_inadimplencia_mensal():
                 SUM(CASE WHEN Status = 'A receber' THEN Valor ELSE 0 END)                                                                                                AS abertos,
                 SUM(CASE WHEN Status = 'Cancelado' AND COALESCE(CAST(Motivo_cancelamento AS TEXT),'') = '2' THEN Valor ELSE 0 END)                                       AS renegociados,
                 SUM(CASE WHEN Status = 'Cancelado' AND COALESCE(CAST(Motivo_cancelamento AS TEXT),'') != '2' AND DATE(Vencimento) < DATE('now') THEN Valor ELSE 0 END)   AS canc_vencidos,
-                SUM(CASE WHEN Status = 'Cancelado' AND COALESCE(CAST(Motivo_cancelamento AS TEXT),'') != '2' AND DATE(Vencimento) >= DATE('now') THEN Valor ELSE 0 END)  AS cancelados
+                SUM(CASE WHEN Status = 'Cancelado' AND DATE(Vencimento) >= DATE('now') THEN Valor ELSE 0 END)                                                             AS cancelados
             FROM Contas_a_Receber
             WHERE {' AND '.join(where)}
             GROUP BY mes

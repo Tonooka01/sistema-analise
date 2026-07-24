@@ -289,8 +289,10 @@ function _auxShell() {
                     <span><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:3px;"></span>Cancelados</span>
                 </div>
             </div>
-            <div style="position:relative;height:200px;">
-                <canvas id="auxInadimplChart"></canvas>
+            <div style="overflow-x:auto;width:100%;">
+                <div style="position:relative;height:260px;min-width:780px;">
+                    <canvas id="auxInadimplChart"></canvas>
+                </div>
             </div>
         </div>
 
