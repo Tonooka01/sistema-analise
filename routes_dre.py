@@ -1194,19 +1194,31 @@ def _make_tuple(v):
 def api_inadimplencia_mensal():
     conn = get_db()
     try:
-        rows = conn.execute("""
+        start_date = request.args.get('start_date', '')
+        end_date   = request.args.get('end_date', '')
+
+        where = ["Vencimento IS NOT NULL"]
+        params = []
+        if start_date:
+            where.append("DATE(Vencimento) >= ?"); params.append(start_date)
+        else:
+            where.append("STRFTIME('%Y-%m', Vencimento) >= STRFTIME('%Y-%m', DATE('now', '-12 months'))")
+        if end_date:
+            where.append("DATE(Vencimento) <= ?"); params.append(end_date)
+        else:
+            where.append("STRFTIME('%Y-%m', Vencimento) <= STRFTIME('%Y-%m', 'now')")
+
+        rows = conn.execute(f"""
             SELECT
                 STRFTIME('%Y-%m', Vencimento) AS mes,
                 SUM(CASE WHEN Status = 'Recebido'   THEN Valor ELSE 0 END) AS baixados,
                 SUM(CASE WHEN Status = 'A receber'  THEN Valor ELSE 0 END) AS abertos,
                 SUM(CASE WHEN Status = 'Cancelado'  THEN Valor ELSE 0 END) AS cancelados
             FROM Contas_a_Receber
-            WHERE Vencimento IS NOT NULL
-              AND STRFTIME('%Y-%m', Vencimento) >= STRFTIME('%Y-%m', DATE('now', '-12 months'))
-              AND STRFTIME('%Y-%m', Vencimento) <= STRFTIME('%Y-%m', 'now')
+            WHERE {' AND '.join(where)}
             GROUP BY mes
             ORDER BY mes
-        """).fetchall()
+        """, params).fetchall()
 
         result = []
         for r in rows:

@@ -392,8 +392,11 @@ async function _loadAux() {
         _renderChart(d.trend);
         _renderCityTable(d.city_penetracao);
 
-        // Gráfico de inadimplência (endpoint separado — série temporal fixa 13 meses)
-        fetch(`${API}/api/dre/inadimplencia_mensal`)
+        // Gráfico de inadimplência — passa filtros de data
+        const inadParams = new URLSearchParams();
+        if (_auxFilters.start_date) inadParams.set('start_date', _auxFilters.start_date);
+        if (_auxFilters.end_date)   inadParams.set('end_date',   _auxFilters.end_date);
+        fetch(`${API}/api/dre/inadimplencia_mensal?${inadParams}`)
             .then(r => r.ok ? r.json() : null)
             .then(inad => { if (inad && !inad.error) _renderInadimplChart(inad); })
             .catch(() => {});
