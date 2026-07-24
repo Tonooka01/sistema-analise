@@ -284,8 +284,6 @@ function _auxShell() {
                 <div style="display:flex;gap:0.75rem;font-size:0.72rem;color:#64748b;align-items:center;flex-wrap:wrap;">
                     <span><span style="display:inline-block;width:9px;height:9px;background:#10b981;border-radius:2px;margin-right:3px;"></span>Baixados</span>
                     <span><span style="display:inline-block;width:9px;height:9px;background:#3b82f6;border-radius:2px;margin-right:3px;"></span>Abertos</span>
-                    <span><span style="display:inline-block;width:9px;height:9px;background:#a855f7;border-radius:2px;margin-right:3px;"></span>Renegociados</span>
-                    <span><span style="display:inline-block;width:9px;height:9px;background:#f59e0b;border-radius:2px;margin-right:3px;"></span>Canc. Vencidos</span>
                     <span><span style="display:inline-block;width:9px;height:9px;background:#ef4444;border-radius:2px;margin-right:3px;"></span>Cancelados</span>
                 </div>
             </div>
@@ -1046,20 +1044,6 @@ function _renderInadimplChart(data) {
                     data: data.map(d => d.abertos_pct),
                     rawValues: data.map(d => d.abertos),
                     backgroundColor: '#3b82f6',
-                    stack: 's',
-                },
-                {
-                    label: 'Renegociados',
-                    data: data.map(d => d.renegociados_pct),
-                    rawValues: data.map(d => d.renegociados),
-                    backgroundColor: '#a855f7',
-                    stack: 's',
-                },
-                {
-                    label: 'Canc. Vencidos',
-                    data: data.map(d => d.canc_vencidos_pct),
-                    rawValues: data.map(d => d.canc_vencidos),
-                    backgroundColor: '#f59e0b',
                     stack: 's',
                 },
                 {
