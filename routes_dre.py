@@ -1211,11 +1211,11 @@ def api_inadimplencia_mensal():
         rows = conn.execute(f"""
             SELECT
                 STRFTIME('%Y-%m', Vencimento) AS mes,
-                SUM(CASE WHEN Status = 'Recebido' THEN Valor ELSE 0 END)                                                                         AS baixados,
-                SUM(CASE WHEN Status = 'A receber' AND DATE(Vencimento) >= DATE('now') THEN Valor ELSE 0 END)                                     AS abertos,
-                SUM(CASE WHEN Status = 'Cancelado' AND CAST(Motivo_cancelamento AS TEXT) = '2' THEN Valor ELSE 0 END)                             AS renegociados,
-                SUM(CASE WHEN Status = 'A receber' AND DATE(Vencimento) < DATE('now') THEN Valor ELSE 0 END)                                      AS canc_vencidos,
-                SUM(CASE WHEN Status = 'Cancelado' AND (Motivo_cancelamento IS NULL OR CAST(Motivo_cancelamento AS TEXT) != '2') THEN Valor ELSE 0 END) AS cancelados
+                SUM(CASE WHEN Status = 'Recebido' THEN Valor ELSE 0 END)                                                                                                              AS baixados,
+                SUM(CASE WHEN Status = 'A receber' THEN Valor ELSE 0 END)                                                                                                             AS abertos,
+                SUM(CASE WHEN Status = 'Cancelado' AND CAST(Motivo_cancelamento AS TEXT) = '2' THEN Valor ELSE 0 END)                                                                 AS renegociados,
+                SUM(CASE WHEN Status = 'Cancelado' AND CAST(Motivo_cancelamento AS TEXT) != '2' AND DATE(Vencimento) < DATE('now') THEN Valor ELSE 0 END)                             AS canc_vencidos,
+                SUM(CASE WHEN Status = 'Cancelado' AND (Motivo_cancelamento IS NULL OR CAST(Motivo_cancelamento AS TEXT) != '2') AND DATE(Vencimento) >= DATE('now') THEN Valor ELSE 0 END) AS cancelados
             FROM Contas_a_Receber
             WHERE {' AND '.join(where)}
             GROUP BY mes
