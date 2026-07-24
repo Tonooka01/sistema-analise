@@ -1000,6 +1000,8 @@ function _renderInadimplChart(data) {
         return `${d.inadimpl}% ${m}/${y.slice(2)}`;
     });
 
+    const fmtBRL = v => new Intl.NumberFormat('pt-BR', {style:'currency', currency:'BRL', minimumFractionDigits:0, maximumFractionDigits:0}).format(v);
+
     _inadimplChart = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
@@ -1008,18 +1010,21 @@ function _renderInadimplChart(data) {
                 {
                     label: 'Baixados',
                     data: data.map(d => d.baixados_pct),
+                    rawValues: data.map(d => d.baixados),
                     backgroundColor: '#10b981',
                     stack: 's',
                 },
                 {
                     label: 'Abertos',
                     data: data.map(d => d.abertos_pct),
+                    rawValues: data.map(d => d.abertos),
                     backgroundColor: '#f59e0b',
                     stack: 's',
                 },
                 {
                     label: 'C.vencidos',
                     data: data.map(d => d.cancelados_pct),
+                    rawValues: data.map(d => d.cancelados),
                     backgroundColor: '#ef4444',
                     stack: 's',
                 },
@@ -1032,8 +1037,26 @@ function _renderInadimplChart(data) {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        title: items => items[0]?.label || '',
-                        label: ctx => ` ${ctx.dataset.label}: ${(ctx.parsed.y || 0).toFixed(1)}%`,
+                        title: items => {
+                            const i = items[0]?.dataIndex;
+                            const total = data[i]?.total;
+                            return `${items[0]?.label || ''}   Total: ${total != null ? fmtBRL(total) : ''}`;
+                        },
+                        label: ctx => {
+                            const raw = ctx.dataset.rawValues?.[ctx.dataIndex];
+                            const pct = (ctx.parsed.y || 0).toFixed(1);
+                            return ` ${ctx.dataset.label}: ${pct}%  (${raw != null ? fmtBRL(raw) : '—'})`;
+                        },
+                    },
+                },
+                datalabels: {
+                    color: '#fff',
+                    font: { size: 8, weight: '700' },
+                    textAlign: 'center',
+                    formatter: (val, ctx) => {
+                        if (val < 4) return '';
+                        const raw = ctx.dataset.rawValues?.[ctx.dataIndex];
+                        return `${val.toFixed(1)}%\n${raw != null ? fmtBRL(raw) : ''}`;
                     },
                 },
             },

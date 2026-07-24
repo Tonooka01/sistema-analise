@@ -1218,11 +1218,15 @@ def api_inadimplencia_mensal():
                 continue
             inadimpl = round((a + c) / total * 100, 1)
             result.append({
-                'mes':           r['mes'],
-                'baixados_pct':  round(b / total * 100, 1),
-                'abertos_pct':   round(a / total * 100, 1),
+                'mes':            r['mes'],
+                'baixados_pct':   round(b / total * 100, 1),
+                'abertos_pct':    round(a / total * 100, 1),
                 'cancelados_pct': round(c / total * 100, 1),
-                'inadimpl':      inadimpl,
+                'inadimpl':       inadimpl,
+                'baixados':       round(b, 2),
+                'abertos':        round(a, 2),
+                'cancelados':     round(c, 2),
+                'total':          round(total, 2),
             })
         return jsonify(result)
     except Exception as e:
