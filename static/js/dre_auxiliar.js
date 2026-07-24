@@ -1007,6 +1007,26 @@ function _renderInadimplChart(data) {
 
     const fmtBRL = v => new Intl.NumberFormat('pt-BR', {style:'currency', currency:'BRL', minimumFractionDigits:0, maximumFractionDigits:0}).format(v);
 
+    const totalLabelPlugin = {
+        id: 'inadimplTotals',
+        afterDatasetsDraw(chart) {
+            const { ctx, scales } = chart;
+            if (!scales.x || !scales.y) return;
+            ctx.save();
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillStyle = '#0f2d5e';
+            data.forEach((d, i) => {
+                if (!d.total) return;
+                const xPos = scales.x.getPixelForValue(i);
+                const yPos = scales.y.getPixelForValue(100) - 3;
+                ctx.fillText(fmtBRL(d.total), xPos, yPos);
+            });
+            ctx.restore();
+        },
+    };
+
     _inadimplChart = new Chart(canvas.getContext('2d'), {
         type: 'bar',
         data: {
@@ -1094,6 +1114,7 @@ function _renderInadimplChart(data) {
                 },
             },
         },
+        plugins: [totalLabelPlugin],
     });
 }
 
