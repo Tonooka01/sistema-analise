@@ -789,12 +789,44 @@ def _sync_vendedores(conn, token, log):
 _MAP_STATUS_COMODATO = {'E': 'Emprestado', 'D': 'Devolvido', 'B': 'Baixa'}
 
 def _sync_equipamentos(conn, token, log):
-    # O endpoint estoque_comodato não está habilitado na API IXC desta instância.
-    # Requer liberação pelo suporte IXCSoft (SUP - API).
-    # Os dados existentes (importados via CSV manual) são preservados.
-    total = conn.execute("SELECT COUNT(*) FROM Equipamento").fetchone()[0]
-    log.append(f"→ Equipamentos: endpoint não disponível na API IXC — {total} registros existentes preservados.")
-    log.append("  ℹ️  Para sync automático, solicite a rota 'estoque_comodato' ao suporte IXCSoft.")
+    log.append("→ Equipamentos (comodato)...")
+    # Endpoint cliente_contrato_comodato funciona sem sortname/qtype.
+    # Qualquer sortname causa "Ocorreu um erro ao processar" nesta instância.
+    try:
+        records = _ixc_get('cliente_contrato_comodato', {}, token)
+    except Exception as e:
+        log.append(f"  ⚠️  Erro ao buscar comodatos: {e}")
+        return
+
+    if not records:
+        log.append("  ⚠️  Nenhum registro retornado.")
+        return
+
+    conn.execute("DELETE FROM Equipamento")
+
+    rows = []
+    for r in records:
+        status_raw = str(r.get('status_comodato') or '').strip()
+        status = _MAP_STATUS_COMODATO.get(status_raw, status_raw)
+        rows.append((
+            r.get('id_contrato'),
+            '',                                   # Raz_o_social_nome (não retornado)
+            '',                                   # Bloqueio_manual (não retornado)
+            str(r.get('descricao') or '').strip(),
+            status,
+            r.get('data') or '',
+            r.get('id_produto'),
+            r.get('quantidade') or '',
+        ))
+
+    conn.executemany("""
+        INSERT INTO Equipamento
+            (ID_contrato, Raz_o_social_nome, Bloqueio_manual, Descricao_produto,
+             Status_comodato, Data, ID_produto, Quantidade)
+        VALUES (?,?,?,?,?,?,?,?)
+    """, rows)
+    conn.commit()
+    log.append(f"  ✅ {len(rows)} registros de comodato sincronizados.")
 
 
 def _sync_plano_venda(conn, token, log):
