@@ -790,50 +790,54 @@ _MAP_STATUS_COMODATO = {'E': 'Emprestado', 'D': 'Devolvido', 'B': 'Baixa'}
 
 def _sync_equipamentos(conn, token, log):
     log.append("→ Equipamentos (comodato)...")
-    records = []
 
-    # Tentativa 1: filtro por id_contrato > 0
-    try:
-        records = _ixc_get('estoque_comodato', {
-            'qtype': 'estoque_comodato.id_contrato', 'query': '0', 'oper': '>',
-            'sortname': 'estoque_comodato.id_contrato', 'sortorder': 'asc',
-        }, token)
-        if records:
-            logger.info(f"[equipamentos] tentativa 1 OK — campos: {list(records[0].keys())}")
-    except Exception as e:
-        logger.warning(f"[equipamentos] tentativa 1 falhou: {e}")
+    # ── Diagnóstico: ver o que a API retorna de verdade ──────────────────────
+    encoded = base64.b64encode(token.encode()).decode()
+    _hdrs = {'Authorization': f'Basic {encoded}', 'ixcsoft': 'listar'}
 
-    # Tentativa 2: sem filtro
-    if not records:
+    def _raw(endpoint, data):
         try:
-            records = _ixc_get('estoque_comodato', {
-                'sortname': 'estoque_comodato.id_contrato', 'sortorder': 'asc',
-            }, token)
-            if records:
-                logger.info(f"[equipamentos] tentativa 2 OK — campos: {list(records[0].keys())}")
+            r = requests.post(f'{IXC_BASE_URL}/{endpoint}', data=data,
+                              headers=_hdrs, timeout=30, verify=False)
+            j = r.json() if 'json' in r.headers.get('content-type', '') else {}
+            total = j.get('total', '?')
+            regs  = j.get('registros') or []
+            fields = list(regs[0].keys()) if regs else []
+            msg = f"  [diag/{endpoint}] HTTP={r.status_code} total={total} campos={fields}"
+            if not fields:
+                msg += f" raw={r.text[:300]}"
+            log.append(msg)
+            logger.info(msg)
+            return regs
         except Exception as e:
-            logger.warning(f"[equipamentos] tentativa 2 falhou: {e}")
+            msg = f"  [diag/{endpoint}] ERRO: {e}"
+            log.append(msg); logger.warning(msg)
+            return []
 
-    # Tentativa 3: qb_query com SQL direto (espelha o CSV exportado manualmente)
+    # Teste 1: endpoint REST sem filtro
+    records = _raw('estoque_comodato',
+                   {'sortname': 'estoque_comodato.id_contrato', 'sortorder': 'asc',
+                    'rp': '500', 'page': '1'})
+
+    # Teste 2: qb_query com tabela interna
     if not records:
-        try:
-            records = _ixc_query_builder(
-                "SELECT ec.id_contrato, cc.razao_social AS razao_social_nome, "
-                "ec.bloqueio_manual, p.descricao AS descricao_produto, "
-                "ec.status_comodato, ec.data, ec.id_produto, ec.quantidade "
-                "FROM estoque_comodato ec "
-                "LEFT JOIN cliente_contrato cc ON cc.id = ec.id_contrato "
-                "LEFT JOIN produto p ON p.id = ec.id_produto",
-                token
-            )
-            if records:
-                logger.info(f"[equipamentos] tentativa 3 (qb_query) OK — campos: {list(records[0].keys())}")
-        except Exception as e:
-            logger.warning(f"[equipamentos] tentativa 3 falhou: {e}")
+        records = _raw('qb_query', {'query':
+            "SELECT ec.id_contrato, cc.razao_social AS razao_social_nome, "
+            "ec.bloqueio_manual, p.descricao AS descricao_produto, "
+            "ec.status_comodato, ec.data, ec.id_produto, ec.quantidade "
+            "FROM estoque_comodato ec "
+            "LEFT JOIN cliente_contrato cc ON cc.id = ec.id_contrato "
+            "LEFT JOIN produto p ON p.id = ec.id_produto LIMIT 5"
+        })
 
     if not records:
-        log.append("  ⚠️  Equipamentos: nenhum registro em nenhuma das 3 tentativas. Verifique o log do servidor.")
+        log.append("  ⚠️  Nenhum registro obtido. Verifique o log acima para diagnóstico.")
         return
+
+    # ── Usa _ixc_get para buscar todos os registros (paginado) ───────────────
+    records = _ixc_get('estoque_comodato', {
+        'sortname': 'estoque_comodato.id_contrato', 'sortorder': 'asc',
+    }, token)
 
     conn.execute("DELETE FROM Equipamento")
 
