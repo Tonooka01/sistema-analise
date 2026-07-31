@@ -238,3 +238,60 @@ def api_neighborhood_clients():
         return jsonify({"error": "Erro interno ao processar a solicitação."}), 500
     finally:
         if conn: conn.close()
+
+
+@details_churn_bp.route('/daily_evolution_details')
+def api_daily_evolution_details():
+    conn = get_db()
+    try:
+        city       = request.args.get('city', '')
+        start_date = request.args.get('start_date', '')
+        end_date   = request.args.get('end_date', start_date)
+        limit      = request.args.get('limit', 20, type=int)
+        offset     = request.args.get('offset', 0, type=int)
+
+        if not city or not start_date:
+            abort(400, "city e start_date são obrigatórios.")
+
+        # Ativações no dia/cidade
+        sql_ativ = """
+            SELECT
+                Cliente, ID AS Contrato_ID, Status_contrato, Status_acesso,
+                Data_ativa_o, Data_cancelamento,
+                Descri_o AS Equipamento_Atual,
+                'Ativação' AS Evento
+            FROM Contratos
+            WHERE Cidade = ?
+              AND DATE(Data_ativa_o) >= ? AND DATE(Data_ativa_o) <= ?
+        """
+
+        # Churns no dia/cidade
+        sql_churn = """
+            SELECT
+                Cliente, ID AS Contrato_ID, Status_contrato, Status_acesso,
+                Data_ativa_o, Data_cancelamento,
+                Descri_o AS Equipamento_Atual,
+                'Churn' AS Evento
+            FROM Contratos
+            WHERE Cidade = ?
+              AND DATE(Data_cancelamento) >= ? AND DATE(Data_cancelamento) <= ?
+              AND Status_contrato IN ('Inativo', 'Negativado')
+        """
+
+        base_sql  = f"SELECT * FROM ({sql_ativ} UNION ALL {sql_churn}) AS t"
+        params_count = [city, start_date, end_date, city, start_date, end_date]
+
+        total_rows = conn.execute(f"SELECT COUNT(*) FROM ({base_sql}) AS c", params_count).fetchone()[0]
+
+        data = conn.execute(
+            f"{base_sql} ORDER BY Evento DESC, Cliente LIMIT ? OFFSET ?",
+            params_count + [limit, offset]
+        ).fetchall()
+
+        return jsonify({"data": [dict(r) for r in data], "total_rows": total_rows})
+
+    except Exception as e:
+        logger.error(f"Erro ao buscar detalhes de evolução diária: {e}", exc_info=True)
+        return jsonify({"error": "Erro ao buscar detalhes."}), 500
+    finally:
+        if conn: conn.close()
