@@ -814,21 +814,24 @@ def _sync_equipamentos(conn, token, log):
             log.append(msg); logger.warning(msg)
             return []
 
-    # Teste 1: endpoint REST sem filtro
-    records = _raw('estoque_comodato',
-                   {'sortname': 'estoque_comodato.id_contrato', 'sortorder': 'asc',
-                    'rp': '500', 'page': '1'})
-
-    # Teste 2: qb_query com tabela interna
-    if not records:
-        records = _raw('qb_query', {'query':
-            "SELECT ec.id_contrato, cc.razao_social AS razao_social_nome, "
-            "ec.bloqueio_manual, p.descricao AS descricao_produto, "
-            "ec.status_comodato, ec.data, ec.id_produto, ec.quantidade "
-            "FROM estoque_comodato ec "
-            "LEFT JOIN cliente_contrato cc ON cc.id = ec.id_contrato "
-            "LEFT JOIN produto p ON p.id = ec.id_produto LIMIT 5"
-        })
+    # Testa múltiplos endpoints possíveis para comodato
+    endpoints = [
+        ('cliente_contrato_comodato', {'qtype': 'cliente_contrato_comodato.id', 'query': '1', 'oper': '>=',
+                                       'sortname': 'cliente_contrato_comodato.id', 'sortorder': 'asc',
+                                       'rp': '5', 'page': '1'}),
+        ('estoque_comodato',          {'sortname': 'estoque_comodato.id_contrato', 'sortorder': 'asc',
+                                       'rp': '5', 'page': '1'}),
+        ('comodato',                  {'qtype': 'comodato.id', 'query': '1', 'oper': '>=',
+                                       'sortname': 'comodato.id', 'sortorder': 'asc',
+                                       'rp': '5', 'page': '1'}),
+        ('qb_query',                  {'query': 'SELECT * FROM estoque_comodato LIMIT 1'}),
+    ]
+    records = []
+    for ep, params in endpoints:
+        records = _raw(ep, params)
+        if records:
+            log.append(f"  ✅ Endpoint encontrado: {ep}")
+            break
 
     if not records:
         log.append("  ⚠️  Nenhum registro obtido. Verifique o log acima para diagnóstico.")
