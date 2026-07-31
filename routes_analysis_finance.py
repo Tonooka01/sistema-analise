@@ -186,8 +186,9 @@ def api_faturamento_por_cidade():
                 raise
 
         cities = conn.execute(
-            "SELECT DISTINCT Cidade FROM Contratos "
-            "WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' ORDER BY Cidade"
+            "SELECT DISTINCT Cidade FROM Contas_a_Receber "
+            "WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' "
+            "AND Cidade NOT GLOB '*[0-9]*' ORDER BY Cidade"
         ).fetchall()
 
         return jsonify({

@@ -95,29 +95,14 @@ def build_billing_queries(start_date, end_date, city=""):
     - Cancelado: filtra por Vencimento, soma Valor_cancelado
     - Cidade: join com Contratos para obter cidade correta
     """
-    # Cidade: usa Contratos como fonte pois CR.Cidade pode estar NULL
-    c_car  = " AND C2.Cidade = :city " if city else ""
-    c_join = " AND C.Cidade  = :city " if city else ""
+    # Cidade: usa CR.Cidade diretamente (Contas_a_Receber tem os nomes corretos)
+    cit  = " AND CR.Cidade = :city " if city else ""
 
-    # JOIN de Contas_a_Receber com Contratos para filtro de cidade
-    car_join = (
-        'FROM "Contas_a_Receber" CR '
-        'JOIN "Contratos" C2 ON CR.ID_contrato_recorrente = C2.ID'
-        if city else
-        'FROM "Contas_a_Receber" CR'
-    )
-
+    frm  = 'FROM "Contas_a_Receber" CR'
     join = (
         'FROM "Contas_a_Receber" CR '
         'JOIN "Contratos" AS C ON CR.ID_contrato_recorrente = C.ID'
     )
-
-    # Sem filtro de cidade — usa CR diretamente (mais performático)
-    car_simple = 'FROM "Contas_a_Receber" CR'
-    c_simple   = c_car if city else ""
-
-    frm  = car_join if city else car_simple
-    cit  = c_car    if city else ""
 
     total_query = f"""
         SELECT STRFTIME('%Y-%m', CR.Data_pagamento) AS Month,
@@ -202,7 +187,7 @@ def build_billing_queries(start_date, end_date, city=""):
         WHERE CR.Data_pagamento IS NOT NULL
           AND CR.Data_pagamento != ''
           AND CR.Status = 'Recebido'
-          AND CR.Data_pagamento BETWEEN :start_date AND :end_date {c_join}
+          AND CR.Data_pagamento BETWEEN :start_date AND :end_date {cit}
           AND C.Cliente IN (SELECT Cliente FROM ActiveClients)
         GROUP BY Month
 
@@ -213,7 +198,7 @@ def build_billing_queries(start_date, end_date, city=""):
                SUM(CR.Valor) AS Total_Value
         {join}
         WHERE CR.Status = 'A receber'
-          AND CR.Vencimento BETWEEN :start_date AND :end_date {c_join}
+          AND CR.Vencimento BETWEEN :start_date AND :end_date {cit}
           AND C.Cliente IN (SELECT Cliente FROM ActiveClients)
         GROUP BY Month
 
@@ -224,7 +209,7 @@ def build_billing_queries(start_date, end_date, city=""):
                SUM(CR.Valor_cancelado) AS Total_Value
         {join}
         WHERE CR.Status = 'Cancelado'
-          AND CR.Vencimento BETWEEN :start_date AND :end_date {c_join}
+          AND CR.Vencimento BETWEEN :start_date AND :end_date {cit}
           AND C.Cliente IN (SELECT Cliente FROM ActiveClients)
         GROUP BY Month
     """
