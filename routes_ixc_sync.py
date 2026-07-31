@@ -790,33 +790,58 @@ _MAP_STATUS_COMODATO = {'E': 'Emprestado', 'D': 'Devolvido', 'B': 'Baixa'}
 
 def _sync_equipamentos(conn, token, log):
     log.append("→ Equipamentos (comodato)...")
+    records = []
+
+    # Tentativa 1: filtro por id_contrato > 0
     try:
         records = _ixc_get('estoque_comodato', {
-            'qtype':     'estoque_comodato.id',
-            'query':     '1',
-            'oper':      '>=',
-            'sortname':  'estoque_comodato.id',
-            'sortorder': 'asc',
+            'qtype': 'estoque_comodato.id_contrato', 'query': '0', 'oper': '>',
+            'sortname': 'estoque_comodato.id_contrato', 'sortorder': 'asc',
         }, token)
+        if records:
+            logger.info(f"[equipamentos] tentativa 1 OK — campos: {list(records[0].keys())}")
     except Exception as e:
-        log.append(f"  ⚠️  Equipamentos: erro ao buscar da API — {e}")
-        return
+        logger.warning(f"[equipamentos] tentativa 1 falhou: {e}")
+
+    # Tentativa 2: sem filtro
+    if not records:
+        try:
+            records = _ixc_get('estoque_comodato', {
+                'sortname': 'estoque_comodato.id_contrato', 'sortorder': 'asc',
+            }, token)
+            if records:
+                logger.info(f"[equipamentos] tentativa 2 OK — campos: {list(records[0].keys())}")
+        except Exception as e:
+            logger.warning(f"[equipamentos] tentativa 2 falhou: {e}")
+
+    # Tentativa 3: qb_query com SQL direto (espelha o CSV exportado manualmente)
+    if not records:
+        try:
+            records = _ixc_query_builder(
+                "SELECT ec.id_contrato, cc.razao_social AS razao_social_nome, "
+                "ec.bloqueio_manual, p.descricao AS descricao_produto, "
+                "ec.status_comodato, ec.data, ec.id_produto, ec.quantidade "
+                "FROM estoque_comodato ec "
+                "LEFT JOIN cliente_contrato cc ON cc.id = ec.id_contrato "
+                "LEFT JOIN produto p ON p.id = ec.id_produto",
+                token
+            )
+            if records:
+                logger.info(f"[equipamentos] tentativa 3 (qb_query) OK — campos: {list(records[0].keys())}")
+        except Exception as e:
+            logger.warning(f"[equipamentos] tentativa 3 falhou: {e}")
 
     if not records:
-        log.append("  ⚠️  Equipamentos: nenhum registro retornado pela API.")
+        log.append("  ⚠️  Equipamentos: nenhum registro em nenhuma das 3 tentativas. Verifique o log do servidor.")
         return
-
-    # Log dos campos do primeiro registro para diagnóstico
-    logger.info(f"[equipamentos] campos retornados: {list(records[0].keys())}")
 
     conn.execute("DELETE FROM Equipamento")
 
     rows = []
     for r in records:
         status_raw = str(r.get('status_comodato') or '').strip()
-        status = _MAP_STATUS_COMODATO.get(status_raw, status_raw)
+        status = _MAP_STATUS_COMODATO.get(status_raw, status_raw) or status_raw
 
-        # Tenta campo descricao_produto; fallback para descricao ou nome_produto
         desc = (r.get('descricao_produto')
                 or r.get('descricao')
                 or r.get('nome_produto')
