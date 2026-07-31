@@ -253,39 +253,50 @@ def api_daily_evolution_details():
         if not city or not start_date:
             abort(400, "city e start_date são obrigatórios.")
 
-        # Ativações no dia/cidade
-        sql_ativ = """
-            SELECT
-                Cliente, ID AS Contrato_ID, Status_contrato, Status_acesso,
-                Data_ativa_o, Data_cancelamento,
-                Descri_o AS Equipamento_Atual,
-                'Ativação' AS Evento
+        # Mesma lógica da query principal em routes_analysis_tech.py
+        sql = """
+            SELECT Cliente, ID AS Contrato_ID, Status_contrato, Status_acesso,
+                   Data_ativa_o, Data_cancelamento AS Data_churn,
+                   Descri_o AS Equipamento_Atual, 'Ativação' AS Evento
             FROM Contratos
-            WHERE Cidade = ?
-              AND DATE(Data_ativa_o) >= ? AND DATE(Data_ativa_o) <= ?
-        """
+            WHERE Cidade = ? AND DATE(Data_ativa_o) >= ? AND DATE(Data_ativa_o) <= ?
 
-        # Churns no dia/cidade
-        sql_churn = """
-            SELECT
-                Cliente, ID AS Contrato_ID, Status_contrato, Status_acesso,
-                Data_ativa_o, Data_cancelamento,
-                Descri_o AS Equipamento_Atual,
-                'Churn' AS Evento
+            UNION ALL
+
+            SELECT Cliente, ID AS Contrato_ID, Status_contrato, Status_acesso,
+                   Data_ativa_o, Data_cancelamento AS Data_churn,
+                   Descri_o AS Equipamento_Atual, 'Churn' AS Evento
             FROM Contratos
-            WHERE Cidade = ?
+            WHERE Cidade = ? AND Status_contrato = 'Inativo'
               AND DATE(Data_cancelamento) >= ? AND DATE(Data_cancelamento) <= ?
-              AND Status_contrato IN ('Inativo', 'Negativado')
+
+            UNION ALL
+
+            SELECT Cliente, ID AS Contrato_ID, Status_contrato, Status_acesso,
+                   Data_ativa_o, Data_cancelamento AS Data_churn,
+                   Descri_o AS Equipamento_Atual, 'Churn' AS Evento
+            FROM Contratos
+            WHERE Cidade = ? AND Status_contrato = 'Negativado'
+              AND DATE(Data_cancelamento) >= ? AND DATE(Data_cancelamento) <= ?
+
+            UNION ALL
+
+            SELECT Cliente, ID AS Contrato_ID, 'Negativado' AS Status_contrato, '' AS Status_acesso,
+                   Data_ativa_o, Data_negativa_o AS Data_churn,
+                   '' AS Equipamento_Atual, 'Churn' AS Evento
+            FROM Contratos_Negativacao
+            WHERE Cidade = ? AND DATE(Data_negativa_o) >= ? AND DATE(Data_negativa_o) <= ?
         """
 
-        base_sql  = f"SELECT * FROM ({sql_ativ} UNION ALL {sql_churn}) AS t"
-        params_count = [city, start_date, end_date, city, start_date, end_date]
+        p = [city, start_date, end_date,
+             city, start_date, end_date,
+             city, start_date, end_date,
+             city, start_date, end_date]
 
-        total_rows = conn.execute(f"SELECT COUNT(*) FROM ({base_sql}) AS c", params_count).fetchone()[0]
-
+        total_rows = conn.execute(f"SELECT COUNT(*) FROM ({sql}) AS c", p).fetchone()[0]
         data = conn.execute(
-            f"{base_sql} ORDER BY Evento DESC, Cliente LIMIT ? OFFSET ?",
-            params_count + [limit, offset]
+            f"SELECT * FROM ({sql}) AS t ORDER BY Evento DESC, Cliente LIMIT ? OFFSET ?",
+            p + [limit, offset]
         ).fetchall()
 
         return jsonify({"data": [dict(r) for r in data], "total_rows": total_rows})
