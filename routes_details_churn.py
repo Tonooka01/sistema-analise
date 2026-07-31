@@ -255,37 +255,65 @@ def api_daily_evolution_details():
 
         # Mesma lógica da query principal em routes_analysis_tech.py
         sql = """
-            SELECT Cliente, ID AS Contrato_ID, Status_contrato, Status_acesso,
-                   Data_ativa_o, Data_cancelamento AS Data_churn,
-                   Descri_o AS Equipamento_Atual, 'Ativação' AS Evento
-            FROM Contratos
-            WHERE Cidade = ? AND DATE(Data_ativa_o) >= ? AND DATE(Data_ativa_o) <= ?
+            SELECT C.Cliente, C.ID AS Contrato_ID, C.Status_contrato, C.Status_acesso,
+                   C.Data_ativa_o,
+                   NULLIF(NULLIF(C.Data_cancelamento,'0000-00-00'),'') AS Data_Final,
+                   COALESCE(E.Descricao_produto, '') AS Equipamento_Atual,
+                   'Ativação' AS Evento
+            FROM Contratos C
+            LEFT JOIN (
+                SELECT ID_contrato, Descricao_produto
+                FROM Equipamento
+                GROUP BY ID_contrato HAVING MAX(Data)
+            ) E ON E.ID_contrato = C.ID
+            WHERE C.Cidade = ? AND DATE(C.Data_ativa_o) >= ? AND DATE(C.Data_ativa_o) <= ?
 
             UNION ALL
 
-            SELECT Cliente, ID AS Contrato_ID, Status_contrato, Status_acesso,
-                   Data_ativa_o, Data_cancelamento AS Data_churn,
-                   Descri_o AS Equipamento_Atual, 'Churn' AS Evento
-            FROM Contratos
-            WHERE Cidade = ? AND Status_contrato = 'Inativo'
-              AND DATE(Data_cancelamento) >= ? AND DATE(Data_cancelamento) <= ?
+            SELECT C.Cliente, C.ID AS Contrato_ID, C.Status_contrato, C.Status_acesso,
+                   C.Data_ativa_o,
+                   NULLIF(NULLIF(C.Data_cancelamento,'0000-00-00'),'') AS Data_Final,
+                   COALESCE(E.Descricao_produto, '') AS Equipamento_Atual,
+                   'Churn' AS Evento
+            FROM Contratos C
+            LEFT JOIN (
+                SELECT ID_contrato, Descricao_produto
+                FROM Equipamento
+                GROUP BY ID_contrato HAVING MAX(Data)
+            ) E ON E.ID_contrato = C.ID
+            WHERE C.Cidade = ? AND C.Status_contrato = 'Inativo'
+              AND DATE(C.Data_cancelamento) >= ? AND DATE(C.Data_cancelamento) <= ?
 
             UNION ALL
 
-            SELECT Cliente, ID AS Contrato_ID, Status_contrato, Status_acesso,
-                   Data_ativa_o, Data_cancelamento AS Data_churn,
-                   Descri_o AS Equipamento_Atual, 'Churn' AS Evento
-            FROM Contratos
-            WHERE Cidade = ? AND Status_contrato = 'Negativado'
-              AND DATE(Data_cancelamento) >= ? AND DATE(Data_cancelamento) <= ?
+            SELECT C.Cliente, C.ID AS Contrato_ID, C.Status_contrato, C.Status_acesso,
+                   C.Data_ativa_o,
+                   NULLIF(NULLIF(C.Data_cancelamento,'0000-00-00'),'') AS Data_Final,
+                   COALESCE(E.Descricao_produto, '') AS Equipamento_Atual,
+                   'Churn' AS Evento
+            FROM Contratos C
+            LEFT JOIN (
+                SELECT ID_contrato, Descricao_produto
+                FROM Equipamento
+                GROUP BY ID_contrato HAVING MAX(Data)
+            ) E ON E.ID_contrato = C.ID
+            WHERE C.Cidade = ? AND C.Status_contrato = 'Negativado'
+              AND DATE(C.Data_cancelamento) >= ? AND DATE(C.Data_cancelamento) <= ?
 
             UNION ALL
 
-            SELECT Cliente, ID AS Contrato_ID, 'Negativado' AS Status_contrato, '' AS Status_acesso,
-                   Data_ativa_o, Data_negativa_o AS Data_churn,
-                   '' AS Equipamento_Atual, 'Churn' AS Evento
-            FROM Contratos_Negativacao
-            WHERE Cidade = ? AND DATE(Data_negativa_o) >= ? AND DATE(Data_negativa_o) <= ?
+            SELECT CN.Cliente, CN.ID AS Contrato_ID, 'Negativado' AS Status_contrato, '' AS Status_acesso,
+                   CN.Data_ativa_o,
+                   NULLIF(NULLIF(CN.Data_negativa_o,'0000-00-00'),'') AS Data_Final,
+                   COALESCE(E.Descricao_produto, '') AS Equipamento_Atual,
+                   'Churn' AS Evento
+            FROM Contratos_Negativacao CN
+            LEFT JOIN (
+                SELECT ID_contrato, Descricao_produto
+                FROM Equipamento
+                GROUP BY ID_contrato HAVING MAX(Data)
+            ) E ON E.ID_contrato = CN.ID
+            WHERE CN.Cidade = ? AND DATE(CN.Data_negativa_o) >= ? AND DATE(CN.Data_negativa_o) <= ?
         """
 
         p = [city, start_date, end_date,
