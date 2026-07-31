@@ -786,9 +786,61 @@ def _sync_vendedores(conn, token, log):
     log.append(f"  ✅ {len(records)} vendedores")
 
 
+_MAP_STATUS_COMODATO = {'E': 'Emprestado', 'D': 'Devolvido', 'B': 'Baixa'}
+
 def _sync_equipamentos(conn, token, log):
-    # Atualização manual via upload_sqlite.py com query do IXCSoft query builder.
-    log.append("→ Equipamentos: atualização manual (ignorado no sync automático).")
+    log.append("→ Equipamentos (comodato)...")
+    try:
+        records = _ixc_get('estoque_comodato', {
+            'qtype':     'estoque_comodato.id',
+            'query':     '1',
+            'oper':      '>=',
+            'sortname':  'estoque_comodato.id',
+            'sortorder': 'asc',
+        }, token)
+    except Exception as e:
+        log.append(f"  ⚠️  Equipamentos: erro ao buscar da API — {e}")
+        return
+
+    if not records:
+        log.append("  ⚠️  Equipamentos: nenhum registro retornado pela API.")
+        return
+
+    # Log dos campos do primeiro registro para diagnóstico
+    logger.info(f"[equipamentos] campos retornados: {list(records[0].keys())}")
+
+    conn.execute("DELETE FROM Equipamento")
+
+    rows = []
+    for r in records:
+        status_raw = str(r.get('status_comodato') or '').strip()
+        status = _MAP_STATUS_COMODATO.get(status_raw, status_raw)
+
+        # Tenta campo descricao_produto; fallback para descricao ou nome_produto
+        desc = (r.get('descricao_produto')
+                or r.get('descricao')
+                or r.get('nome_produto')
+                or r.get('produto_descricao') or '')
+
+        rows.append((
+            r.get('id_contrato'),
+            r.get('razao_social_nome') or r.get('razao_social') or r.get('cliente_nome') or '',
+            r.get('bloqueio_manual') or '',
+            str(desc).strip(),
+            status,
+            r.get('data') or '',
+            r.get('id_produto'),
+            r.get('quantidade') or '',
+        ))
+
+    conn.executemany("""
+        INSERT INTO Equipamento
+            (ID_contrato, Raz_o_social_nome, Bloqueio_manual, Descricao_produto,
+             Status_comodato, Data, ID_produto, Quantidade)
+        VALUES (?,?,?,?,?,?,?,?)
+    """, rows)
+    conn.commit()
+    log.append(f"  ✅ {len(rows)} registros de comodato sincronizados.")
 
 
 def _sync_plano_venda(conn, token, log):
