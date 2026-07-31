@@ -55,32 +55,29 @@ def test(endpoint, data, label=""):
     except Exception as e:
         print(f"  ERRO: {e}")
 
-# 1. cliente_contrato_comodato filtrado por id_contrato IN (lista)
+# 1. cliente_contrato_comodato sem nenhum filtro (só paginação)
 test('cliente_contrato_comodato',
-     {'qtype': 'cliente_contrato_comodato.id_contrato', 'query': id_list,
-      'oper': 'IN', 'sortname': 'cliente_contrato_comodato.id_contrato',
-      'sortorder': 'asc', 'rp': '100', 'page': '1'},
-     'cliente_contrato_comodato (IN)')
+     {'rp': '3', 'page': '1'},
+     'cliente_contrato_comodato (sem filtro)')
 
-# 2. cliente_contrato_comodato sem filtro
+# 2. cliente_contrato_comodato com grid_param vazio
 test('cliente_contrato_comodato',
-     {'qtype': 'cliente_contrato_comodato.id', 'query': '1', 'oper': '>=',
-      'sortname': 'cliente_contrato_comodato.id', 'sortorder': 'asc',
-      'rp': '5', 'page': '1'},
-     'cliente_contrato_comodato (id>=1)')
+     {'grid_param': '[]', 'rp': '3', 'page': '1'},
+     'cliente_contrato_comodato (grid_param vazio)')
 
-# 3. estoque_comodato
-test('estoque_comodato',
-     {'qtype': 'estoque_comodato.id', 'query': '1', 'oper': '>=',
-      'sortname': 'estoque_comodato.id', 'sortorder': 'asc',
-      'rp': '5', 'page': '1'})
+# 3. Tenta campos alternativos como sortname
+for campo in ['id_contrato', 'id', 'id_produto', 'status']:
+    test('cliente_contrato_comodato',
+         {'sortname': f'cliente_contrato_comodato.{campo}', 'sortorder': 'asc',
+          'rp': '3', 'page': '1'},
+         f'cliente_contrato_comodato (sort={campo})')
 
-# 4. Produto do contrato (vd_contratos_produtos)
+# 4. vd_contratos_produtos com id >= 1 simples
 first_id = contratos[0]['ID']
 test('vd_contratos_produtos',
-     {'qtype': 'vd_contratos_produtos.id_cliente_contrato', 'query': str(first_id),
-      'oper': '=', 'sortname': 'vd_contratos_produtos.id', 'sortorder': 'asc',
-      'rp': '10', 'page': '1'},
-     f'vd_contratos_produtos (contrato {first_id})')
+     {'qtype': 'vd_contratos_produtos.id', 'query': '1', 'oper': '>=',
+      'sortname': 'vd_contratos_produtos.id', 'sortorder': 'asc',
+      'rp': '3', 'page': '1'},
+     'vd_contratos_produtos (id>=1)')
 
 print("\n" + "=" * 60)
