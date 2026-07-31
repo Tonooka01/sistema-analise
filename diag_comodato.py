@@ -55,25 +55,38 @@ def test(endpoint, data, label=""):
     except Exception as e:
         print(f"  ERRO: {e}")
 
-# 1. cliente_contrato_comodato sem nenhum filtro (só paginação)
+# 1. Dump completo de cliente_contrato para contrato 18753 (tem equipamento no banco)
+print("\n[cliente_contrato — todos os campos para contrato 18753]")
+try:
+    r = requests.post(f'{BASE}/cliente_contrato',
+        data={'qtype': 'cliente_contrato.id', 'query': '18753', 'oper': '=',
+              'sortname': 'cliente_contrato.id', 'sortorder': 'asc',
+              'rp': '1', 'page': '1'},
+        headers=headers, timeout=30, verify=False)
+    j = r.json()
+    regs = j.get('registros') or []
+    if regs:
+        print(f"  Campos ({len(regs[0])}):")
+        for k, v in regs[0].items():
+            print(f"    {k}: {str(v)[:80]}")
+    else:
+        print(f"  {r.text[:300]}")
+except Exception as e:
+    print(f"  ERRO: {e}")
+
+# 2. cliente_contrato_comodato sem nenhum filtro
 test('cliente_contrato_comodato',
      {'rp': '3', 'page': '1'},
      'cliente_contrato_comodato (sem filtro)')
 
-# 2. cliente_contrato_comodato com grid_param vazio
-test('cliente_contrato_comodato',
-     {'grid_param': '[]', 'rp': '3', 'page': '1'},
-     'cliente_contrato_comodato (grid_param vazio)')
-
 # 3. Tenta campos alternativos como sortname
-for campo in ['id_contrato', 'id', 'id_produto', 'status']:
+for campo in ['id', 'id_contrato', 'id_produto', 'status', 'data']:
     test('cliente_contrato_comodato',
          {'sortname': f'cliente_contrato_comodato.{campo}', 'sortorder': 'asc',
           'rp': '3', 'page': '1'},
-         f'cliente_contrato_comodato (sort={campo})')
+         f'cc_comodato sort={campo}')
 
-# 4. vd_contratos_produtos com id >= 1 simples
-first_id = contratos[0]['ID']
+# 4. vd_contratos_produtos com id >= 1
 test('vd_contratos_produtos',
      {'qtype': 'vd_contratos_produtos.id', 'query': '1', 'oper': '>=',
       'sortname': 'vd_contratos_produtos.id', 'sortorder': 'asc',
