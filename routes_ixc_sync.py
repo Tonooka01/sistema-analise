@@ -789,90 +789,12 @@ def _sync_vendedores(conn, token, log):
 _MAP_STATUS_COMODATO = {'E': 'Emprestado', 'D': 'Devolvido', 'B': 'Baixa'}
 
 def _sync_equipamentos(conn, token, log):
-    log.append("→ Equipamentos (comodato)...")
-
-    # ── Diagnóstico: ver o que a API retorna de verdade ──────────────────────
-    encoded = base64.b64encode(token.encode()).decode()
-    _hdrs = {'Authorization': f'Basic {encoded}', 'ixcsoft': 'listar'}
-
-    def _raw(endpoint, data):
-        try:
-            r = requests.post(f'{IXC_BASE_URL}/{endpoint}', data=data,
-                              headers=_hdrs, timeout=30, verify=False)
-            j = r.json() if 'json' in r.headers.get('content-type', '') else {}
-            total = j.get('total', '?')
-            regs  = j.get('registros') or []
-            fields = list(regs[0].keys()) if regs else []
-            msg = f"  [diag/{endpoint}] HTTP={r.status_code} total={total} campos={fields}"
-            if not fields:
-                msg += f" raw={r.text[:300]}"
-            log.append(msg)
-            logger.info(msg)
-            return regs
-        except Exception as e:
-            msg = f"  [diag/{endpoint}] ERRO: {e}"
-            log.append(msg); logger.warning(msg)
-            return []
-
-    # Testa múltiplos endpoints possíveis para comodato
-    endpoints = [
-        ('cliente_contrato_comodato', {'qtype': 'cliente_contrato_comodato.id', 'query': '1', 'oper': '>=',
-                                       'sortname': 'cliente_contrato_comodato.id', 'sortorder': 'asc',
-                                       'rp': '5', 'page': '1'}),
-        ('estoque_comodato',          {'sortname': 'estoque_comodato.id_contrato', 'sortorder': 'asc',
-                                       'rp': '5', 'page': '1'}),
-        ('comodato',                  {'qtype': 'comodato.id', 'query': '1', 'oper': '>=',
-                                       'sortname': 'comodato.id', 'sortorder': 'asc',
-                                       'rp': '5', 'page': '1'}),
-        ('qb_query',                  {'query': 'SELECT * FROM estoque_comodato LIMIT 1'}),
-    ]
-    records = []
-    for ep, params in endpoints:
-        records = _raw(ep, params)
-        if records:
-            log.append(f"  ✅ Endpoint encontrado: {ep}")
-            break
-
-    if not records:
-        log.append("  ⚠️  Nenhum registro obtido. Verifique o log acima para diagnóstico.")
-        return
-
-    # ── Usa _ixc_get para buscar todos os registros (paginado) ───────────────
-    records = _ixc_get('estoque_comodato', {
-        'sortname': 'estoque_comodato.id_contrato', 'sortorder': 'asc',
-    }, token)
-
-    conn.execute("DELETE FROM Equipamento")
-
-    rows = []
-    for r in records:
-        status_raw = str(r.get('status_comodato') or '').strip()
-        status = _MAP_STATUS_COMODATO.get(status_raw, status_raw) or status_raw
-
-        desc = (r.get('descricao_produto')
-                or r.get('descricao')
-                or r.get('nome_produto')
-                or r.get('produto_descricao') or '')
-
-        rows.append((
-            r.get('id_contrato'),
-            r.get('razao_social_nome') or r.get('razao_social') or r.get('cliente_nome') or '',
-            r.get('bloqueio_manual') or '',
-            str(desc).strip(),
-            status,
-            r.get('data') or '',
-            r.get('id_produto'),
-            r.get('quantidade') or '',
-        ))
-
-    conn.executemany("""
-        INSERT INTO Equipamento
-            (ID_contrato, Raz_o_social_nome, Bloqueio_manual, Descricao_produto,
-             Status_comodato, Data, ID_produto, Quantidade)
-        VALUES (?,?,?,?,?,?,?,?)
-    """, rows)
-    conn.commit()
-    log.append(f"  ✅ {len(rows)} registros de comodato sincronizados.")
+    # O endpoint estoque_comodato não está habilitado na API IXC desta instância.
+    # Requer liberação pelo suporte IXCSoft (SUP - API).
+    # Os dados existentes (importados via CSV manual) são preservados.
+    total = conn.execute("SELECT COUNT(*) FROM Equipamento").fetchone()[0]
+    log.append(f"→ Equipamentos: endpoint não disponível na API IXC — {total} registros existentes preservados.")
+    log.append("  ℹ️  Para sync automático, solicite a rota 'estoque_comodato' ao suporte IXCSoft.")
 
 
 def _sync_plano_venda(conn, token, log):
