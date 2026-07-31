@@ -265,7 +265,7 @@ def api_daily_evolution_details():
                 SELECT ID_contrato, Descricao_produto
                 FROM Equipamento
                 GROUP BY ID_contrato HAVING MAX(Data)
-            ) E ON E.ID_contrato = C.ID
+            ) E ON CAST(TRIM(E.ID_contrato) AS INTEGER) = C.ID
             WHERE C.Cidade = ? AND DATE(C.Data_ativa_o) >= ? AND DATE(C.Data_ativa_o) <= ?
 
             UNION ALL
@@ -280,7 +280,7 @@ def api_daily_evolution_details():
                 SELECT ID_contrato, Descricao_produto
                 FROM Equipamento
                 GROUP BY ID_contrato HAVING MAX(Data)
-            ) E ON E.ID_contrato = C.ID
+            ) E ON CAST(TRIM(E.ID_contrato) AS INTEGER) = C.ID
             WHERE C.Cidade = ? AND C.Status_contrato = 'Inativo'
               AND DATE(C.Data_cancelamento) >= ? AND DATE(C.Data_cancelamento) <= ?
 
@@ -296,7 +296,7 @@ def api_daily_evolution_details():
                 SELECT ID_contrato, Descricao_produto
                 FROM Equipamento
                 GROUP BY ID_contrato HAVING MAX(Data)
-            ) E ON E.ID_contrato = C.ID
+            ) E ON CAST(TRIM(E.ID_contrato) AS INTEGER) = C.ID
             WHERE C.Cidade = ? AND C.Status_contrato = 'Negativado'
               AND DATE(C.Data_cancelamento) >= ? AND DATE(C.Data_cancelamento) <= ?
 
@@ -312,7 +312,7 @@ def api_daily_evolution_details():
                 SELECT ID_contrato, Descricao_produto
                 FROM Equipamento
                 GROUP BY ID_contrato HAVING MAX(Data)
-            ) E ON E.ID_contrato = CN.ID
+            ) E ON CAST(TRIM(E.ID_contrato) AS INTEGER) = CN.ID
             WHERE CN.Cidade = ? AND DATE(CN.Data_negativa_o) >= ? AND DATE(CN.Data_negativa_o) <= ?
         """
 
