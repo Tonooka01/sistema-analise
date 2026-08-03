@@ -68,6 +68,7 @@ from routes_ixc_sync import ixc_sync_bp
 app = Flask(__name__)
 
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'sua_chave_secreta_super_segura_troque_isso_em_producao')
+app.config['SESSION_COOKIE_NAME'] = 'analise_session'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
