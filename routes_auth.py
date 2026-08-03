@@ -4,7 +4,7 @@ Blueprint de autenticação — login, logout, criação de usuários.
 """
 
 import sqlite3
-from flask import Blueprint, render_template, redirect, url_for, request, flash, abort
+from flask import Blueprint, render_template, redirect, url_for, request, flash, abort, session
 from flask_login import login_user, login_required, logout_user, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from database import get_db_connection
@@ -34,7 +34,8 @@ def login():
                 is_active=is_active,
                 permissions=permissions
             )
-            login_user(user)
+            session.permanent = True
+            login_user(user, remember=True)
             return redirect(url_for('index'))
 
         flash('Usuário ou senha inválidos.')

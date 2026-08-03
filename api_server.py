@@ -5,7 +5,7 @@ Configuração, middleware, registro de blueprints e inicialização.
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request, redirect, url_for
 from flask_cors import CORS
 from flask_login import LoginManager, login_required, current_user
@@ -71,6 +71,7 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'sua_chave_secreta_super_seg
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)
 app.config['GET_DB_CONNECTION'] = get_db_connection
 
 CORS(app)
