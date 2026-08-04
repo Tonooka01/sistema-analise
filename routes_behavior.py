@@ -227,13 +227,13 @@ def api_behavior_predictive_churn():
         risk_level = request.args.get('risk_level', '').strip()
         status_acesso = request.args.get('status_acesso', '').strip()
 
-        active_conds = ["C.Status_contrato = 'Ativo'"]
+        active_conds = ["Status_contrato = 'Ativo'"]
         active_p     = []
         if status_acesso:
-            active_conds.append("C.Status_acesso = ?")
+            active_conds.append("Status_acesso = ?")
             active_p.append(status_acesso)
         if city:
-            active_conds.append("C.Cidade = ?")
+            active_conds.append("Cidade = ?")
             active_p.append(city)
         where_active = " AND ".join(active_conds)
 
