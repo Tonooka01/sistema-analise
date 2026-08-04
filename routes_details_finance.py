@@ -44,7 +44,9 @@ def api_invoice_details():
 
         params.extend([limit, offset])
         data = conn.execute(
-            f"SELECT CAR.ID, CAR.Vencimento, CAR.Emissao, CAR.Data_pagamento, CAR.Valor, CAR.Status "
+            f"SELECT CAR.ID, CAR.Vencimento, CAR.Emissao, "
+            f"COALESCE(CAR.Data_pagamento, CAR.Data_baixa) AS Data_pagamento, "
+            f"CAR.Valor, CAR.Status "
             f"{from_join} {where} ORDER BY CAR.Vencimento DESC LIMIT ? OFFSET ?",
             tuple(params)
         ).fetchall()
@@ -71,7 +73,9 @@ def api_financial_details(contract_id):
         ).fetchone()[0]
 
         data = conn.execute(
-            "SELECT ID, Parcela_R, Emissao, Vencimento, Data_pagamento, Valor, Status "
+            "SELECT ID, Parcela_R, Emissao, Vencimento, "
+            "COALESCE(Data_pagamento, Data_baixa) AS Data_pagamento, "
+            "Valor, Status "
             "FROM Contas_a_Receber WHERE ID_Contrato_Recorrente = ? ORDER BY Vencimento DESC LIMIT ? OFFSET ?",
             (contract_id, limit, offset)
         ).fetchall()

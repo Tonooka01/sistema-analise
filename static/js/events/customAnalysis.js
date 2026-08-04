@@ -94,6 +94,7 @@ export function handleCustomAnalysisChange(page = 1, triggerFetch = true) {
             break;
 
         case 'analise_comportamento':
+            if (dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
             if (dom.behaviorAnalysisContainer) dom.behaviorAnalysisContainer.classList.remove('hidden');
             if (shouldFetch) behaviorAnalysis.initializeBehaviorAnalysis();
             break;

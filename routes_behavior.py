@@ -227,7 +227,10 @@ def api_behavior_predictive_churn():
         risk_level = request.args.get('risk_level', '').strip()
         status_acesso = request.args.get('status_acesso', '').strip()
 
-        active_conds = ["Status_contrato = 'Ativo'"]
+        active_conds = [
+            "Status_contrato = 'Ativo'",
+            "Status_acesso != 'Desativado'",
+        ]
         active_p     = []
         if status_acesso:
             active_conds.append("Status_acesso = ?")
@@ -379,6 +382,139 @@ def api_behavior_predictive_churn():
 
     except Exception as e:
         logger.error(f"Erro na análise preditiva de churn: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
+@behavior_bp.route('/predictive_churn_export')
+def api_behavior_predictive_churn_export():
+    conn = get_db()
+    try:
+        limit      = request.args.get('limit',      5000, type=int)
+        offset     = request.args.get('offset',     0,    type=int)
+        city       = request.args.get('city',       '').strip()
+        risk_level = request.args.get('risk_level', '').strip()
+
+        active_conds = [
+            "Status_contrato = 'Ativo'",
+            "Status_acesso != 'Desativado'",
+        ]
+        active_p = []
+        if city:
+            active_conds.append("Cidade = ?")
+            active_p.append(city)
+        where_active = " AND ".join(active_conds)
+
+        risk_sql = ""
+        risk_p   = []
+        if risk_level == 'Alto':
+            risk_sql = "AND Risk_Score >= 60"
+        elif risk_level == 'Médio':
+            risk_sql = "AND Risk_Score >= 25 AND Risk_Score < 60"
+        elif risk_level == 'Baixo':
+            risk_sql = "AND Risk_Score >= 10 AND Risk_Score < 25"
+
+        export_sql = f"""
+            WITH ActiveContracts AS (
+                SELECT ID, Cliente, Cidade, Data_ativa_o
+                FROM Contratos
+                WHERE {where_active}
+            ),
+            PaymentProfile AS (
+                SELECT
+                    CR.ID_Contrato_Recorrente,
+                    SUM(CASE WHEN CR.Status = 'A receber'
+                              AND CR.Vencimento < date('now') THEN 1 ELSE 0 END) AS Faturas_Vencidas,
+                    MAX(CASE WHEN CR.Status = 'A receber' AND CR.Vencimento < date('now')
+                             THEN CAST(JULIANDAY(date('now')) - JULIANDAY(CR.Vencimento) AS INTEGER)
+                             END) AS Dias_Vencido,
+                    SUM(CASE WHEN CR.Data_pagamento > CR.Vencimento
+                              AND CR.Vencimento >= date('now', '-90 days') THEN 1 ELSE 0 END) AS Atrasos_90d,
+                    ROUND(AVG(CASE WHEN CR.Data_pagamento IS NOT NULL
+                                   THEN JULIANDAY(CR.Data_pagamento) - JULIANDAY(CR.Vencimento)
+                                   END), 1) AS Media_Atraso,
+                    ROUND(SUM(CASE WHEN CR.Status = 'A receber' AND CR.Vencimento < date('now')
+                                   THEN CR.Valor ELSE 0 END), 2) AS Valor_Vencido
+                FROM Contas_a_Receber CR
+                WHERE CR.ID_Contrato_Recorrente IN (SELECT ID FROM ActiveContracts)
+                GROUP BY CR.ID_Contrato_Recorrente
+            ),
+            RecentTickets AS (
+                SELECT Cliente, COUNT(*) AS Atendimentos_30d
+                FROM (
+                    SELECT Cliente FROM Atendimentos
+                    WHERE Criado_em >= date('now', '-30 days') AND Cliente IS NOT NULL
+                    UNION ALL
+                    SELECT Cliente FROM OS
+                    WHERE Abertura >= date('now', '-30 days') AND Cliente IS NOT NULL
+                )
+                GROUP BY Cliente
+            ),
+            ConnectionStatus AS (
+                SELECT ID_contrato,
+                       CAST(JULIANDAY(date('now')) - JULIANDAY(MAX(ltima_conex_o_final))
+                            AS INTEGER) AS Dias_Sem_Conexao
+                FROM Logins
+                WHERE ltima_conex_o_final IS NOT NULL AND ID_contrato IS NOT NULL
+                GROUP BY ID_contrato
+            ),
+            Scored AS (
+                SELECT
+                    AC.ID AS Contrato_ID,
+                    AC.Cliente,
+                    AC.Cidade,
+                    COALESCE(PP.Faturas_Vencidas, 0) AS Faturas_Vencidas,
+                    COALESCE(PP.Dias_Vencido, 0)     AS Dias_Vencido,
+                    COALESCE(PP.Atrasos_90d, 0)      AS Atrasos_90d,
+                    COALESCE(PP.Valor_Vencido, 0)    AS Valor_Vencido,
+                    COALESCE(RT.Atendimentos_30d, 0) AS Atendimentos_30d,
+                    COALESCE(CS.Dias_Sem_Conexao, 0) AS Dias_Sem_Conexao,
+                    (
+                        COALESCE(PP.Faturas_Vencidas, 0) * 25
+                        + CASE WHEN COALESCE(PP.Dias_Vencido, 0) > 60 THEN 30
+                               WHEN COALESCE(PP.Dias_Vencido, 0) > 30 THEN 15
+                               ELSE 0 END
+                        + MIN(COALESCE(PP.Atrasos_90d, 0), 5) * 8
+                        + CASE WHEN COALESCE(PP.Media_Atraso, 0) > 30 THEN 15
+                               WHEN COALESCE(PP.Media_Atraso, 0) > 15 THEN 7
+                               ELSE 0 END
+                        + MIN(COALESCE(RT.Atendimentos_30d, 0), 3) * 8
+                        + CASE WHEN COALESCE(CS.Dias_Sem_Conexao, 0) > 30 THEN 20
+                               WHEN COALESCE(CS.Dias_Sem_Conexao, 0) > 14 THEN 10
+                               ELSE 0 END
+                    ) AS Risk_Score
+                FROM ActiveContracts AC
+                LEFT JOIN PaymentProfile PP ON AC.ID = PP.ID_Contrato_Recorrente
+                LEFT JOIN RecentTickets RT ON AC.Cliente = RT.Cliente
+                LEFT JOIN ConnectionStatus CS ON AC.ID = CS.ID_contrato
+                WHERE (
+                    COALESCE(PP.Faturas_Vencidas, 0) > 0
+                    OR COALESCE(PP.Atrasos_90d, 0) > 1
+                    OR COALESCE(RT.Atendimentos_30d, 0) > 1
+                    OR COALESCE(CS.Dias_Sem_Conexao, 0) > 14
+                )
+            )
+            SELECT
+                S.*,
+                CASE WHEN S.Risk_Score >= 60 THEN 'Alto'
+                     WHEN S.Risk_Score >= 25 THEN 'Médio'
+                     WHEN S.Risk_Score >= 10 THEN 'Baixo'
+                     ELSE 'Saudável' END AS Nivel_Risco,
+                COALESCE(CLI.Telefone, '') AS Telefone,
+                COALESCE(CLI.WhatsApp, '') AS WhatsApp
+            FROM Scored S
+            LEFT JOIN Clientes CLI ON CLI.Raz_o_social = S.Cliente
+            WHERE S.Risk_Score >= 10 {risk_sql}
+            ORDER BY S.Risk_Score DESC
+            LIMIT ? OFFSET ?
+        """
+
+        data = [dict(r) for r in conn.execute(export_sql, active_p + risk_p + [limit, offset]).fetchall()]
+        return jsonify({'data': data})
+
+    except Exception as e:
+        logger.error(f"Erro no export de churn preditivo: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()

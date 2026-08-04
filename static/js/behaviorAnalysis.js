@@ -300,7 +300,7 @@ async function fetchBehaviorData_ChurnPattern(city = '') {
             Math.round((s.Churners_Pre_6m       / total) * 100),
         ];
         grid.addWidget({
-            w: 6, h: 14, x: 0, y: 0,
+            w: 6, h: 7, x: 0, y: 0,
             content: `<div class="grid-stack-item-content">
                 <div class="chart-container-header"><h3 class="chart-title">Sinais Presentes nos Churners (%)</h3></div>
                 <div class="chart-canvas-container"><canvas id="${signalChartId}"></canvas></div>
@@ -319,7 +319,7 @@ async function fetchBehaviorData_ChurnPattern(city = '') {
             const order  = ['0-3m','3-6m','6-12m','12-24m','24m+'];
             const sorted = order.map(f => permanence_distribution.find(d => d.Faixa === f) || { Faixa: f, Count: 0 });
             grid.addWidget({
-                w: 6, h: 14, x: 6, y: 0,
+                w: 6, h: 7, x: 6, y: 0,
                 content: `<div class="grid-stack-item-content">
                     <div class="chart-container-header"><h3 class="chart-title">Distribuição de Permanência</h3></div>
                     <div class="chart-canvas-container"><canvas id="${permChartId}"></canvas></div>
@@ -338,7 +338,7 @@ async function fetchBehaviorData_ChurnPattern(city = '') {
         if (seasonal_distribution.length) {
             const seasonChartId = 'churnSeasonChart';
             grid.addWidget({
-                w: 12, h: 14, x: 0, y: 14,
+                w: 12, h: 7, x: 0, y: 7,
                 content: `<div class="grid-stack-item-content">
                     <div class="chart-container-header"><h3 class="chart-title">Sazonalidade de Cancelamentos (por mês do ano)</h3></div>
                     <div class="chart-canvas-container"><canvas id="${seasonChartId}"></canvas></div>
@@ -385,12 +385,16 @@ function renderPredictiveChurnTab() {
                 </select>
             </div>
             <button id="btnFilterPredictive" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
+            <button id="btnExportPredictive" class="bg-green-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-green-700 transition font-semibold text-sm h-10">⬇ Baixar CSV</button>
         </div>
         <div id="predictive-churn-table-container"></div>
     `;
 
     const btnFilter = tabContent.querySelector('#btnFilterPredictive');
     if (btnFilter) btnFilter.addEventListener('click', () => fetchAndRenderPredictiveChurnTable(1));
+
+    const btnExport = tabContent.querySelector('#btnExportPredictive');
+    if (btnExport) btnExport.addEventListener('click', () => exportPredictiveChurnCSV());
 
     fetchAndRenderPredictiveChurnTable(1);
 }
@@ -460,19 +464,50 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
             'Baixo': 'background:#fefce8;color:#ca8a04;border:1px solid #fde047;',
         };
 
+        const _esc = s => (s || '').replace(/"/g, '&quot;');
+
         const columns = [
-            { header: 'Cliente',       render: r => `<span class="font-medium">${r.Cliente}</span>` },
-            { header: 'Cidade',        key: 'Cidade' },
-            { header: 'Risco',         render: r => `<span style="padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;${RISK_CLS[r.Nivel_Risco]||''}">${r.Nivel_Risco}</span>` },
-            { header: 'Score',         render: r => `<span class="font-mono font-bold">${r.Risk_Score}</span>` },
-            { header: 'Fat. Vencidas', render: r => r.Faturas_Vencidas > 0 ? `<span style="color:#dc2626;font-weight:700;">${r.Faturas_Vencidas}</span>` : '0' },
-            { header: 'Dias Vencido',  render: r => r.Dias_Vencido > 0 ? `<span style="color:#dc2626;">${r.Dias_Vencido}d</span>` : '-' },
-            { header: 'Atrasos 90d',   render: r => r.Atrasos_90d > 0 ? `<span style="color:#ea580c;">${r.Atrasos_90d}</span>` : '0' },
-            { header: 'Atend. 30d',    render: r => r.Atendimentos_30d > 0 ? `<span style="color:#2563eb;">${r.Atendimentos_30d}</span>` : '0' },
-            { header: 'Sem Conexão',   render: r => r.Dias_Sem_Conexao > 0
-                ? `<span style="color:${r.Dias_Sem_Conexao > 30 ? '#dc2626' : '#ca8a04'};">${r.Dias_Sem_Conexao}d</span>`
+            { header: 'Contrato', render: r =>
+                `<span class="font-mono text-xs text-gray-500">#${r.Contrato_ID}</span>` },
+            { header: 'Cliente', render: r =>
+                `<span class="detail-trigger cursor-pointer text-blue-600 font-medium hover:underline"
+                    data-type="financial"
+                    data-contract-id="${r.Contrato_ID}"
+                    data-client-name="${_esc(r.Cliente)}">${r.Cliente}</span>` },
+            { header: 'Cidade', key: 'Cidade' },
+            { header: 'Risco', render: r =>
+                `<span style="padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;${RISK_CLS[r.Nivel_Risco]||''}">${r.Nivel_Risco}</span>` },
+            { header: 'Score', render: r => `<span class="font-mono font-bold">${r.Risk_Score}</span>` },
+            { header: 'Fat. Vencidas', render: r => r.Faturas_Vencidas > 0
+                ? `<span class="invoice-detail-trigger cursor-pointer text-red-600 font-bold hover:underline"
+                    data-type="faturas_nao_pagas"
+                    data-contract-id="${r.Contrato_ID}"
+                    data-client-name="${_esc(r.Cliente)}">${r.Faturas_Vencidas}</span>`
+                : '0' },
+            { header: 'Dias Vencido', render: r => r.Dias_Vencido > 0
+                ? `<span style="color:#dc2626;">${r.Dias_Vencido}d</span>` : '-' },
+            { header: 'Atrasos 90d', render: r => r.Atrasos_90d > 0
+                ? `<span class="invoice-detail-trigger cursor-pointer text-orange-600 font-bold hover:underline"
+                    data-type="atrasos_pagos"
+                    data-contract-id="${r.Contrato_ID}"
+                    data-client-name="${_esc(r.Cliente)}">${r.Atrasos_90d}</span>`
+                : '0' },
+            { header: 'Atend. 30d', render: r => r.Atendimentos_30d > 0
+                ? `<span class="detail-trigger cursor-pointer text-blue-600 font-bold hover:underline"
+                    data-type="complaints"
+                    data-contract-id="${r.Contrato_ID}"
+                    data-client-name="${_esc(r.Cliente)}">${r.Atendimentos_30d}</span>`
+                : '0' },
+            { header: 'Sem Conexão', render: r => r.Dias_Sem_Conexao > 0
+                ? `<span class="detail-trigger cursor-pointer hover:underline"
+                    style="color:${r.Dias_Sem_Conexao > 30 ? '#dc2626' : '#ca8a04'};"
+                    data-type="logins"
+                    data-contract-id="${r.Contrato_ID}"
+                    data-client-name="${_esc(r.Cliente)}">${r.Dias_Sem_Conexao}d</span>`
                 : '-' },
-            { header: 'Val. Vencido',  render: r => r.Valor_Vencido > 0 ? `<span style="color:#dc2626;">R$ ${parseFloat(r.Valor_Vencido).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>` : '-' },
+            { header: 'Val. Vencido', render: r => r.Valor_Vencido > 0
+                ? `<span style="color:#dc2626;">R$ ${parseFloat(r.Valor_Vencido).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>`
+                : '-' },
         ];
 
         const tableState = { currentPage: page, totalRows: result.total_rows || 0, rowsPerPage };
@@ -486,5 +521,51 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
 
     } catch (error) {
         container.innerHTML = `<p class="text-red-500 p-4">${error.message}</p>`;
+    }
+}
+
+async function exportPredictiveChurnCSV() {
+    const city      = document.getElementById('predCityFilter')?.value  || '';
+    const riskLevel = document.getElementById('predRiskFilter')?.value  || '';
+    const btn       = document.getElementById('btnExportPredictive');
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando...'; }
+
+    try {
+        const params = new URLSearchParams({ limit: 5000, offset: 0 });
+        if (city)      params.append('city',       city);
+        if (riskLevel) params.append('risk_level', riskLevel);
+
+        const res  = await fetch(`/api/behavior/predictive_churn_export?${params}`);
+        if (!res.ok) throw new Error('Erro ao buscar dados para exportação.');
+        const { data } = await res.json();
+        if (!data?.length) { alert('Nenhum dado para exportar.'); return; }
+
+        const headers = ['Contrato','Cliente','Telefone','WhatsApp','Cidade','Nível Risco','Score',
+                         'Fat. Vencidas','Dias Vencido','Atrasos 90d','Atend. 30d','Sem Conexão (dias)','Val. Vencido'];
+        const rows = data.map(r => [
+            r.Contrato_ID, r.Cliente,
+            r.Telefone  || '', r.WhatsApp || '',
+            r.Cidade    || '', r.Nivel_Risco, r.Risk_Score,
+            r.Faturas_Vencidas, r.Dias_Vencido, r.Atrasos_90d,
+            r.Atendimentos_30d, r.Dias_Sem_Conexao,
+            r.Valor_Vencido > 0 ? parseFloat(r.Valor_Vencido).toFixed(2).replace('.', ',') : '0,00'
+        ]);
+
+        const csvContent = [headers, ...rows]
+            .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
+            .join('\n');
+
+        const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `churn_preditivo_${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        alert(e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '⬇ Baixar CSV'; }
     }
 }
