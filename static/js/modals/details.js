@@ -95,7 +95,24 @@ function _renderDetailTabContent(tab, data) {
             columns = [
                 { header: 'ID', key: 'ID' }, { header: 'Parcela', key: 'Parcela_R' },
                 { header: 'Emissão', key: 'Emissao', isDate: true }, { header: 'Vencimento', key: 'Vencimento', isDate: true },
-                { header: 'Pagamento', key: 'Data_pagamento', isDate: true }, { header: 'Valor', key: 'Valor', isCurrency: true }, { header: 'Status', key: 'Status' }
+                { header: 'Pagamento', key: 'Data_pagamento', isDate: true }, { header: 'Valor', key: 'Valor', isCurrency: true },
+                { header: 'Status', render: row => {
+                    const s = row.Status || '';
+                    const now = new Date(); now.setHours(0,0,0,0);
+                    const due = row.Vencimento ? new Date(row.Vencimento) : null;
+                    const overdue = s === 'A receber' && due && due < now;
+                    const style = overdue
+                        ? 'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;'
+                        : s === 'Recebido'
+                            ? 'background:#dcfce7;color:#16a34a;border:1px solid #86efac;'
+                        : s === 'A receber'
+                            ? 'background:#eff6ff;color:#2563eb;border:1px solid #93c5fd;'
+                        : s === 'Cancelado'
+                            ? 'background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;'
+                            : 'background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;';
+                    const label = overdue ? 'Vencido' : s;
+                    return `<span style="padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:600;white-space:nowrap;${style}">${label}</span>`;
+                }}
             ]; break;
         case 'os':
             columns = [{ header: 'ID', key: 'ID' }, { header: 'Abertura', key: 'Abertura', isDate: true }, { header: 'Assunto', key: 'Assunto' }, { header: 'Status', key: 'Status' }]; break;
