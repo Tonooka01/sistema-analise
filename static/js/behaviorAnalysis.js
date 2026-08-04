@@ -194,12 +194,168 @@ async function fetchBehaviorData_Complaints(city = '') {
 }
 
 /**
- * Renderiza o conteúdo (placeholder) da aba "Padrão de Churn".
+ * Renderiza a aba "Padrão de Churn".
  */
 function renderChurnPatternTab() {
     const tabContent = document.getElementById('tab-content-churn');
-    if (tabContent) {
-        tabContent.innerHTML = `<p class="text-center text-gray-500 p-4">Análise de Padrão de Churn - Em desenvolvimento.</p>`;
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <div class="flex flex-wrap justify-center gap-4 mb-4 items-end">
+            <div class="flex flex-col items-center">
+                <label for="churnCityFilter" class="text-gray-700 font-medium mb-1 text-sm">Filtrar por Cidade:</label>
+                <select id="churnCityFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-w-[200px]">
+                    <option value="">Todas as Cidades</option>
+                </select>
+            </div>
+            <button id="btnFilterChurn" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
+        </div>
+        <div id="churn-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div id="churn-charts-area" class="grid-stack"></div>
+    `;
+
+    const btnFilter = tabContent.querySelector('#btnFilterChurn');
+    if (btnFilter) {
+        btnFilter.addEventListener('click', () => {
+            const city = tabContent.querySelector('#churnCityFilter')?.value || '';
+            fetchBehaviorData_ChurnPattern(city);
+        });
+    }
+
+    fetchBehaviorData_ChurnPattern();
+}
+
+async function fetchBehaviorData_ChurnPattern(city = '') {
+    const chartsArea = document.getElementById('churn-charts-area');
+    const kpiArea    = document.getElementById('churn-kpi-row');
+    if (!chartsArea || !kpiArea) return;
+
+    if (chartsArea.gridstack) chartsArea.gridstack.destroy(false);
+    chartsArea.innerHTML = '<div class="loading-spinner"></div>';
+    kpiArea.innerHTML = '';
+
+    try {
+        const qs = city ? `?city=${encodeURIComponent(city)}` : '';
+        const resp = await fetch(`${state.API_BASE_URL}/api/behavior/churn_pattern${qs}`);
+        if (!resp.ok) throw new Error(await utils.handleFetchError(resp, 'Erro ao carregar padrão de churn.'));
+        const data = await resp.json();
+
+        const { summary: s = {}, permanence_distribution = [], seasonal_distribution = [], cities = [] } = data;
+
+        // City filter
+        const cityFilter = document.getElementById('churnCityFilter');
+        if (cityFilter && cities.length && cityFilter.options.length <= 1) {
+            utils.populateCityFilter(cityFilter, cities, city);
+        }
+
+        const total    = s.Total_Churners || 0;
+        const pctAtraso = total > 0 ? Math.round((s.Com_Atraso_Pre_Churn / total) * 100) : 0;
+        const pctAtend  = total > 0 ? Math.round((s.Com_Atendimentos     / total) * 100) : 0;
+        const pctPre6m  = total > 0 ? Math.round((s.Churners_Pre_6m      / total) * 100) : 0;
+
+        kpiArea.innerHTML = `
+            <div class="summary-card">
+                <div class="summary-card-label">Total Churners</div>
+                <div class="summary-card-value">${total.toLocaleString('pt-BR')}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-card-label">Permanência Média</div>
+                <div class="summary-card-value">${s.Media_Permanencia_Meses || 0} meses</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #ef4444;">
+                <div class="summary-card-label">Atraso nos 60d antes</div>
+                <div class="summary-card-value" style="color:#ef4444;">${pctAtraso}%</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #f97316;">
+                <div class="summary-card-label">Tinham Atendimento</div>
+                <div class="summary-card-value" style="color:#f97316;">${pctAtend}%</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #eab308;">
+                <div class="summary-card-label">Cancelaram &lt; 6 meses</div>
+                <div class="summary-card-value" style="color:#eab308;">${pctPre6m}%</div>
+            </div>
+        `;
+
+        chartsArea.innerHTML = '';
+
+        if (total === 0) {
+            chartsArea.innerHTML = '<p class="text-center text-gray-500 p-4">Nenhum dado de churn encontrado.</p>';
+            return;
+        }
+
+        const grid = GridStack.init({
+            cellHeight: 70, minRow: 1, margin: 10, float: true, column: 12,
+            disableOneColumnMode: false
+        }, chartsArea);
+        if (!grid) return;
+
+        // Chart 1 — Sinais de risco (horizontal/vertical bar)
+        const signalChartId = 'churnSignalsChart';
+        const signalLabels  = ['Atraso 60d antes', 'Histórico de atraso', 'Tinha atendimento', 'Fatura vencida', '< 6 meses ativo'];
+        const signalValues  = [
+            Math.round((s.Com_Atraso_Pre_Churn  / total) * 100),
+            Math.round((s.Com_Historico_Atraso  / total) * 100),
+            Math.round((s.Com_Atendimentos      / total) * 100),
+            Math.round((s.Com_Faturas_Vencidas  / total) * 100),
+            Math.round((s.Churners_Pre_6m       / total) * 100),
+        ];
+        grid.addWidget({
+            w: 6, h: 14, x: 0, y: 0,
+            content: `<div class="grid-stack-item-content">
+                <div class="chart-container-header"><h3 class="chart-title">Sinais Presentes nos Churners (%)</h3></div>
+                <div class="chart-canvas-container"><canvas id="${signalChartId}"></canvas></div>
+            </div>`
+        });
+        setTimeout(() => renderChart(
+            signalChartId, 'bar_vertical', signalLabels,
+            [{ label: '% dos churners', data: signalValues }],
+            'Sinais Presentes nos Churners (%)',
+            { formatterType: 'number' }
+        ), 50);
+
+        // Chart 2 — Permanência
+        if (permanence_distribution.length) {
+            const permChartId = 'churnPermChart';
+            const order  = ['0-3m','3-6m','6-12m','12-24m','24m+'];
+            const sorted = order.map(f => permanence_distribution.find(d => d.Faixa === f) || { Faixa: f, Count: 0 });
+            grid.addWidget({
+                w: 6, h: 14, x: 6, y: 0,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">Distribuição de Permanência</h3></div>
+                    <div class="chart-canvas-container"><canvas id="${permChartId}"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => renderChart(
+                permChartId, 'bar_vertical',
+                sorted.map(d => d.Faixa),
+                [{ label: 'Cancelamentos', data: sorted.map(d => d.Count) }],
+                'Distribuição de Permanência',
+                { formatterType: 'number' }
+            ), 50);
+        }
+
+        // Chart 3 — Sazonalidade
+        if (seasonal_distribution.length) {
+            const seasonChartId = 'churnSeasonChart';
+            grid.addWidget({
+                w: 12, h: 14, x: 0, y: 14,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">Sazonalidade de Cancelamentos (por mês do ano)</h3></div>
+                    <div class="chart-canvas-container"><canvas id="${seasonChartId}"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => renderChart(
+                seasonChartId, 'bar_vertical',
+                seasonal_distribution.map(d => d.Mes),
+                [{ label: 'Cancelamentos', data: seasonal_distribution.map(d => d.Count) }],
+                'Sazonalidade de Cancelamentos',
+                { formatterType: 'number' }
+            ), 50);
+        }
+
+    } catch (error) {
+        console.error(error);
+        chartsArea.innerHTML = `<p class="text-red-500 p-4">${error.message}</p>`;
     }
 }
 
@@ -210,115 +366,123 @@ function renderPredictiveChurnTab() {
     const tabContent = document.getElementById('tab-content-preditiva');
     if (!tabContent) return;
 
-    // Estrutura HTML da aba com filtros e botão
     tabContent.innerHTML = `
-        <div id="predictive-churn-filters" class="flex flex-wrap justify-center items-end gap-4 my-4">
+        <div id="pred-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div class="flex flex-wrap justify-center gap-4 mb-4 items-end">
             <div>
-                <label for="predictiveContractStatusFilter" class="text-gray-700 font-medium mr-2 text-sm">Status Contrato:</label>
-                <select id="predictiveContractStatusFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                    <option value="Ativo" selected>Ativo</option>
-                    <!-- Outros status podem ser populados dinamicamente se necessário -->
+                <label class="text-sm font-medium text-gray-700 mr-1">Cidade:</label>
+                <select id="predCityFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm min-w-[160px]">
+                    <option value="">Todas</option>
                 </select>
             </div>
             <div>
-                <label for="predictiveAccessStatusFilter" class="text-gray-700 font-medium mr-2 text-sm">Status Acesso:</label>
-                <select id="predictiveAccessStatusFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <label class="text-sm font-medium text-gray-700 mr-1">Nível de Risco:</label>
+                <select id="predRiskFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
                     <option value="">Todos</option>
+                    <option value="Alto">🔴 Alto</option>
+                    <option value="Médio">🟠 Médio</option>
+                    <option value="Baixo">🟡 Baixo</option>
                 </select>
             </div>
             <button id="btnFilterPredictive" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
         </div>
-        <div id="predictive-churn-table-container"></div> <!-- Container para a tabela e paginação -->
+        <div id="predictive-churn-table-container"></div>
     `;
 
-    // Popula o filtro de Status de Acesso
-    const mainAccessFilter = dom.accessStatusFilter; // Pega do DOM principal
-    const predictiveAccessFilter = tabContent.querySelector('#predictiveAccessStatusFilter');
-
-    const populatePredictiveFilter = () => {
-         if (mainAccessFilter && predictiveAccessFilter) {
-             predictiveAccessFilter.innerHTML = mainAccessFilter.innerHTML;
-             if (predictiveAccessFilter.options[0]?.value !== '') {
-                  const todosOption = document.createElement('option');
-                  todosOption.value = '';
-                  todosOption.textContent = 'Todos';
-                  predictiveAccessFilter.insertBefore(todosOption, predictiveAccessFilter.firstChild);
-             }
-             predictiveAccessFilter.value = '';
-         }
-    };
-
-    if (mainAccessFilter && mainAccessFilter.options.length > 1) {
-        populatePredictiveFilter();
-    } else {
-        populateContractStatusFilters().then(populatePredictiveFilter);
-    }
-
-    // Adiciona listener ao botão
     const btnFilter = tabContent.querySelector('#btnFilterPredictive');
     if (btnFilter) btnFilter.addEventListener('click', () => fetchAndRenderPredictiveChurnTable(1));
 
-    // Carrega a tabela inicial
     fetchAndRenderPredictiveChurnTable(1);
 }
 
 /**
- * Busca os dados e renderiza a tabela paginada da "Análise Preditiva de Churn".
- * @param {number} page - Número da página a ser buscada.
+ * Busca e renderiza a tabela paginada da "Análise Preditiva de Churn".
  */
 export async function fetchAndRenderPredictiveChurnTable(page = 1) {
     const container = document.getElementById('predictive-churn-table-container');
     if (!container) return;
 
-    container.innerHTML = '<div class="loading-spinner"></div>'; // Mostra loading
+    container.innerHTML = '<div class="loading-spinner"></div>';
 
-    const contractStatus = document.getElementById('predictiveContractStatusFilter')?.value || 'Ativo';
-    const accessStatus = document.getElementById('predictiveAccessStatusFilter')?.value || '';
-    const rowsPerPage = 50; // Pode ser ajustável se necessário
-    const offset = (page - 1) * rowsPerPage;
+    const city      = document.getElementById('predCityFilter')?.value  || '';
+    const riskLevel = document.getElementById('predRiskFilter')?.value  || '';
+    const rowsPerPage = 50;
+    const offset      = (page - 1) * rowsPerPage;
 
-    const params = new URLSearchParams({
-        limit: rowsPerPage,
-        offset: offset,
-        status_contrato: contractStatus
-    });
-    // Adiciona status_acesso apenas se um valor for selecionado
-    if (accessStatus) {
-        params.append('status_acesso', accessStatus);
-    }
-    const url = `${state.API_BASE_URL}/api/behavior/predictive_churn?${params.toString()}`;
+    const params = new URLSearchParams({ limit: rowsPerPage, offset });
+    if (city)      params.append('city',       city);
+    if (riskLevel) params.append('risk_level', riskLevel);
+
+    const url = `${state.API_BASE_URL}/api/behavior/predictive_churn?${params}`;
 
     try {
         const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(await utils.handleFetchError(response, 'Não foi possível carregar a análise preditiva.'));
-        }
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar análise preditiva.'));
         const result = await response.json();
 
-        // Guarda o estado atual da paginação para esta tabela específica
-        const tableState = { currentPage: page, totalRows: result.total_rows || 0, rowsPerPage: rowsPerPage };
+        // KPI tiles
+        const kpiRow = document.getElementById('pred-kpi-row');
+        if (kpiRow && result.summary) {
+            const s = result.summary;
+            kpiRow.innerHTML = `
+                <div class="summary-card" style="border-left:4px solid #ef4444;cursor:pointer;" onclick="document.getElementById('predRiskFilter').value='Alto';document.getElementById('btnFilterPredictive').click()">
+                    <div class="summary-card-label">🔴 Alto Risco</div>
+                    <div class="summary-card-value" style="color:#ef4444;">${s.Alto || 0}</div>
+                    <div style="font-size:0.7rem;color:#9ca3af;">Score ≥ 60 · clique para filtrar</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #f97316;cursor:pointer;" onclick="document.getElementById('predRiskFilter').value='Médio';document.getElementById('btnFilterPredictive').click()">
+                    <div class="summary-card-label">🟠 Médio Risco</div>
+                    <div class="summary-card-value" style="color:#f97316;">${s.Medio || 0}</div>
+                    <div style="font-size:0.7rem;color:#9ca3af;">Score 25–59 · clique para filtrar</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #eab308;cursor:pointer;" onclick="document.getElementById('predRiskFilter').value='Baixo';document.getElementById('btnFilterPredictive').click()">
+                    <div class="summary-card-label">🟡 Baixo Risco</div>
+                    <div class="summary-card-value" style="color:#eab308;">${s.Baixo || 0}</div>
+                    <div style="font-size:0.7rem;color:#9ca3af;">Score 10–24 · clique para filtrar</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-card-label">Total Monitorados</div>
+                    <div class="summary-card-value">${s.Total || 0}</div>
+                    <div style="font-size:0.7rem;color:#9ca3af;">com algum sinal de risco</div>
+                </div>
+            `;
+        }
 
-        // Define as colunas
+        // City filter on first load
+        const cityFilter = document.getElementById('predCityFilter');
+        if (cityFilter && result.cities?.length && cityFilter.options.length <= 1) {
+            utils.populateCityFilter(cityFilter, result.cities, city);
+        }
+
+        const RISK_CLS = {
+            'Alto':  'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;',
+            'Médio': 'background:#ffedd5;color:#ea580c;border:1px solid #fdba74;',
+            'Baixo': 'background:#fefce8;color:#ca8a04;border:1px solid #fde047;',
+        };
+
         const columns = [
-            { header: 'Cliente', render: r => `<span title="${r.Razao_Social}">${r.Razao_Social}</span>` },
-            { header: 'Contrato ID', key: 'Contrato_ID' },
-             // Simplificado para indicar que o evento ocorreu, mas ainda linka para detalhes financeiros
-            { header: 'Teve Atraso >10d?', render: r => `<span class="detail-trigger cursor-pointer text-red-600 font-bold hover:underline" data-type="financial" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Razao_Social.replace(/"/g, '&quot;')}">Sim</span>` },
-            { header: 'Tem Reclamações?', render: r => `<span class="detail-trigger cursor-pointer text-orange-600 font-bold hover:underline" data-type="complaints" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Razao_Social.replace(/"/g, '&quot;')}">Sim</span>` },
-            { header: 'Última Conexão', render: r => r.Ultima_Conexao ? `<span class="detail-trigger cursor-pointer text-blue-600 hover:underline" data-type="logins" data-contract-id="${r.Contrato_ID}" data-client-name="${r.Razao_Social.replace(/"/g, '&quot;')}">${utils.formatDate(r.Ultima_Conexao)}</span>` : 'N/A' }
+            { header: 'Cliente',       render: r => `<span class="font-medium">${r.Cliente}</span>` },
+            { header: 'Cidade',        key: 'Cidade' },
+            { header: 'Risco',         render: r => `<span style="padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;${RISK_CLS[r.Nivel_Risco]||''}">${r.Nivel_Risco}</span>` },
+            { header: 'Score',         render: r => `<span class="font-mono font-bold">${r.Risk_Score}</span>` },
+            { header: 'Fat. Vencidas', render: r => r.Faturas_Vencidas > 0 ? `<span style="color:#dc2626;font-weight:700;">${r.Faturas_Vencidas}</span>` : '0' },
+            { header: 'Dias Vencido',  render: r => r.Dias_Vencido > 0 ? `<span style="color:#dc2626;">${r.Dias_Vencido}d</span>` : '-' },
+            { header: 'Atrasos 90d',   render: r => r.Atrasos_90d > 0 ? `<span style="color:#ea580c;">${r.Atrasos_90d}</span>` : '0' },
+            { header: 'Atend. 30d',    render: r => r.Atendimentos_30d > 0 ? `<span style="color:#2563eb;">${r.Atendimentos_30d}</span>` : '0' },
+            { header: 'Sem Conexão',   render: r => r.Dias_Sem_Conexao > 0
+                ? `<span style="color:${r.Dias_Sem_Conexao > 30 ? '#dc2626' : '#ca8a04'};">${r.Dias_Sem_Conexao}d</span>`
+                : '-' },
+            { header: 'Val. Vencido',  render: r => r.Valor_Vencido > 0 ? `<span style="color:#dc2626;">R$ ${parseFloat(r.Valor_Vencido).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>` : '-' },
         ];
 
-        // Renderiza a tabela ou mensagem de "nenhum resultado"
-        let tableHtml = '<p class="text-center text-gray-500 mt-4">Nenhum cliente com perfil de risco encontrado para os filtros selecionados.</p>';
-        if (result.data && result.data.length > 0) {
+        const tableState = { currentPage: page, totalRows: result.total_rows || 0, rowsPerPage };
+        let tableHtml = '<p class="text-center text-gray-500 mt-4">Nenhum cliente em risco para os filtros selecionados.</p>';
+        if (result.data?.length > 0) {
             tableHtml = utils.renderGenericDetailTable(null, result.data, columns, true);
         }
 
-        // Renderiza a paginação usando a função utilitária
         const paginationHtml = utils.createGenericPaginationHtml('predictive-page-btn', tableState);
-
-        // Atualiza o container com a tabela e a paginação
-        container.innerHTML = `<div class="table-wrapper border rounded-lg overflow-hidden">${tableHtml}</div>` + paginationHtml;
+        container.innerHTML = `<div class="table-wrapper border rounded-lg overflow-hidden">${tableHtml}</div>${paginationHtml}`;
 
     } catch (error) {
         container.innerHTML = `<p class="text-red-500 p-4">${error.message}</p>`;

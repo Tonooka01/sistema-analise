@@ -70,92 +70,315 @@ def api_behavior_complaint_patterns():
     finally:
         if conn: conn.close()
 
+@behavior_bp.route('/churn_pattern')
+def api_behavior_churn_pattern():
+    conn = get_db()
+    try:
+        city = request.args.get('city', '').strip()
+
+        has_neg = bool(conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='Contratos_Negativacao'"
+        ).fetchone())
+
+        city_sql = "AND Cidade = ?" if city else ""
+        city_p   = [city] if city else []
+
+        neg_union = ""
+        if has_neg:
+            neg_union = f"""
+            UNION ALL
+            SELECT ID AS Contrato_ID, Cliente, Data_ativa_o,
+                   Data_negativa_o AS end_date, Cidade
+            FROM Contratos_Negativacao
+            WHERE Data_negativa_o IS NOT NULL {city_sql}
+            """
+
+        churners_cte = f"""
+            Churners AS (
+                SELECT ID AS Contrato_ID, Cliente, Data_ativa_o,
+                       Data_cancelamento AS end_date, Cidade
+                FROM Contratos
+                WHERE Status_contrato = 'Inativo'
+                  AND Status_acesso = 'Desativado'
+                  AND Data_cancelamento IS NOT NULL
+                  AND Data_cancelamento != ''
+                  {city_sql}
+                {neg_union}
+            )
+        """
+        base_p = city_p + (city_p if has_neg else [])
+
+        summary_sql = f"""
+            WITH {churners_cte},
+            ChurnPayments AS (
+                SELECT
+                    CR.ID_Contrato_Recorrente,
+                    SUM(CASE WHEN CR.Data_pagamento > CR.Vencimento THEN 1 ELSE 0 END) AS Atrasos_Total,
+                    SUM(CASE WHEN CR.Status = 'A receber'
+                              AND CR.Vencimento < date('now') THEN 1 ELSE 0 END) AS Faturas_Vencidas,
+                    SUM(CASE WHEN CR.Data_pagamento > CR.Vencimento
+                              AND CR.Vencimento >= DATE(CH.end_date, '-60 days')
+                              AND CR.Vencimento <= CH.end_date THEN 1 ELSE 0 END) AS Atrasos_Pre_Churn
+                FROM Contas_a_Receber CR
+                JOIN Churners CH ON CR.ID_Contrato_Recorrente = CH.Contrato_ID
+                GROUP BY CR.ID_Contrato_Recorrente
+            ),
+            ChurnTickets AS (
+                SELECT DISTINCT CH.Contrato_ID
+                FROM Churners CH
+                JOIN (
+                    SELECT Cliente FROM Atendimentos WHERE Cliente IS NOT NULL
+                    UNION
+                    SELECT Cliente FROM OS WHERE Cliente IS NOT NULL
+                ) T ON CH.Cliente = T.Cliente
+            )
+            SELECT
+                COUNT(CH.Contrato_ID) AS Total_Churners,
+                ROUND(AVG((JULIANDAY(CH.end_date) - JULIANDAY(CH.Data_ativa_o)) / 30.44), 1) AS Media_Permanencia_Meses,
+                SUM(CASE WHEN CP.Atrasos_Total > 0 THEN 1 ELSE 0 END) AS Com_Historico_Atraso,
+                SUM(CASE WHEN CP.Atrasos_Pre_Churn > 0 THEN 1 ELSE 0 END) AS Com_Atraso_Pre_Churn,
+                SUM(CASE WHEN CP.Faturas_Vencidas > 0 THEN 1 ELSE 0 END) AS Com_Faturas_Vencidas,
+                SUM(CASE WHEN CT.Contrato_ID IS NOT NULL THEN 1 ELSE 0 END) AS Com_Atendimentos,
+                SUM(CASE WHEN (JULIANDAY(CH.end_date) - JULIANDAY(CH.Data_ativa_o)) / 30.44 < 6
+                         THEN 1 ELSE 0 END) AS Churners_Pre_6m
+            FROM Churners CH
+            LEFT JOIN ChurnPayments CP ON CH.Contrato_ID = CP.ID_Contrato_Recorrente
+            LEFT JOIN ChurnTickets CT ON CH.Contrato_ID = CT.Contrato_ID
+            WHERE CH.end_date IS NOT NULL AND CH.Data_ativa_o IS NOT NULL
+        """
+
+        perm_sql = f"""
+            WITH {churners_cte}
+            SELECT
+                CASE
+                    WHEN (JULIANDAY(end_date)-JULIANDAY(Data_ativa_o))/30.44 <= 3  THEN '0-3m'
+                    WHEN (JULIANDAY(end_date)-JULIANDAY(Data_ativa_o))/30.44 <= 6  THEN '3-6m'
+                    WHEN (JULIANDAY(end_date)-JULIANDAY(Data_ativa_o))/30.44 <= 12 THEN '6-12m'
+                    WHEN (JULIANDAY(end_date)-JULIANDAY(Data_ativa_o))/30.44 <= 24 THEN '12-24m'
+                    ELSE '24m+'
+                END AS Faixa,
+                COUNT(*) AS Count
+            FROM Churners
+            WHERE end_date IS NOT NULL AND Data_ativa_o IS NOT NULL
+            GROUP BY Faixa
+        """
+
+        seasonal_sql = f"""
+            WITH {churners_cte}
+            SELECT
+                CASE STRFTIME('%m', end_date)
+                    WHEN '01' THEN 'Jan' WHEN '02' THEN 'Fev' WHEN '03' THEN 'Mar'
+                    WHEN '04' THEN 'Abr' WHEN '05' THEN 'Mai' WHEN '06' THEN 'Jun'
+                    WHEN '07' THEN 'Jul' WHEN '08' THEN 'Ago' WHEN '09' THEN 'Set'
+                    WHEN '10' THEN 'Out' WHEN '11' THEN 'Nov' WHEN '12' THEN 'Dez'
+                END AS Mes,
+                STRFTIME('%m', end_date) AS Mes_Num,
+                COUNT(*) AS Count
+            FROM Churners
+            WHERE end_date IS NOT NULL
+            GROUP BY Mes_Num, Mes
+            ORDER BY Mes_Num
+        """
+
+        if has_neg:
+            cities_sql = """
+                SELECT DISTINCT Cidade FROM (
+                    SELECT Cidade FROM Contratos
+                    WHERE Status_contrato='Inativo' AND Status_acesso='Desativado'
+                    UNION
+                    SELECT Cidade FROM Contratos_Negativacao
+                ) WHERE Cidade IS NOT NULL AND TRIM(Cidade) != ''
+                  AND Cidade NOT GLOB '*[0-9]*' ORDER BY Cidade
+            """
+        else:
+            cities_sql = """
+                SELECT DISTINCT Cidade FROM Contratos
+                WHERE Status_contrato='Inativo' AND Status_acesso='Desativado'
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+                  AND Cidade NOT GLOB '*[0-9]*' ORDER BY Cidade
+            """
+
+        summary    = dict(conn.execute(summary_sql,  base_p).fetchone() or {})
+        permanence = [dict(r) for r in conn.execute(perm_sql,     base_p).fetchall()]
+        seasonal   = [dict(r) for r in conn.execute(seasonal_sql, base_p).fetchall()]
+        cities     = [r[0] for r in conn.execute(cities_sql).fetchall() if r[0]]
+
+        return jsonify({
+            'summary':                  summary,
+            'permanence_distribution':  permanence,
+            'seasonal_distribution':    seasonal,
+            'cities':                   cities,
+        })
+
+    except Exception as e:
+        logger.error(f"Erro no padrão de churn: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
 @behavior_bp.route('/predictive_churn')
 def api_behavior_predictive_churn():
     conn = get_db()
     try:
-        # Reutiliza a lógica da "Saúde Financeira", mas foca em clientes com reclamações
-        delay_days = 10 # Considera atrasos acima de 10 dias como um sinal
+        limit      = request.args.get('limit',      50,   type=int)
+        offset     = request.args.get('offset',     0,    type=int)
+        city       = request.args.get('city',       '').strip()
+        risk_level = request.args.get('risk_level', '').strip()
+        status_acesso = request.args.get('status_acesso', '').strip()
 
-        # Filtros do frontend
-        limit = request.args.get('limit', 50, type=int)
-        offset = request.args.get('offset', 0, type=int)
-        status_contrato = request.args.get('status_contrato', 'Ativo')
-        status_acesso = request.args.get('status_acesso', '')
-
-        params = []
-        where_conditions = [
-            "FLP.ID_Contrato_Recorrente IS NOT NULL", # Garante que o cliente já teve ao menos um atraso significativo
-            "CC.Possui_Reclamacoes = 'Sim'" # Garante que o cliente já abriu alguma reclamação
-        ]
-
-        if status_contrato:
-            where_conditions.append("C.Status_contrato = ?")
-            params.append(status_contrato)
+        active_conds = ["C.Status_contrato = 'Ativo'"]
+        active_p     = []
         if status_acesso:
-            where_conditions.append("C.Status_acesso = ?")
-            params.append(status_acesso)
+            active_conds.append("C.Status_acesso = ?")
+            active_p.append(status_acesso)
+        if city:
+            active_conds.append("C.Cidade = ?")
+            active_p.append(city)
+        where_active = " AND ".join(active_conds)
 
-        where_clause = " WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+        risk_sql = ""
+        risk_p   = []
+        if risk_level == 'Alto':
+            risk_sql = "AND Risk_Score >= 60"
+        elif risk_level == 'Médio':
+            risk_sql = "AND Risk_Score >= 25 AND Risk_Score < 60"
+        elif risk_level == 'Baixo':
+            risk_sql = "AND Risk_Score >= 10 AND Risk_Score < 25"
 
-        query_base_from = f"""
-            FROM Contratos C
-            JOIN FirstLatePayment FLP ON C.ID = FLP.ID_Contrato_Recorrente
-            JOIN CustomerComplaints CC ON C.Cliente = CC.Cliente
-            LEFT JOIN LastConnection LC ON C.ID = LC.ID_contrato
-        """
-
-        full_query_select = f"""
-            WITH FirstLatePayment AS (
-                SELECT DISTINCT p.ID_Contrato_Recorrente
-                FROM Contas_a_Receber p
-                JOIN Contratos c ON p.ID_Contrato_Recorrente = c.ID
-                WHERE p.Data_pagamento IS NOT NULL AND JULIANDAY(p.Data_pagamento) - JULIANDAY(p.Vencimento) > {delay_days} AND p.Vencimento >= c.Data_ativa_o
+        base_cte = f"""
+            WITH ActiveContracts AS (
+                SELECT ID, Cliente, Cidade, Data_ativa_o
+                FROM Contratos
+                WHERE {where_active}
             ),
-            CustomerComplaints AS (
-                SELECT Cliente, 'Sim' AS Possui_Reclamacoes
-                FROM ( SELECT Cliente FROM Atendimentos WHERE Cliente IS NOT NULL UNION SELECT Cliente FROM OS WHERE Cliente IS NOT NULL )
+            PaymentProfile AS (
+                SELECT
+                    CR.ID_Contrato_Recorrente,
+                    SUM(CASE WHEN CR.Status = 'A receber'
+                              AND CR.Vencimento < date('now') THEN 1 ELSE 0 END) AS Faturas_Vencidas,
+                    MAX(CASE WHEN CR.Status = 'A receber' AND CR.Vencimento < date('now')
+                             THEN CAST(JULIANDAY(date('now')) - JULIANDAY(CR.Vencimento) AS INTEGER)
+                             END) AS Dias_Vencido,
+                    SUM(CASE WHEN CR.Data_pagamento > CR.Vencimento
+                              AND CR.Vencimento >= date('now', '-90 days') THEN 1 ELSE 0 END) AS Atrasos_90d,
+                    ROUND(AVG(CASE WHEN CR.Data_pagamento IS NOT NULL
+                                   THEN JULIANDAY(CR.Data_pagamento) - JULIANDAY(CR.Vencimento)
+                                   END), 1) AS Media_Atraso,
+                    ROUND(SUM(CASE WHEN CR.Status = 'A receber' AND CR.Vencimento < date('now')
+                                   THEN CR.Valor ELSE 0 END), 2) AS Valor_Vencido
+                FROM Contas_a_Receber CR
+                WHERE CR.ID_Contrato_Recorrente IN (SELECT ID FROM ActiveContracts)
+                GROUP BY CR.ID_Contrato_Recorrente
+            ),
+            RecentTickets AS (
+                SELECT Cliente, COUNT(*) AS Atendimentos_30d
+                FROM (
+                    SELECT Cliente FROM Atendimentos
+                    WHERE Criado_em >= date('now', '-30 days') AND Cliente IS NOT NULL
+                    UNION ALL
+                    SELECT Cliente FROM OS
+                    WHERE Abertura >= date('now', '-30 days') AND Cliente IS NOT NULL
+                )
                 GROUP BY Cliente
             ),
-            LastConnection AS (
-                SELECT ID_contrato, MAX(ltima_conex_o_final) as Ultima_Conexao
-                FROM Logins WHERE ltima_conex_o_final IS NOT NULL AND ID_contrato IS NOT NULL
+            ConnectionStatus AS (
+                SELECT ID_contrato,
+                       MAX(ltima_conex_o_final) AS Ultima_Conexao,
+                       CAST(JULIANDAY(date('now')) - JULIANDAY(MAX(ltima_conex_o_final))
+                            AS INTEGER) AS Dias_Sem_Conexao
+                FROM Logins
+                WHERE ltima_conex_o_final IS NOT NULL AND ID_contrato IS NOT NULL
                 GROUP BY ID_contrato
+            ),
+            Scored AS (
+                SELECT
+                    AC.ID AS Contrato_ID,
+                    AC.Cliente,
+                    AC.Cidade,
+                    CAST((JULIANDAY(date('now')) - JULIANDAY(AC.Data_ativa_o)) / 30.44
+                         AS INTEGER) AS Meses_Ativo,
+                    COALESCE(PP.Faturas_Vencidas, 0) AS Faturas_Vencidas,
+                    COALESCE(PP.Dias_Vencido, 0)     AS Dias_Vencido,
+                    COALESCE(PP.Atrasos_90d, 0)      AS Atrasos_90d,
+                    COALESCE(PP.Media_Atraso, 0)     AS Media_Atraso,
+                    COALESCE(PP.Valor_Vencido, 0)    AS Valor_Vencido,
+                    COALESCE(RT.Atendimentos_30d, 0) AS Atendimentos_30d,
+                    COALESCE(CS.Dias_Sem_Conexao, 0) AS Dias_Sem_Conexao,
+                    CS.Ultima_Conexao,
+                    (
+                        COALESCE(PP.Faturas_Vencidas, 0) * 25
+                        + CASE WHEN COALESCE(PP.Dias_Vencido, 0) > 60 THEN 30
+                               WHEN COALESCE(PP.Dias_Vencido, 0) > 30 THEN 15
+                               ELSE 0 END
+                        + MIN(COALESCE(PP.Atrasos_90d, 0), 5) * 8
+                        + CASE WHEN COALESCE(PP.Media_Atraso, 0) > 30 THEN 15
+                               WHEN COALESCE(PP.Media_Atraso, 0) > 15 THEN 7
+                               ELSE 0 END
+                        + MIN(COALESCE(RT.Atendimentos_30d, 0), 3) * 8
+                        + CASE WHEN COALESCE(CS.Dias_Sem_Conexao, 0) > 30 THEN 20
+                               WHEN COALESCE(CS.Dias_Sem_Conexao, 0) > 14 THEN 10
+                               ELSE 0 END
+                    ) AS Risk_Score
+                FROM ActiveContracts AC
+                LEFT JOIN PaymentProfile PP ON AC.ID = PP.ID_Contrato_Recorrente
+                LEFT JOIN RecentTickets RT ON AC.Cliente = RT.Cliente
+                LEFT JOIN ConnectionStatus CS ON AC.ID = CS.ID_contrato
+                WHERE (
+                    COALESCE(PP.Faturas_Vencidas, 0) > 0
+                    OR COALESCE(PP.Atrasos_90d, 0) > 1
+                    OR COALESCE(RT.Atendimentos_30d, 0) > 1
+                    OR COALESCE(CS.Dias_Sem_Conexao, 0) > 14
+                )
             )
-            SELECT C.Cliente AS Razao_Social, C.ID AS Contrato_ID, C.Status_contrato, C.Status_acesso, C.Data_ativa_o,
-                   'Sim' AS Primeira_Inadimplencia_Vencimento, -- Simplificado
-                   'Sim' AS Possui_Reclamacoes,
-                   LC.Ultima_Conexao
-            {query_base_from}
-            {where_clause}
         """
 
-        # CORREÇÃO: A contagem deve usar a estrutura da query principal
-        count_query = f"""
-             WITH FirstLatePayment AS (
-                 SELECT DISTINCT p.ID_Contrato_Recorrente
-                 FROM Contas_a_Receber p JOIN Contratos c ON p.ID_Contrato_Recorrente = c.ID
-                 WHERE p.Data_pagamento IS NOT NULL AND JULIANDAY(p.Data_pagamento) - JULIANDAY(p.Vencimento) > {delay_days} AND p.Vencimento >= c.Data_ativa_o
-             ),
-             CustomerComplaints AS (
-                 SELECT Cliente, 'Sim' AS Possui_Reclamacoes
-                 FROM ( SELECT Cliente FROM Atendimentos WHERE Cliente IS NOT NULL UNION SELECT Cliente FROM OS WHERE Cliente IS NOT NULL ) GROUP BY Cliente
-             )
-             SELECT COUNT(C.ID)
-             FROM Contratos C JOIN FirstLatePayment FLP ON C.ID = FLP.ID_Contrato_Recorrente JOIN CustomerComplaints CC ON C.Cliente = CC.Cliente
-             {where_clause}
+        summary_sql = base_cte + """
+            SELECT
+                SUM(CASE WHEN Risk_Score >= 60 THEN 1 ELSE 0 END) AS Alto,
+                SUM(CASE WHEN Risk_Score >= 25 AND Risk_Score < 60 THEN 1 ELSE 0 END) AS Medio,
+                SUM(CASE WHEN Risk_Score >= 10 AND Risk_Score < 25 THEN 1 ELSE 0 END) AS Baixo,
+                COUNT(*) AS Total
+            FROM Scored WHERE Risk_Score >= 10
         """
-        total_rows = conn.execute(count_query, tuple(params)).fetchone()[0]
 
-        # CORREÇÃO: A ordenação deve usar os nomes das colunas do resultado (Razao_Social, Contrato_ID).
-        paginated_query = f"{full_query_select} ORDER BY Razao_Social, Contrato_ID LIMIT ? OFFSET ?;"
-        params.extend([limit, offset])
-        data = conn.execute(paginated_query, tuple(params)).fetchall()
+        count_sql = base_cte + f"""
+            SELECT COUNT(*) FROM Scored WHERE Risk_Score >= 10 {risk_sql}
+        """
 
-        return jsonify({"data": [dict(row) for row in data], "total_rows": total_rows})
+        data_sql = base_cte + f"""
+            SELECT *,
+                CASE WHEN Risk_Score >= 60 THEN 'Alto'
+                     WHEN Risk_Score >= 25 THEN 'Médio'
+                     WHEN Risk_Score >= 10 THEN 'Baixo'
+                     ELSE 'Saudável' END AS Nivel_Risco
+            FROM Scored
+            WHERE Risk_Score >= 10 {risk_sql}
+            ORDER BY Risk_Score DESC
+            LIMIT ? OFFSET ?
+        """
 
-    except sqlite3.Error as e:
+        cities_sql = """
+            SELECT DISTINCT Cidade FROM Contratos
+            WHERE Status_contrato = 'Ativo' AND Cidade IS NOT NULL
+              AND TRIM(Cidade) != '' AND Cidade NOT GLOB '*[0-9]*'
+            ORDER BY Cidade
+        """
+
+        summary    = dict(conn.execute(summary_sql, active_p).fetchone() or {})
+        total_rows = conn.execute(count_sql,         active_p + risk_p).fetchone()[0]
+        data       = [dict(r) for r in conn.execute(data_sql, active_p + risk_p + [limit, offset]).fetchall()]
+        cities     = [r[0] for r in conn.execute(cities_sql).fetchall() if r[0]]
+
+        return jsonify({
+            'data':       data,
+            'summary':    summary,
+            'total_rows': total_rows,
+            'cities':     cities,
+        })
+
+    except Exception as e:
         logger.error(f"Erro na análise preditiva de churn: {e}", exc_info=True)
-        return jsonify({"error": f"Erro interno ao processar a análise preditiva. Detalhe: {e}"}), 500
+        return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
