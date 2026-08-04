@@ -384,6 +384,17 @@ function renderPredictiveChurnTab() {
                     <option value="Baixo">🟡 Baixo</option>
                 </select>
             </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mr-1">St. Acesso:</label>
+                <select id="predAccessFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
+                    <option value="">Todos</option>
+                    <option value="Ativo">Ativo</option>
+                    <option value="Suspenso">Suspenso</option>
+                    <option value="Bloqueio Manual">Bloqueio Manual</option>
+                    <option value="Bloqueio Automático">Bloqueio Automático</option>
+                    <option value="Financeiro em atraso">Financeiro em atraso</option>
+                </select>
+            </div>
             <button id="btnFilterPredictive" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
             <button id="btnExportPredictive" class="bg-green-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-green-700 transition font-semibold text-sm h-10">⬇ Baixar CSV</button>
         </div>
@@ -408,14 +419,16 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
 
     container.innerHTML = '<div class="loading-spinner"></div>';
 
-    const city      = document.getElementById('predCityFilter')?.value  || '';
-    const riskLevel = document.getElementById('predRiskFilter')?.value  || '';
-    const rowsPerPage = 50;
-    const offset      = (page - 1) * rowsPerPage;
+    const city         = document.getElementById('predCityFilter')?.value    || '';
+    const riskLevel    = document.getElementById('predRiskFilter')?.value    || '';
+    const statusAcesso = document.getElementById('predAccessFilter')?.value  || '';
+    const rowsPerPage  = 50;
+    const offset       = (page - 1) * rowsPerPage;
 
     const params = new URLSearchParams({ limit: rowsPerPage, offset });
-    if (city)      params.append('city',       city);
-    if (riskLevel) params.append('risk_level', riskLevel);
+    if (city)         params.append('city',          city);
+    if (riskLevel)    params.append('risk_level',    riskLevel);
+    if (statusAcesso) params.append('status_acesso', statusAcesso);
 
     const url = `${state.API_BASE_URL}/api/behavior/predictive_churn?${params}`;
 
@@ -538,16 +551,18 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
 }
 
 async function exportPredictiveChurnCSV() {
-    const city      = document.getElementById('predCityFilter')?.value  || '';
-    const riskLevel = document.getElementById('predRiskFilter')?.value  || '';
-    const btn       = document.getElementById('btnExportPredictive');
+    const city         = document.getElementById('predCityFilter')?.value    || '';
+    const riskLevel    = document.getElementById('predRiskFilter')?.value    || '';
+    const statusAcesso = document.getElementById('predAccessFilter')?.value  || '';
+    const btn          = document.getElementById('btnExportPredictive');
 
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando...'; }
 
     try {
         const params = new URLSearchParams({ limit: 5000, offset: 0 });
-        if (city)      params.append('city',       city);
-        if (riskLevel) params.append('risk_level', riskLevel);
+        if (city)         params.append('city',          city);
+        if (riskLevel)    params.append('risk_level',    riskLevel);
+        if (statusAcesso) params.append('status_acesso', statusAcesso);
 
         const res  = await fetch(`/api/behavior/predictive_churn_export?${params}`);
         if (!res.ok) throw new Error('Erro ao buscar dados para exportação.');
