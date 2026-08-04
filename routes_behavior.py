@@ -221,20 +221,21 @@ def api_behavior_churn_pattern():
 def api_behavior_predictive_churn():
     conn = get_db()
     try:
-        limit      = request.args.get('limit',      50,   type=int)
-        offset     = request.args.get('offset',     0,    type=int)
-        city       = request.args.get('city',       '').strip()
-        risk_level = request.args.get('risk_level', '').strip()
-        status_acesso = request.args.get('status_acesso', '').strip()
+        limit         = request.args.get('limit',      50,   type=int)
+        offset        = request.args.get('offset',     0,    type=int)
+        city          = request.args.get('city',       '').strip()
+        risk_level    = request.args.get('risk_level', '').strip()
+        status_acesso = [v for v in request.args.getlist('status_acesso') if v.strip()]
 
         active_conds = [
             "Status_contrato = 'Ativo'",
             "Status_acesso != 'Desativado'",
         ]
-        active_p     = []
+        active_p = []
         if status_acesso:
-            active_conds.append("Status_acesso = ?")
-            active_p.append(status_acesso)
+            placeholders = ','.join('?' * len(status_acesso))
+            active_conds.append(f"Status_acesso IN ({placeholders})")
+            active_p.extend(status_acesso)
         if city:
             active_conds.append("Cidade = ?")
             active_p.append(city)
@@ -394,15 +395,20 @@ def api_behavior_predictive_churn_export():
     conn = get_db()
     try:
         limit      = request.args.get('limit',      5000, type=int)
-        offset     = request.args.get('offset',     0,    type=int)
-        city       = request.args.get('city',       '').strip()
-        risk_level = request.args.get('risk_level', '').strip()
+        offset        = request.args.get('offset',     0,    type=int)
+        city          = request.args.get('city',       '').strip()
+        risk_level    = request.args.get('risk_level', '').strip()
+        status_acesso = [v for v in request.args.getlist('status_acesso') if v.strip()]
 
         active_conds = [
             "Status_contrato = 'Ativo'",
             "Status_acesso != 'Desativado'",
         ]
         active_p = []
+        if status_acesso:
+            placeholders = ','.join('?' * len(status_acesso))
+            active_conds.append(f"Status_acesso IN ({placeholders})")
+            active_p.extend(status_acesso)
         if city:
             active_conds.append("Cidade = ?")
             active_p.append(city)

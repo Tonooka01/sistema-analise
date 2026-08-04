@@ -384,16 +384,22 @@ function renderPredictiveChurnTab() {
                     <option value="Baixo">🟡 Baixo</option>
                 </select>
             </div>
-            <div>
+            <div style="position:relative;" id="predAccessDropdownWrap">
                 <label class="text-sm font-medium text-gray-700 mr-1">St. Acesso:</label>
-                <select id="predAccessFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
-                    <option value="">Todos</option>
-                    <option value="Ativo">Ativo</option>
-                    <option value="Suspenso">Suspenso</option>
-                    <option value="Bloqueio Manual">Bloqueio Manual</option>
-                    <option value="Bloqueio Automático">Bloqueio Automático</option>
-                    <option value="Financeiro em atraso">Financeiro em atraso</option>
-                </select>
+                <button type="button" id="predAccessBtn"
+                    class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm text-sm min-w-[160px] text-left flex items-center justify-between gap-2"
+                    style="cursor:pointer;">
+                    <span id="predAccessLabel">Todos</span>
+                    <svg style="width:14px;height:14px;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div id="predAccessMenu" style="display:none;position:absolute;top:100%;left:0;z-index:50;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);min-width:200px;padding:6px 0;">
+                    ${['Ativo','Suspenso','Bloqueio Manual','Bloqueio Automático','Financeiro em atraso'].map(v =>
+                        `<label style="display:flex;align-items:center;gap:8px;padding:6px 14px;cursor:pointer;font-size:.875rem;" class="hover:bg-gray-50">
+                            <input type="checkbox" class="pred-access-cb" value="${v}" style="cursor:pointer;">
+                            ${v}
+                        </label>`
+                    ).join('')}
+                </div>
             </div>
             <button id="btnFilterPredictive" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
             <button id="btnExportPredictive" class="bg-green-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-green-700 transition font-semibold text-sm h-10">⬇ Baixar CSV</button>
@@ -407,6 +413,25 @@ function renderPredictiveChurnTab() {
     const btnExport = tabContent.querySelector('#btnExportPredictive');
     if (btnExport) btnExport.addEventListener('click', () => exportPredictiveChurnCSV());
 
+    // Multi-select dropdown de St. Acesso
+    const accessBtn  = tabContent.querySelector('#predAccessBtn');
+    const accessMenu = tabContent.querySelector('#predAccessMenu');
+    if (accessBtn && accessMenu) {
+        accessBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            accessMenu.style.display = accessMenu.style.display === 'none' ? 'block' : 'none';
+        });
+        accessMenu.addEventListener('change', () => {
+            const checked = [...accessMenu.querySelectorAll('.pred-access-cb:checked')].map(cb => cb.value);
+            tabContent.querySelector('#predAccessLabel').textContent =
+                checked.length === 0 ? 'Todos' : checked.length === 1 ? checked[0] : `${checked.length} selecionados`;
+        });
+        document.addEventListener('click', e => {
+            if (!tabContent.querySelector('#predAccessDropdownWrap')?.contains(e.target))
+                accessMenu.style.display = 'none';
+        }, { capture: false });
+    }
+
     fetchAndRenderPredictiveChurnTable(1);
 }
 
@@ -419,16 +444,16 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
 
     container.innerHTML = '<div class="loading-spinner"></div>';
 
-    const city         = document.getElementById('predCityFilter')?.value    || '';
-    const riskLevel    = document.getElementById('predRiskFilter')?.value    || '';
-    const statusAcesso = document.getElementById('predAccessFilter')?.value  || '';
-    const rowsPerPage  = 50;
-    const offset       = (page - 1) * rowsPerPage;
+    const city          = document.getElementById('predCityFilter')?.value || '';
+    const riskLevel     = document.getElementById('predRiskFilter')?.value || '';
+    const accessChecked = [...document.querySelectorAll('.pred-access-cb:checked')].map(cb => cb.value);
+    const rowsPerPage   = 50;
+    const offset        = (page - 1) * rowsPerPage;
 
     const params = new URLSearchParams({ limit: rowsPerPage, offset });
-    if (city)         params.append('city',          city);
-    if (riskLevel)    params.append('risk_level',    riskLevel);
-    if (statusAcesso) params.append('status_acesso', statusAcesso);
+    if (city)      params.append('city',       city);
+    if (riskLevel) params.append('risk_level', riskLevel);
+    accessChecked.forEach(v => params.append('status_acesso', v));
 
     const url = `${state.API_BASE_URL}/api/behavior/predictive_churn?${params}`;
 
@@ -551,18 +576,18 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
 }
 
 async function exportPredictiveChurnCSV() {
-    const city         = document.getElementById('predCityFilter')?.value    || '';
-    const riskLevel    = document.getElementById('predRiskFilter')?.value    || '';
-    const statusAcesso = document.getElementById('predAccessFilter')?.value  || '';
-    const btn          = document.getElementById('btnExportPredictive');
+    const city          = document.getElementById('predCityFilter')?.value || '';
+    const riskLevel     = document.getElementById('predRiskFilter')?.value || '';
+    const accessChecked = [...document.querySelectorAll('.pred-access-cb:checked')].map(cb => cb.value);
+    const btn           = document.getElementById('btnExportPredictive');
 
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando...'; }
 
     try {
         const params = new URLSearchParams({ limit: 5000, offset: 0 });
-        if (city)         params.append('city',          city);
-        if (riskLevel)    params.append('risk_level',    riskLevel);
-        if (statusAcesso) params.append('status_acesso', statusAcesso);
+        if (city)      params.append('city',       city);
+        if (riskLevel) params.append('risk_level', riskLevel);
+        accessChecked.forEach(v => params.append('status_acesso', v));
 
         const res  = await fetch(`/api/behavior/predictive_churn_export?${params}`);
         if (!res.ok) throw new Error('Erro ao buscar dados para exportação.');
