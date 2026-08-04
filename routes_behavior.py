@@ -251,7 +251,7 @@ def api_behavior_predictive_churn():
 
         base_cte = f"""
             WITH ActiveContracts AS (
-                SELECT ID, Cliente, Cidade, Data_ativa_o
+                SELECT ID, Cliente, Cidade, Data_ativa_o, Status_contrato, Status_acesso
                 FROM Contratos
                 WHERE {where_active}
             ),
@@ -299,6 +299,8 @@ def api_behavior_predictive_churn():
                     AC.ID AS Contrato_ID,
                     AC.Cliente,
                     AC.Cidade,
+                    AC.Status_contrato,
+                    AC.Status_acesso,
                     CAST((JULIANDAY(date('now')) - JULIANDAY(AC.Data_ativa_o)) / 30.44
                          AS INTEGER) AS Meses_Ativo,
                     COALESCE(PP.Faturas_Vencidas, 0) AS Faturas_Vencidas,
@@ -417,7 +419,7 @@ def api_behavior_predictive_churn_export():
 
         export_sql = f"""
             WITH ActiveContracts AS (
-                SELECT ID, Cliente, Cidade, Data_ativa_o
+                SELECT ID, Cliente, Cidade, Data_ativa_o, Status_contrato, Status_acesso
                 FROM Contratos
                 WHERE {where_active}
             ),
@@ -464,6 +466,8 @@ def api_behavior_predictive_churn_export():
                     AC.ID AS Contrato_ID,
                     AC.Cliente,
                     AC.Cidade,
+                    AC.Status_contrato,
+                    AC.Status_acesso,
                     COALESCE(PP.Faturas_Vencidas, 0) AS Faturas_Vencidas,
                     COALESCE(PP.Dias_Vencido, 0)     AS Dias_Vencido,
                     COALESCE(PP.Atrasos_90d, 0)      AS Atrasos_90d,

@@ -466,6 +466,15 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
 
         const _esc = s => (s || '').replace(/"/g, '&quot;');
 
+        const ACCESS_CLS = {
+            'Ativo':               'background:#dcfce7;color:#16a34a;border:1px solid #86efac;',
+            'Suspenso':            'background:#fef9c3;color:#a16207;border:1px solid #fde047;',
+            'Bloqueado':           'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;',
+            'Bloqueio Manual':     'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;',
+            'Bloqueio Automático': 'background:#ffedd5;color:#ea580c;border:1px solid #fdba74;',
+            'Financeiro em atraso':'background:#ffedd5;color:#ea580c;border:1px solid #fdba74;',
+        };
+
         const columns = [
             { header: 'Contrato', render: r =>
                 `<span class="font-mono text-xs text-gray-500">#${r.Contrato_ID}</span>` },
@@ -475,6 +484,10 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
                     data-contract-id="${r.Contrato_ID}"
                     data-client-name="${_esc(r.Cliente)}">${r.Cliente}</span>` },
             { header: 'Cidade', key: 'Cidade' },
+            { header: 'St. Acesso', render: r => {
+                const s = r.Status_acesso || '-';
+                return `<span style="padding:2px 7px;border-radius:999px;font-size:0.72rem;font-weight:600;white-space:nowrap;${ACCESS_CLS[s]||'background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;'}">${s}</span>`;
+            }},
             { header: 'Risco', render: r =>
                 `<span style="padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;${RISK_CLS[r.Nivel_Risco]||''}">${r.Nivel_Risco}</span>` },
             { header: 'Score', render: r => `<span class="font-mono font-bold">${r.Risk_Score}</span>` },
@@ -541,12 +554,15 @@ async function exportPredictiveChurnCSV() {
         const { data } = await res.json();
         if (!data?.length) { alert('Nenhum dado para exportar.'); return; }
 
-        const headers = ['Contrato','Cliente','Telefone','WhatsApp','Cidade','Nível Risco','Score',
+        const headers = ['Contrato','Cliente','Telefone','WhatsApp','Cidade',
+                         'St. Contrato','St. Acesso',
+                         'Nível Risco','Score',
                          'Fat. Vencidas','Dias Vencido','Atrasos 90d','Atend. 30d','Sem Conexão (dias)','Val. Vencido'];
         const rows = data.map(r => [
             r.Contrato_ID, r.Cliente,
             r.Telefone  || '', r.WhatsApp || '',
-            r.Cidade    || '', r.Nivel_Risco, r.Risk_Score,
+            r.Cidade    || '', r.Status_contrato || '', r.Status_acesso || '',
+            r.Nivel_Risco, r.Risk_Score,
             r.Faturas_Vencidas, r.Dias_Vencido, r.Atrasos_90d,
             r.Atendimentos_30d, r.Dias_Sem_Conexao,
             r.Valor_Vencido > 0 ? parseFloat(r.Valor_Vencido).toFixed(2).replace('.', ',') : '0,00'
