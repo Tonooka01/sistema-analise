@@ -74,7 +74,7 @@ def api_financial_details(contract_id):
 
         data = conn.execute(
             "SELECT ID, Parcela_R, Emissao, Vencimento, "
-            "COALESCE(Data_pagamento, Data_baixa) AS Data_pagamento, "
+            "COALESCE(NULLIF(Data_pagamento,''), NULLIF(Data_baixa,''), NULLIF(Data_cr_dito,'')) AS Data_pagamento, "
             "Valor, Status "
             "FROM Contas_a_Receber WHERE ID_Contrato_Recorrente = ? ORDER BY Vencimento DESC LIMIT ? OFFSET ?",
             (contract_id, limit, offset)
