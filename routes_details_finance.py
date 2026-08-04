@@ -45,7 +45,7 @@ def api_invoice_details():
         params.extend([limit, offset])
         data = conn.execute(
             f"SELECT CAR.ID, CAR.Vencimento, CAR.Emissao, "
-            f"COALESCE(CAR.Data_pagamento, CAR.Data_baixa, CAR.Data_cr_dito) AS Data_pagamento, "
+            f"COALESCE(NULLIF(CAR.Data_pagamento,''), NULLIF(CAR.Data_baixa,''), NULLIF(CAR.Data_cr_dito,'')) AS Data_pagamento, "
             f"CAR.Valor, CAR.Status "
             f"{from_join} {where} ORDER BY CAR.Vencimento DESC LIMIT ? OFFSET ?",
             tuple(params)
