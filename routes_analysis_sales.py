@@ -46,9 +46,9 @@ def _get_years_cities(conn):
         cities = [
             r[0] for r in conn.execute(
                 "SELECT DISTINCT Cidade FROM ("
-                "  SELECT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*'"
+                "  SELECT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != ''"
                 "  UNION"
-                "  SELECT Cidade FROM Contratos_Negativacao WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*'"
+                "  SELECT Cidade FROM Contratos_Negativacao WHERE Cidade IS NOT NULL AND TRIM(Cidade) != ''"
                 ") ORDER BY Cidade"
             ).fetchall() if r[0]
         ]
@@ -56,7 +56,7 @@ def _get_years_cities(conn):
         cities = [
             r[0] for r in conn.execute(
                 "SELECT DISTINCT Cidade FROM Contratos "
-                "WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*' ORDER BY Cidade"
+                "WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' ORDER BY Cidade"
             ).fetchall() if r[0]
         ]
 

@@ -674,7 +674,7 @@ def api_generic_summary(table_name):
             summary_data['by_access_status'] = [dict(row) for row in by_access_status]
 
             # Busca cidades (sem filtro de ano/mês)
-            cities_query = "SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*' ORDER BY Cidade"
+            cities_query = "SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' ORDER BY Cidade"
             cities_data = conn.execute(cities_query).fetchall()
             summary_data['cities'] = [row[0] for row in cities_data]
 
