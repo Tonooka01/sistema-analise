@@ -107,7 +107,7 @@ def api_cancellations_by_equipment():
         years_query = "SELECT DISTINCT Year FROM ( SELECT STRFTIME('%Y', Data_cancelamento) AS Year FROM Contratos WHERE Data_cancelamento IS NOT NULL UNION SELECT STRFTIME('%Y', Data_negativa_o) AS Year FROM Contratos_Negativacao WHERE Data_negativa_o IS NOT NULL ) WHERE Year IS NOT NULL ORDER BY Year DESC"
         years_data = conn.execute(years_query).fetchall()
 
-        cities_query = "SELECT DISTINCT Cidade FROM (SELECT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' UNION SELECT Cidade FROM Contratos_Negativacao WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '') ORDER BY Cidade"
+        cities_query = "SELECT DISTINCT Cidade FROM (SELECT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*' UNION SELECT Cidade FROM Contratos_Negativacao WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*') ORDER BY Cidade"
         cities_data = conn.execute(cities_query).fetchall()
 
         return jsonify({
@@ -199,15 +199,15 @@ def api_daily_evolution_by_city():
 
         base_query = """
             WITH all_events AS (
-                SELECT Cidade, DATE(Data_ativa_o) as event_date, 'ativacao' as event_type FROM Contratos WHERE Data_ativa_o IS NOT NULL AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+                SELECT Cidade, DATE(Data_ativa_o) as event_date, 'ativacao' as event_type FROM Contratos WHERE Data_ativa_o IS NOT NULL AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*'
                 UNION ALL
-                SELECT Cidade, DATE(Data_ativa_o) as event_date, 'ativacao' as event_type FROM Contratos_Negativacao WHERE Data_ativa_o IS NOT NULL AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+                SELECT Cidade, DATE(Data_ativa_o) as event_date, 'ativacao' as event_type FROM Contratos_Negativacao WHERE Data_ativa_o IS NOT NULL AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*'
                 UNION ALL
-                SELECT Cidade, DATE(Data_cancelamento) as event_date, 'churn' as event_type FROM Contratos WHERE Data_cancelamento IS NOT NULL AND Status_contrato = 'Inativo' AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+                SELECT Cidade, DATE(Data_cancelamento) as event_date, 'churn' as event_type FROM Contratos WHERE Data_cancelamento IS NOT NULL AND Status_contrato = 'Inativo' AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*'
                 UNION ALL
-                SELECT Cidade, DATE(Data_negativa_o) as event_date, 'churn' as event_type FROM Contratos_Negativacao WHERE Data_negativa_o IS NOT NULL AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+                SELECT Cidade, DATE(Data_negativa_o) as event_date, 'churn' as event_type FROM Contratos_Negativacao WHERE Data_negativa_o IS NOT NULL AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*'
                 UNION ALL
-                SELECT Cidade, DATE(Data_cancelamento) as event_date, 'churn' as event_type FROM Contratos WHERE Data_cancelamento IS NOT NULL AND Status_contrato = 'Negativado' AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+                SELECT Cidade, DATE(Data_cancelamento) as event_date, 'churn' as event_type FROM Contratos WHERE Data_cancelamento IS NOT NULL AND Status_contrato = 'Negativado' AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*'
             )
         """
 
@@ -269,9 +269,9 @@ def api_daily_evolution_by_city():
 
              fallback_base_query = """
                 WITH all_events AS (
-                    SELECT Cidade, DATE(Data_ativa_o) as event_date, 'ativacao' as event_type FROM Contratos WHERE Data_ativa_o IS NOT NULL AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+                    SELECT Cidade, DATE(Data_ativa_o) as event_date, 'ativacao' as event_type FROM Contratos WHERE Data_ativa_o IS NOT NULL AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*'
                     UNION ALL
-                    SELECT Cidade, DATE(Data_cancelamento) as event_date, 'churn' as event_type FROM Contratos WHERE Data_cancelamento IS NOT NULL AND (Status_contrato = 'Inativo' OR Status_contrato = 'Negativado') AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+                    SELECT Cidade, DATE(Data_cancelamento) as event_date, 'churn' as event_type FROM Contratos WHERE Data_cancelamento IS NOT NULL AND (Status_contrato = 'Inativo' OR Status_contrato = 'Negativado') AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Cidade NOT GLOB '[0-9]*'
                 )
              """
              fallback_query = f"{fallback_base_query} SELECT Cidade, event_date, SUM(CASE WHEN event_type = 'ativacao' THEN 1 ELSE 0 END) AS ativacoes, SUM(CASE WHEN event_type = 'churn' THEN 1 ELSE 0 END) AS churn FROM all_events {where_sql} GROUP BY Cidade, event_date ORDER BY Cidade, event_date;"

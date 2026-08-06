@@ -514,11 +514,11 @@ def api_cohort_analysis():
 
         try:
             fallback["cities"] = [r[0] for r in conn.execute(
-                "SELECT DISTINCT Cidade FROM (SELECT Cidade FROM Contratos UNION SELECT Cidade FROM Contratos_Negativacao) WHERE Cidade IS NOT NULL ORDER BY Cidade"
+                "SELECT DISTINCT Cidade FROM (SELECT Cidade FROM Contratos WHERE Cidade NOT GLOB '[0-9]*' UNION SELECT Cidade FROM Contratos_Negativacao WHERE Cidade NOT GLOB '[0-9]*') WHERE Cidade IS NOT NULL ORDER BY Cidade"
             ).fetchall() if r[0]]
         except Exception:
             fallback["cities"] = [r[0] for r in conn.execute(
-                "SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL ORDER BY Cidade"
+                "SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND Cidade NOT GLOB '[0-9]*' ORDER BY Cidade"
             ).fetchall() if r[0]]
 
         try:
@@ -684,8 +684,8 @@ def api_cancellations_by_neighborhood():
 
         cities = conn.execute(
             "SELECT DISTINCT Cidade FROM ("
-            "SELECT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade)!='' "
-            "UNION SELECT Cidade FROM Contratos_Negativacao WHERE Cidade IS NOT NULL AND TRIM(Cidade)!=''"
+            "SELECT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade)!='' AND Cidade NOT GLOB '[0-9]*' "
+            "UNION SELECT Cidade FROM Contratos_Negativacao WHERE Cidade IS NOT NULL AND TRIM(Cidade)!='' AND Cidade NOT GLOB '[0-9]*'"
             ") ORDER BY Cidade"
         ).fetchall()
         years = conn.execute(
