@@ -100,17 +100,30 @@ function _renderDetailTabContent(tab, data) {
                     const s = row.Status || '';
                     const now = new Date(); now.setHours(0,0,0,0);
                     const due = row.Vencimento ? new Date(row.Vencimento) : null;
-                    const overdue = s === 'A receber' && due && due < now;
-                    const style = overdue
-                        ? 'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;'
-                        : s === 'Recebido'
-                            ? 'background:#dcfce7;color:#16a34a;border:1px solid #86efac;'
-                        : s === 'A receber'
-                            ? 'background:#eff6ff;color:#2563eb;border:1px solid #93c5fd;'
-                        : s === 'Cancelado'
-                            ? 'background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;'
-                            : 'background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;';
-                    const label = overdue ? 'Vencido' : s;
+                    const pag = row.Data_pagamento ? new Date(row.Data_pagamento) : null;
+                    let label, style;
+                    if (pag) {
+                        // Tem data de pagamento — está pago
+                        if (due && pag > due) {
+                            label = 'Rec. em Atraso';
+                            style = 'background:#fef3c7;color:#b45309;border:1px solid #fcd34d;';
+                        } else {
+                            label = 'Recebido';
+                            style = 'background:#dcfce7;color:#16a34a;border:1px solid #86efac;';
+                        }
+                    } else if (s === 'Recebido') {
+                        label = 'Recebido';
+                        style = 'background:#dcfce7;color:#16a34a;border:1px solid #86efac;';
+                    } else if (s === 'A receber' && due && due < now) {
+                        label = 'Vencido';
+                        style = 'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;';
+                    } else if (s === 'A receber') {
+                        label = 'A receber';
+                        style = 'background:#eff6ff;color:#2563eb;border:1px solid #93c5fd;';
+                    } else {
+                        label = s || 'Cancelado';
+                        style = 'background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;';
+                    }
                     return `<span style="padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:600;white-space:nowrap;${style}">${label}</span>`;
                 }}
             ]; break;
