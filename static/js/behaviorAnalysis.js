@@ -504,8 +504,8 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
     const city          = document.getElementById('predCityFilter')?.value || '';
     const riskLevel     = document.getElementById('predRiskFilter')?.value || '';
     const accessChecked = [...document.querySelectorAll('.pred-access-cb:checked')].map(cb => cb.value);
-    const rowsPerPage   = 5000;
-    const offset        = 0;
+    const rowsPerPage   = 20;
+    const offset        = (page - 1) * rowsPerPage;
 
     const params = new URLSearchParams({ limit: rowsPerPage, offset });
     if (city)      params.append('city',       city);
@@ -624,10 +624,24 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
         }
 
         const n = result.total_rows || 0;
-        const countHtml = n > 0
-            ? `<p class="text-sm text-gray-400 mt-2 text-center">${n.toLocaleString('pt-BR')} registros</p>`
-            : '';
-        container.innerHTML = `<div class="table-wrapper border rounded-lg overflow-hidden">${tableHtml}</div>${countHtml}`;
+        const totalPages = Math.ceil(n / rowsPerPage);
+        let paginationHtml = '';
+        if (totalPages > 1) {
+            paginationHtml = `
+                <div class="pagination-controls flex justify-center items-center gap-2 mt-4">
+                    <button class="pred-page-btn bg-gray-200 px-3 py-1 rounded disabled:opacity-50"
+                            data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>Anterior</button>
+                    <span class="text-sm text-gray-500">Página ${page} de ${totalPages} · ${n.toLocaleString('pt-BR')} registros</span>
+                    <button class="pred-page-btn bg-blue-500 text-white px-3 py-1 rounded disabled:opacity-50"
+                            data-page="${page + 1}" ${page >= totalPages ? 'disabled' : ''}>Próxima</button>
+                </div>`;
+        } else if (n > 0) {
+            paginationHtml = `<p class="text-sm text-gray-400 mt-2 text-center">${n.toLocaleString('pt-BR')} registros</p>`;
+        }
+        container.innerHTML = `<div class="table-wrapper border rounded-lg overflow-hidden">${tableHtml}</div>${paginationHtml}`;
+        container.querySelectorAll('.pred-page-btn').forEach(btn => {
+            btn.addEventListener('click', () => fetchAndRenderPredictiveChurnTable(parseInt(btn.dataset.page)));
+        });
 
     } catch (error) {
         container.innerHTML = `<p class="text-red-500 p-4">${error.message}</p>`;
