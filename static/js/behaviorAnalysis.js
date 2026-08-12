@@ -181,6 +181,10 @@ async function fetchBehaviorData_Complaints(city = '') {
                 // Pequeno delay para garantir que o DOM do widget foi inserido
                 setTimeout(() => {
                     renderChart(chartId, 'bar_vertical', data.top_subjects.map(d => d.Assunto), [{ label: 'Contagem', data: data.top_subjects.map(d => d.Count) }], `Top Assuntos de Reclamação ${filterText}`, { formatterType: 'number' });
+                    _addChartClickHandler(chartId, label => {
+                        const url = `${state.API_BASE_URL}/api/behavior/complaint_clients?subject=${encodeURIComponent(label)}&city=${encodeURIComponent(city)}`;
+                        _openBehaviorDetailModal(`Reclamações: "${label}"`, url, true);
+                    });
                 }, 50);
             }
         } else {
@@ -240,7 +244,7 @@ async function fetchBehaviorData_ChurnPattern(city = '') {
         if (!resp.ok) throw new Error(await utils.handleFetchError(resp, 'Erro ao carregar padrão de churn.'));
         const data = await resp.json();
 
-        const { summary: s = {}, permanence_distribution = [], seasonal_distribution = [], cities = [] } = data;
+        const { summary: s = {}, permanence_distribution = [], seasonal_distribution = [], assunto_distribution = [], cities = [] } = data;
 
         // City filter
         const cityFilter = document.getElementById('churnCityFilter');
@@ -271,7 +275,7 @@ async function fetchBehaviorData_ChurnPattern(city = '') {
                 <div class="summary-card-value" style="color:#f97316;">${pctAtend}%</div>
             </div>
             <div class="summary-card" style="border-left:4px solid #eab308;">
-                <div class="summary-card-label">Cancelaram &lt; 6 meses</div>
+                <div class="summary-card-label">Pagaram &lt; 6 meses</div>
                 <div class="summary-card-value" style="color:#eab308;">${pctPre6m}%</div>
             </div>
         `;
@@ -291,7 +295,7 @@ async function fetchBehaviorData_ChurnPattern(city = '') {
 
         // Chart 1 — Sinais de risco (horizontal/vertical bar)
         const signalChartId = 'churnSignalsChart';
-        const signalLabels  = ['Atraso 60d antes', 'Histórico de atraso', 'Tinha atendimento', 'Fatura vencida', '< 6 meses ativo'];
+        const signalLabels  = ['Atraso 60d antes', 'Histórico de atraso', 'Tinha atendimento', 'Fatura vencida', '< 6 meses pagos'];
         const signalValues  = [
             Math.round((s.Com_Atraso_Pre_Churn  / total) * 100),
             Math.round((s.Com_Historico_Atraso  / total) * 100),
@@ -306,12 +310,27 @@ async function fetchBehaviorData_ChurnPattern(city = '') {
                 <div class="chart-canvas-container"><canvas id="${signalChartId}"></canvas></div>
             </div>`
         });
-        setTimeout(() => renderChart(
-            signalChartId, 'bar_vertical', signalLabels,
-            [{ label: '% dos churners', data: signalValues }],
-            'Sinais Presentes nos Churners (%)',
-            { formatterType: 'number' }
-        ), 50);
+        setTimeout(() => {
+            renderChart(
+                signalChartId, 'bar_vertical', signalLabels,
+                [{ label: '% dos churners', data: signalValues }],
+                'Sinais Presentes nos Churners (%)',
+                { formatterType: 'number' }
+            );
+            const SIGNAL_KEY = {
+                'Atraso 60d antes':    'atraso_pre_churn',
+                'Histórico de atraso': 'historico_atraso',
+                'Tinha atendimento':   'com_atendimentos',
+                'Fatura vencida':      'faturas_vencidas',
+                '< 6 meses pagos':     'pre_6m',
+            };
+            _addChartClickHandler(signalChartId, label => {
+                const key = SIGNAL_KEY[label];
+                if (!key) return;
+                const url = `${state.API_BASE_URL}/api/behavior/churn_clients?filter_type=signal&filter_value=${encodeURIComponent(key)}&city=${encodeURIComponent(city)}`;
+                _openBehaviorDetailModal(`Churners — "${label}"`, url, false);
+            });
+        }, 50);
 
         // Chart 2 — Permanência
         if (permanence_distribution.length) {
@@ -325,13 +344,19 @@ async function fetchBehaviorData_ChurnPattern(city = '') {
                     <div class="chart-canvas-container"><canvas id="${permChartId}"></canvas></div>
                 </div>`
             });
-            setTimeout(() => renderChart(
-                permChartId, 'bar_vertical',
-                sorted.map(d => d.Faixa),
-                [{ label: 'Cancelamentos', data: sorted.map(d => d.Count) }],
-                'Distribuição de Permanência',
-                { formatterType: 'number' }
-            ), 50);
+            setTimeout(() => {
+                renderChart(
+                    permChartId, 'bar_vertical',
+                    sorted.map(d => d.Faixa),
+                    [{ label: 'Cancelamentos', data: sorted.map(d => d.Count) }],
+                    'Distribuição de Permanência',
+                    { formatterType: 'number' }
+                );
+                _addChartClickHandler(permChartId, label => {
+                    const url = `${state.API_BASE_URL}/api/behavior/churn_clients?filter_type=permanencia&filter_value=${encodeURIComponent(label)}&city=${encodeURIComponent(city)}`;
+                    _openBehaviorDetailModal(`Churners com permanência: ${label}`, url, false);
+                });
+            }, 50);
         }
 
         // Chart 3 — Sazonalidade
@@ -339,18 +364,50 @@ async function fetchBehaviorData_ChurnPattern(city = '') {
             const seasonChartId = 'churnSeasonChart';
             grid.addWidget({
                 w: 12, h: 7, x: 0, y: 7,
+                id: 'seasonWidget',
                 content: `<div class="grid-stack-item-content">
                     <div class="chart-container-header"><h3 class="chart-title">Sazonalidade de Cancelamentos (por mês do ano)</h3></div>
                     <div class="chart-canvas-container"><canvas id="${seasonChartId}"></canvas></div>
                 </div>`
             });
-            setTimeout(() => renderChart(
-                seasonChartId, 'bar_vertical',
-                seasonal_distribution.map(d => d.Mes),
-                [{ label: 'Cancelamentos', data: seasonal_distribution.map(d => d.Count) }],
-                'Sazonalidade de Cancelamentos',
-                { formatterType: 'number' }
-            ), 50);
+            setTimeout(() => {
+                renderChart(
+                    seasonChartId, 'bar_vertical',
+                    seasonal_distribution.map(d => d.Mes),
+                    [{ label: 'Cancelamentos', data: seasonal_distribution.map(d => d.Count) }],
+                    'Sazonalidade de Cancelamentos',
+                    { formatterType: 'number' }
+                );
+                _addChartClickHandler(seasonChartId, label => {
+                    const url = `${state.API_BASE_URL}/api/behavior/churn_clients?filter_type=mes&filter_value=${encodeURIComponent(label)}&city=${encodeURIComponent(city)}`;
+                    _openBehaviorDetailModal(`Churners cancelados em: ${label}`, url, false);
+                });
+            }, 50);
+        }
+
+        // Chart 4 — Assuntos dos Churners
+        if (assunto_distribution.length) {
+            const assChartId = 'churnAssuntosChart';
+            grid.addWidget({
+                w: 12, h: 9, x: 0, y: 14,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">Principais Assuntos de Atendimento dos Churners</h3></div>
+                    <div class="chart-canvas-container"><canvas id="${assChartId}"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => {
+                renderChart(
+                    assChartId, 'bar_vertical',
+                    assunto_distribution.map(d => d.Assunto),
+                    [{ label: 'Churners afetados', data: assunto_distribution.map(d => d.Count) }],
+                    'Principais Assuntos de Atendimento dos Churners',
+                    { formatterType: 'number' }
+                );
+                _addChartClickHandler(assChartId, label => {
+                    const url = `${state.API_BASE_URL}/api/behavior/churn_clients?filter_type=signal&filter_value=com_atendimentos&city=${encodeURIComponent(city)}`;
+                    _openBehaviorDetailModal(`Churners com atendimento: "${label}"`, url, false);
+                });
+            }, 50);
         }
 
     } catch (error) {
@@ -447,8 +504,8 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
     const city          = document.getElementById('predCityFilter')?.value || '';
     const riskLevel     = document.getElementById('predRiskFilter')?.value || '';
     const accessChecked = [...document.querySelectorAll('.pred-access-cb:checked')].map(cb => cb.value);
-    const rowsPerPage   = 50;
-    const offset        = (page - 1) * rowsPerPage;
+    const rowsPerPage   = 5000;
+    const offset        = 0;
 
     const params = new URLSearchParams({ limit: rowsPerPage, offset });
     if (city)      params.append('city',       city);
@@ -561,14 +618,16 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
                 : '-' },
         ];
 
-        const tableState = { currentPage: page, totalRows: result.total_rows || 0, rowsPerPage };
         let tableHtml = '<p class="text-center text-gray-500 mt-4">Nenhum cliente em risco para os filtros selecionados.</p>';
         if (result.data?.length > 0) {
             tableHtml = utils.renderGenericDetailTable(null, result.data, columns, true);
         }
 
-        const paginationHtml = utils.createGenericPaginationHtml('predictive-page-btn', tableState);
-        container.innerHTML = `<div class="table-wrapper border rounded-lg overflow-hidden">${tableHtml}</div>${paginationHtml}`;
+        const n = result.total_rows || 0;
+        const countHtml = n > 0
+            ? `<p class="text-sm text-gray-400 mt-2 text-center">${n.toLocaleString('pt-BR')} registros</p>`
+            : '';
+        container.innerHTML = `<div class="table-wrapper border rounded-lg overflow-hidden">${tableHtml}</div>${countHtml}`;
 
     } catch (error) {
         container.innerHTML = `<p class="text-red-500 p-4">${error.message}</p>`;
@@ -623,5 +682,113 @@ async function exportPredictiveChurnCSV() {
         alert(e.message);
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = '⬇ Baixar CSV'; }
+    }
+}
+
+// -------------------------------------------------------
+// MODAL DE CLIENTES DOS GRÁFICOS CLICÁVEIS
+// -------------------------------------------------------
+
+const _BC_MODAL_ID = 'behaviorClientsModal';
+
+function _addChartClickHandler(chartId, onLabel) {
+    const canvas = document.getElementById(chartId);
+    if (!canvas) return;
+    canvas.style.cursor = 'pointer';
+    canvas.addEventListener('click', event => {
+        const chart = state.getMainCharts()[chartId];
+        if (!chart) return;
+        const elements = chart.getElementsAtEventForMode(event, 'nearest', { intersect: true }, false);
+        if (!elements.length) return;
+        onLabel(chart.data.labels[elements[0].index]);
+    });
+}
+
+function _ensureBehaviorDetailModal() {
+    if (document.getElementById(_BC_MODAL_ID)) return;
+    const el = document.createElement('div');
+    el.id = _BC_MODAL_ID;
+    el.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);align-items:center;justify-content:center;';
+    el.innerHTML = `
+        <div style="background:#fff;border-radius:12px;max-width:960px;width:95vw;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35);">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid #e5e7eb;flex-shrink:0;">
+                <h3 id="bcModalTitle" style="font-size:.95rem;font-weight:700;color:#111827;margin:0;"></h3>
+                <button id="bcModalClose" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:1.5rem;line-height:1;padding:0 4px;">&times;</button>
+            </div>
+            <div id="bcModalBody" style="overflow-y:auto;padding:16px;flex:1;min-height:180px;"></div>
+        </div>
+    `;
+    document.body.appendChild(el);
+    document.getElementById('bcModalClose').addEventListener('click', _closeBehaviorDetailModal);
+    el.addEventListener('click', e => { if (e.target === el) _closeBehaviorDetailModal(); });
+}
+
+function _closeBehaviorDetailModal() {
+    const el = document.getElementById(_BC_MODAL_ID);
+    if (el) el.style.display = 'none';
+}
+
+async function _openBehaviorDetailModal(title, url, isComplaint) {
+    _ensureBehaviorDetailModal();
+    const modal = document.getElementById(_BC_MODAL_ID);
+    document.getElementById('bcModalTitle').textContent = title;
+    const body = document.getElementById('bcModalBody');
+    body.innerHTML = '<div style="display:flex;justify-content:center;padding:40px;"><div class="loading-spinner"></div></div>';
+    modal.style.display = 'flex';
+
+    try {
+        const resp = await fetch(url);
+        const result = await resp.json();
+        if (result.error) {
+            body.innerHTML = `<p style="color:#dc2626;padding:16px;">Erro: ${result.error}</p>`;
+            return;
+        }
+        const rows = result.data || [];
+        if (!rows.length) {
+            body.innerHTML = '<p style="text-align:center;color:#6b7280;padding:32px;">Nenhum cliente encontrado.</p>';
+            return;
+        }
+
+        const cols = isComplaint
+            ? [
+                { label: 'Cliente', key: 'Cliente' },
+                { label: 'Cidade',  key: 'Cidade'  },
+                { label: 'Tipo',    key: 'Tipo'    },
+                { label: 'Data',    key: 'Data'    },
+              ]
+            : [
+                { label: 'Cliente',      key: 'Cliente'          },
+                { label: 'Cidade',       key: 'Cidade'           },
+                { label: 'Ativação',     key: 'Data_ativa_o'     },
+                { label: 'Cancelamento', key: 'end_date'         },
+                { label: 'Meses Pagos',  key: 'Permanencia_Meses', fmt: v => v != null ? `${v}` : '' },
+              ];
+
+        const thHtml = cols.map(c =>
+            `<th style="text-align:left;padding:8px 12px;white-space:nowrap;color:#374151;font-size:.8rem;font-weight:600;border-bottom:2px solid #e2e8f0;">${c.label}</th>`
+        ).join('');
+
+        const tbHtml = rows.map((row, i) => {
+            const cells = cols.map(c => {
+                const val = c.fmt ? c.fmt(row[c.key]) : (row[c.key] ?? '');
+                return `<td style="padding:7px 12px;color:#374151;white-space:nowrap;font-size:.82rem;">${val}</td>`;
+            }).join('');
+            return `<tr style="border-bottom:1px solid #f1f5f9;background:${i % 2 === 0 ? '#fff' : '#f8fafc'};">${cells}</tr>`;
+        }).join('');
+
+        body.innerHTML = `
+            <p style="font-size:.78rem;color:#9ca3af;margin-bottom:10px;">
+                ${rows.length} registro${rows.length !== 1 ? 's' : ''}${rows.length >= 300 ? ' (limitado a 300)' : ''}
+            </p>
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead><tr style="background:#f8fafc;">${thHtml}</tr></thead>
+                    <tbody>${tbHtml}</tbody>
+                </table>
+            </div>`;
+
+    } catch (e) {
+        body.innerHTML = '<p style="color:#dc2626;padding:16px;">Erro ao carregar dados.</p>';
+        console.error(e);
     }
 }
