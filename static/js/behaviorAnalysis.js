@@ -638,7 +638,7 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
         } else if (n > 0) {
             paginationHtml = `<p class="text-sm text-gray-400 mt-2 text-center">${n.toLocaleString('pt-BR')} registros</p>`;
         }
-        container.innerHTML = `<div class="table-wrapper border rounded-lg overflow-hidden">${tableHtml}</div>${paginationHtml}`;
+        container.innerHTML = `<div class="border rounded-lg overflow-hidden"><div style="overflow-y:auto;max-height:520px;">${tableHtml}</div></div>${paginationHtml}`;
         container.querySelectorAll('.pred-page-btn').forEach(btn => {
             btn.addEventListener('click', () => fetchAndRenderPredictiveChurnTable(parseInt(btn.dataset.page)));
         });
