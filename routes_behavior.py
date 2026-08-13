@@ -277,8 +277,10 @@ def api_behavior_predictive_churn():
 
         risk_sql = ""
         risk_p   = []
-        if risk_level == 'Alto':
-            risk_sql = "AND Risk_Score >= 60"
+        if risk_level == 'Altíssimo':
+            risk_sql = "AND Risk_Score > 160"
+        elif risk_level == 'Alto':
+            risk_sql = "AND Risk_Score >= 60 AND Risk_Score <= 160"
         elif risk_level == 'Médio':
             risk_sql = "AND Risk_Score >= 25 AND Risk_Score < 60"
         elif risk_level == 'Baixo':
@@ -375,9 +377,10 @@ def api_behavior_predictive_churn():
 
         summary_sql = base_cte + """
             SELECT
-                SUM(CASE WHEN Risk_Score >= 60 THEN 1 ELSE 0 END) AS Alto,
-                SUM(CASE WHEN Risk_Score >= 25 AND Risk_Score < 60 THEN 1 ELSE 0 END) AS Medio,
-                SUM(CASE WHEN Risk_Score >= 10 AND Risk_Score < 25 THEN 1 ELSE 0 END) AS Baixo,
+                SUM(CASE WHEN Risk_Score > 160                              THEN 1 ELSE 0 END) AS Altissimo,
+                SUM(CASE WHEN Risk_Score >= 60 AND Risk_Score <= 160        THEN 1 ELSE 0 END) AS Alto,
+                SUM(CASE WHEN Risk_Score >= 25 AND Risk_Score < 60          THEN 1 ELSE 0 END) AS Medio,
+                SUM(CASE WHEN Risk_Score >= 10 AND Risk_Score < 25          THEN 1 ELSE 0 END) AS Baixo,
                 COUNT(*) AS Total
             FROM Scored WHERE Risk_Score >= 10
         """
@@ -388,9 +391,10 @@ def api_behavior_predictive_churn():
 
         data_sql = base_cte + f"""
             SELECT *,
-                CASE WHEN Risk_Score >= 60 THEN 'Alto'
-                     WHEN Risk_Score >= 25 THEN 'Médio'
-                     WHEN Risk_Score >= 10 THEN 'Baixo'
+                CASE WHEN Risk_Score > 160  THEN 'Altíssimo'
+                     WHEN Risk_Score >= 60  THEN 'Alto'
+                     WHEN Risk_Score >= 25  THEN 'Médio'
+                     WHEN Risk_Score >= 10  THEN 'Baixo'
                      ELSE 'Saudável' END AS Nivel_Risco
             FROM Scored
             WHERE Risk_Score >= 10 {risk_sql}
@@ -450,8 +454,10 @@ def api_behavior_predictive_churn_export():
 
         risk_sql = ""
         risk_p   = []
-        if risk_level == 'Alto':
-            risk_sql = "AND Risk_Score >= 60"
+        if risk_level == 'Altíssimo':
+            risk_sql = "AND Risk_Score > 160"
+        elif risk_level == 'Alto':
+            risk_sql = "AND Risk_Score >= 60 AND Risk_Score <= 160"
         elif risk_level == 'Médio':
             risk_sql = "AND Risk_Score >= 25 AND Risk_Score < 60"
         elif risk_level == 'Baixo':

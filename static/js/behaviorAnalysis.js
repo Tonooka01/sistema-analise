@@ -439,6 +439,7 @@ function renderPredictiveChurnTab() {
                 <label class="text-sm font-medium text-gray-700 mr-1">Nível de Risco:</label>
                 <select id="predRiskFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
                     <option value="">Todos</option>
+                    <option value="Altíssimo">🚨 Altíssimo</option>
                     <option value="Alto">🔴 Alto</option>
                     <option value="Médio">🟠 Médio</option>
                     <option value="Baixo">🟡 Baixo</option>
@@ -527,10 +528,15 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
         if (kpiRow && result.summary) {
             const s = result.summary;
             kpiRow.innerHTML = `
+                <div class="summary-card" style="border-left:4px solid #7c3aed;cursor:pointer;" onclick="document.getElementById('predRiskFilter').value='Altíssimo';document.getElementById('btnFilterPredictive').click()">
+                    <div class="summary-card-label">🚨 Altíssimo Risco</div>
+                    <div class="summary-card-value" style="color:#7c3aed;">${s.Altissimo || 0}</div>
+                    <div style="font-size:0.7rem;color:#9ca3af;">Score &gt; 160 · clique para filtrar</div>
+                </div>
                 <div class="summary-card" style="border-left:4px solid #ef4444;cursor:pointer;" onclick="document.getElementById('predRiskFilter').value='Alto';document.getElementById('btnFilterPredictive').click()">
                     <div class="summary-card-label">🔴 Alto Risco</div>
                     <div class="summary-card-value" style="color:#ef4444;">${s.Alto || 0}</div>
-                    <div style="font-size:0.7rem;color:#9ca3af;">Score ≥ 60 · clique para filtrar</div>
+                    <div style="font-size:0.7rem;color:#9ca3af;">Score 60–160 · clique para filtrar</div>
                 </div>
                 <div class="summary-card" style="border-left:4px solid #f97316;cursor:pointer;" onclick="document.getElementById('predRiskFilter').value='Médio';document.getElementById('btnFilterPredictive').click()">
                     <div class="summary-card-label">🟠 Médio Risco</div>
@@ -557,9 +563,10 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
         }
 
         const RISK_CLS = {
-            'Alto':  'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;',
-            'Médio': 'background:#ffedd5;color:#ea580c;border:1px solid #fdba74;',
-            'Baixo': 'background:#fefce8;color:#ca8a04;border:1px solid #fde047;',
+            'Altíssimo': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
+            'Alto':      'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;',
+            'Médio':     'background:#ffedd5;color:#ea580c;border:1px solid #fdba74;',
+            'Baixo':     'background:#fefce8;color:#ca8a04;border:1px solid #fde047;',
         };
 
         const _esc = s => (s || '').replace(/"/g, '&quot;');
