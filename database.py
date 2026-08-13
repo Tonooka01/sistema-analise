@@ -49,6 +49,19 @@ def init_db_users():
             )
         ''')
         conn.execute('''
+            CREATE TABLE IF NOT EXISTS Radius_Acct (
+                ID            INTEGER PRIMARY KEY,
+                Login         TEXT,
+                Inicio        TEXT,
+                Fim           TEXT,
+                Duracao_s     INTEGER,
+                Download_bytes INTEGER,
+                Upload_bytes  INTEGER,
+                Concentrador  TEXT,
+                IP            TEXT
+            )
+        ''')
+        conn.execute('''
             CREATE TABLE IF NOT EXISTS DRE (
                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
                 Ano              INTEGER,
@@ -79,6 +92,7 @@ def init_db_users():
             ('idx_clientes_id',          'Clientes',              'ID'),
             ('idx_clientes_neg_id',      'Clientes_Negativacao',  'ID'),
             ('idx_logins_id',            'Logins',                'ID'),
+            ('idx_radius_acct_id',       'Radius_Acct',           'ID'),
         ]
         for idx, table, col in _IXC_INDEXES:
             try:

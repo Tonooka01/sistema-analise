@@ -58,6 +58,9 @@ export function handleBehaviorTabChange(tabName) {
             case 'preditiva':
                 renderPredictiveChurnTab();
                 break;
+            case 'qualidade':
+                renderQoSTab();
+                break;
             default:
                 console.warn(`Aba de comportamento desconhecida: ${tabName}`);
                 if (targetPane) targetPane.innerHTML = `<p class="text-red-500">Conteúdo para aba "${tabName}" não definido.</p>`;
@@ -806,3 +809,205 @@ async function _openBehaviorDetailModal(title, url, isComplaint) {
         console.error(e);
     }
 }
+
+// -------------------------------------------------------
+// ABA: QUALIDADE DE REDE
+// -------------------------------------------------------
+
+async function renderQoSTab() {
+    const tabContent = document.getElementById('tab-content-qualidade');
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <div class="flex flex-wrap justify-center gap-4 mb-6 items-end">
+            <div class="flex flex-col items-center">
+                <label for="qosCityFilter" class="text-gray-700 font-medium mb-1 text-sm">Filtrar por Cidade:</label>
+                <select id="qosCityFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-w-[200px]">
+                    <option value="">Todas as cidades</option>
+                </select>
+            </div>
+            <button id="btnFilterQoS" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors">Filtrar</button>
+        </div>
+        <div id="qos-kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+        <div id="qos-charts-area" class="grid-stack"></div>
+    `;
+
+    tabContent.querySelector('#btnFilterQoS')?.addEventListener('click', fetchBehaviorData_QoS);
+    fetchBehaviorData_QoS();
+}
+
+async function fetchBehaviorData_QoS() {
+    const city = document.getElementById('qosCityFilter')?.value || '';
+    const params = new URLSearchParams();
+    if (city) params.append('city', city);
+
+    const chartsArea = document.getElementById('qos-charts-area');
+    if (chartsArea?.gridstack) { chartsArea.gridstack.destroy(false); }
+
+    try {
+        const resp = await fetch(`${state.API_BASE_URL}/api/behavior/qos_overview?${params}`);
+        if (!resp.ok) throw new Error('Erro ao carregar dados de qualidade');
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+
+        // Cidade filter
+        const cityFilter = document.getElementById('qosCityFilter');
+        if (cityFilter && data.cities?.length && cityFilter.options.length <= 1) {
+            utils.populateCityFilter(cityFilter, data.cities, city);
+        }
+
+        // KPI cards
+        const kpiRow = document.getElementById('qos-kpi-row');
+        if (kpiRow) {
+            const k = data.kpis;
+            kpiRow.innerHTML = `
+                <div class="summary-card" style="border-left:4px solid #ef4444;cursor:pointer;" onclick="_openQoSModal('Clientes com Sinal Crítico','${state.API_BASE_URL}/api/behavior/signal_clients?level=critical&city=${encodeURIComponent(city)}')">
+                    <div class="summary-card-label">Sinal Crítico</div>
+                    <div class="summary-card-value" style="color:#ef4444;">${k.signal_critical}</div>
+                    <div style="font-size:0.7rem;color:#9ca3af;">RX &lt; -27 dBm · clique para ver</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #3b82f6;">
+                    <div class="summary-card-label">ONUs Monitoradas</div>
+                    <div class="summary-card-value" style="color:#3b82f6;">${k.signal_total}</div>
+                    <div style="font-size:0.7rem;color:#9ca3af;">clientes com dado de sinal</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #f97316;cursor:pointer;" onclick="_openQoSModal('Clientes com Franquia Atingida','${state.API_BASE_URL}/api/behavior/signal_clients?city=${encodeURIComponent(city)}')">
+                    <div class="summary-card-label">Franquia Atingida</div>
+                    <div class="summary-card-value" style="color:#f97316;">${k.quota_pct}%</div>
+                    <div style="font-size:0.7rem;color:#9ca3af;">${k.quota_atingiram} clientes no limite</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #8b5cf6;">
+                    <div class="summary-card-label">Desconexões Hoje</div>
+                    <div class="summary-card-value" style="color:#8b5cf6;">${k.disc_total}</div>
+                    <div style="font-size:0.7rem;color:#9ca3af;">total registrado hoje</div>
+                </div>
+            `;
+        }
+
+        // GridStack
+        const gs = GridStack.init({ cellHeight: 60, margin: 8, column: 12, float: false }, '#qos-charts-area');
+        chartsArea.gridstack = gs;
+
+        // Chart 1: Qualidade de Sinal por OLT (stacked)
+        if (data.signal_by_olt?.length) {
+            const cId = 'qosSignalChart';
+            gs.addWidget(`<div class="grid-stack-item" gs-w="12" gs-h="9" gs-x="0" gs-y="0">
+                <div class="grid-stack-item-content chart-widget">
+                    <h3 class="chart-title" id="${cId}Title">Qualidade de Sinal por OLT</h3>
+                    <canvas id="${cId}"></canvas>
+                </div></div>`);
+            setTimeout(() => {
+                const labels = data.signal_by_olt.map(d => d.olt);
+                renderChart(cId, 'bar_vertical', labels, [
+                    { label: 'Boa (≥ -25 dBm)',      data: data.signal_by_olt.map(d => d.boa),      backgroundColor: '#22c55eB3' },
+                    { label: 'Marginal (-27 a -25)',  data: data.signal_by_olt.map(d => d.marginal), backgroundColor: '#eab308B3' },
+                    { label: 'Crítica (< -27 dBm)',  data: data.signal_by_olt.map(d => d.critica),  backgroundColor: '#ef4444B3' },
+                ], 'Qualidade de Sinal por OLT', {
+                    formatterType: 'number',
+                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+                });
+                _addChartClickHandler(cId, label => {
+                    _openQoSModal(`Sinal — "${label}"`,
+                        `${state.API_BASE_URL}/api/behavior/signal_clients?olt=${encodeURIComponent(label)}&city=${encodeURIComponent(city)}`);
+                });
+            }, 50);
+        }
+
+        // Chart 2: Causas de Queda
+        if (data.top_causes?.length) {
+            const cId = 'qosCausesChart';
+            gs.addWidget(`<div class="grid-stack-item" gs-w="6" gs-h="9" gs-x="0" gs-y="9">
+                <div class="grid-stack-item-content chart-widget">
+                    <h3 class="chart-title" id="${cId}Title">Causas de Queda (ONUs)</h3>
+                    <canvas id="${cId}"></canvas>
+                </div></div>`);
+            setTimeout(() => {
+                renderChart(cId, 'bar_horizontal',
+                    data.top_causes.map(d => d.causa),
+                    [{ label: 'Ocorrências', data: data.top_causes.map(d => d.count) }],
+                    'Causas de Queda (ONUs)', { formatterType: 'number' });
+                _addChartClickHandler(cId, label => {
+                    _openQoSModal(`Causa de queda: "${label}"`,
+                        `${state.API_BASE_URL}/api/behavior/signal_clients?cause=${encodeURIComponent(label)}&city=${encodeURIComponent(city)}`);
+                });
+            }, 50);
+        }
+
+        // Chart 3: Desconexões por OLT
+        if (data.instability_by_olt?.length) {
+            const cId = 'qosInstabChart';
+            gs.addWidget(`<div class="grid-stack-item" gs-w="6" gs-h="9" gs-x="6" gs-y="9">
+                <div class="grid-stack-item-content chart-widget">
+                    <h3 class="chart-title" id="${cId}Title">Média de Desconexões por OLT</h3>
+                    <canvas id="${cId}"></canvas>
+                </div></div>`);
+            setTimeout(() => {
+                renderChart(cId, 'bar_vertical',
+                    data.instability_by_olt.map(d => d.olt),
+                    [{ label: 'Média de Desconexões', data: data.instability_by_olt.map(d => d.avg_disc) }],
+                    'Média de Desconexões por OLT', { formatterType: 'number' });
+                _addChartClickHandler(cId, label => {
+                    _openQoSModal(`Desconexões — "${label}"`,
+                        `${state.API_BASE_URL}/api/behavior/signal_clients?olt=${encodeURIComponent(label)}&city=${encodeURIComponent(city)}`);
+                });
+            }, 50);
+        }
+
+    } catch (e) {
+        if (chartsArea) chartsArea.innerHTML = `<p class="text-red-500 p-4">${e.message}</p>`;
+        console.error(e);
+    }
+}
+
+window._openQoSModal = async function(title, url) {
+    _ensureBehaviorDetailModal();
+    const modal = document.getElementById(_BC_MODAL_ID);
+    document.getElementById('bcModalTitle').textContent = title;
+    const body = document.getElementById('bcModalBody');
+    body.innerHTML = '<div style="display:flex;justify-content:center;padding:40px;"><div class="loading-spinner"></div></div>';
+    modal.style.display = 'flex';
+
+    try {
+        const resp = await fetch(url);
+        const result = await resp.json();
+        if (result.error) { body.innerHTML = `<p style="color:#dc2626;padding:16px;">Erro: ${result.error}</p>`; return; }
+        const rows = result.data || [];
+        if (!rows.length) { body.innerHTML = '<p style="text-align:center;color:#6b7280;padding:32px;">Nenhum cliente encontrado.</p>'; return; }
+
+        const cols = [
+            { label: 'Cliente',      key: 'Cliente' },
+            { label: 'Cidade',       key: 'Cidade'  },
+            { label: 'OLT',          key: 'OLT'     },
+            { label: 'Sinal RX',     key: 'Sinal_RX',         fmt: v => v != null ? `${v} dBm` : '-' },
+            { label: 'Sinal TX',     key: 'Sinal_TX',         fmt: v => v != null ? `${v} dBm` : '-' },
+            { label: 'Status ONU',   key: 'Status_ONU'   },
+            { label: 'Causa Queda',  key: 'Causa_Queda'  },
+            { label: 'Desc. Hoje',   key: 'Desconexoes_Hoje' },
+        ];
+
+        const th = cols.map(c =>
+            `<th style="text-align:left;padding:8px 12px;white-space:nowrap;color:#374151;font-size:.8rem;font-weight:600;border-bottom:2px solid #e2e8f0;">${c.label}</th>`
+        ).join('');
+
+        const tb = rows.map((row, i) => {
+            const rxVal = row['Sinal_RX'];
+            const rxStyle = rxVal < -27 ? 'color:#dc2626;font-weight:700;' : rxVal < -25 ? 'color:#d97706;' : 'color:#16a34a;';
+            const cells = cols.map(c => {
+                const val = c.fmt ? c.fmt(row[c.key]) : (row[c.key] ?? '-');
+                const extra = c.key === 'Sinal_RX' ? `style="${rxStyle}"` : '';
+                return `<td ${extra} style="padding:7px 12px;white-space:nowrap;font-size:.82rem;color:#374151;">${val}</td>`;
+            }).join('');
+            return `<tr style="border-bottom:1px solid #f1f5f9;background:${i % 2 === 0 ? '#fff' : '#f8fafc'};">${cells}</tr>`;
+        }).join('');
+
+        body.innerHTML = `
+            <p style="font-size:.78rem;color:#9ca3af;margin-bottom:10px;">${rows.length} registro${rows.length !== 1 ? 's' : ''}${rows.length >= 300 ? ' (limitado a 300)' : ''}</p>
+            <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+                <thead><tr style="background:#f8fafc;">${th}</tr></thead>
+                <tbody>${tb}</tbody>
+            </table></div>`;
+    } catch (e) {
+        body.innerHTML = '<p style="color:#dc2626;padding:16px;">Erro ao carregar dados.</p>';
+        console.error(e);
+    }
+};

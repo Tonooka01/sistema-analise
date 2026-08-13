@@ -845,6 +845,77 @@ def _sync_plano_venda(conn, token, log):
     log.append(f"  ✅ {len(records)} planos de venda")
 
 
+def _sync_radacct(conn, token, log):
+    """Sincroniza histórico de sessões RADIUS (últimos 90 dias)."""
+    log.append("→ Radius Acct (últimos 90 dias)...")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS Radius_Acct (
+            ID            INTEGER PRIMARY KEY,
+            Login         TEXT,
+            Inicio        TEXT,
+            Fim           TEXT,
+            Duracao_s     INTEGER,
+            Download_bytes INTEGER,
+            Upload_bytes  INTEGER,
+            Concentrador  TEXT,
+            IP            TEXT
+        )
+    """)
+    conn.commit()
+
+    since_dt = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+
+    ENDPOINTS = ['radusuarios_radacct', 'radacct', 'radius_acct']
+    records = []
+    used_ep = None
+    for ep in ENDPOINTS:
+        try:
+            records = _ixc_get(ep, {
+                'qtype':     'acctstarttime',
+                'query':     since_dt,
+                'oper':      '>=',
+                'sortname':  'acctstarttime',
+                'sortorder': 'asc',
+            }, token)
+            used_ep = ep
+            break
+        except Exception:
+            continue
+
+    if not records:
+        log.append(f"  ⚠ Nenhum dado RADIUS retornado (endpoints tentados: {', '.join(ENDPOINTS)})")
+        return
+
+    # Limpa registros antigos (> 90 dias)
+    conn.execute("DELETE FROM Radius_Acct WHERE Inicio < ?", (since_dt,))
+
+    count = 0
+    for r in records:
+        try:
+            conn.execute("""
+                INSERT OR REPLACE INTO Radius_Acct
+                (ID, Login, Inicio, Fim, Duracao_s, Download_bytes, Upload_bytes, Concentrador, IP)
+                VALUES (?,?,?,?,?,?,?,?,?)
+            """, (
+                r.get('id') or r.get('radacctid'),
+                r.get('username'),
+                r.get('acctstarttime'),
+                r.get('acctstoptime'),
+                r.get('acctsessiontime'),
+                r.get('acctoutputoctets'),   # bytes NAS→cliente = download do cliente
+                r.get('acctinputoctets'),    # bytes cliente→NAS = upload do cliente
+                r.get('nasipaddress') or r.get('concentrador'),
+                r.get('framedipaddress') or r.get('ip')
+            ))
+            count += 1
+        except Exception:
+            pass
+
+    conn.commit()
+    log.append(f"  ✅ {count} sessões RADIUS sincronizadas via '{used_ep}'")
+
+
 # ── Sync principal ─────────────────────────────────────────────────────────────
 
 def _run_sync(app, token, mode='incremental', tables=None):
@@ -872,6 +943,7 @@ def _run_sync(app, token, mode='incremental', tables=None):
             ('vendedores',     'Vendedores',      lambda: _sync_vendedores(conn, token, log)),
             ('equipamentos',   'Equipamentos',    lambda: _sync_equipamentos(conn, token, log)),
             ('plano_venda',    'Planos de Venda', lambda: _sync_plano_venda(conn, token, log)),
+            ('radacct',        'Radius Acct',     lambda: _sync_radacct(conn, token, log)),
         ]
 
         # Filtra só as tabelas selecionadas
