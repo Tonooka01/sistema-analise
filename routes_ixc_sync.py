@@ -679,13 +679,27 @@ def _sync_atendimentos(conn, token, log, since=None):
     if not since:
         conn.execute("DELETE FROM Atendimentos")
 
+    # Cache de clientes (mesmo padrão do sync de OS)
+    cliente_cache = {}
+    for table in ['Clientes', 'Clientes_Negativacao']:
+        try:
+            for row in conn.execute(f"SELECT ID, Raz_o_social FROM {table}").fetchall():
+                id_int = int(float(row[0])) if row[0] else None
+                if id_int:
+                    cliente_cache[str(id_int)] = row[1]
+        except Exception:
+            pass
+
     for r in records:
+        id_cli = str(int(float(r.get('id_cliente') or 0))) if r.get('id_cliente') else ''
+        nome_cliente = cliente_cache.get(id_cli) or r.get('cliente_razao') or id_cli or None
+
         conn.execute("""
             INSERT OR REPLACE INTO Atendimentos
             (ID, Cliente, Criado_em, ltima_altera_o, Assunto, Novo_status, Descri_o, Filial)
             VALUES (?,?,?,?,?,?,?,?)
         """, (
-            r.get('id'), r.get('cliente_razao'),
+            r.get('id'), nome_cliente,
             r.get('data_criacao'), r.get('data_ultima_alteracao'),
             r.get('titulo'), r.get('su_status'),
             r.get('menssagem'), r.get('id_filial')
