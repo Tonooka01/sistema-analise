@@ -901,10 +901,10 @@ async function fetchBehaviorData_QoS() {
                 const LEVEL_KEYS = ['excellent', 'good', 'marginal', 'critical'];
                 renderChart(cId, 'bar_vertical', olts,
                     [
-                        { label: 'Excelente (> -20 dBm)',  data: data.signal_by_olt.map(d => d.excelente || 0), backgroundColor: '#15803dE6' },
-                        { label: 'Boa (-20 a -25 dBm)',    data: data.signal_by_olt.map(d => d.boa       || 0), backgroundColor: '#22c55eE6' },
-                        { label: 'Marginal (-25 a -27 dBm)',data: data.signal_by_olt.map(d => d.marginal  || 0), backgroundColor: '#eab308E6' },
-                        { label: 'Crítica (< -27 dBm)',    data: data.signal_by_olt.map(d => d.critica   || 0), backgroundColor: '#ef4444E6' },
+                        { label: 'Excelente (acima de -20 dBm)', data: data.signal_by_olt.map(d => d.excelente || 0), backgroundColor: '#15803dE6' },
+                        { label: 'Boa (-20 a -25 dBm)',          data: data.signal_by_olt.map(d => d.boa       || 0), backgroundColor: '#22c55eE6' },
+                        { label: 'Marginal (-25 a -27 dBm)',      data: data.signal_by_olt.map(d => d.marginal  || 0), backgroundColor: '#eab308E6' },
+                        { label: 'Crítica (abaixo de -27 dBm)',  data: data.signal_by_olt.map(d => d.critica   || 0), backgroundColor: '#ef4444E6' },
                     ],
                     'Qualidade de Sinal por OLT',
                     { formatterType: 'number', scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
