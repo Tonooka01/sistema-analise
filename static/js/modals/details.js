@@ -56,7 +56,7 @@ export async function fetchAndRenderTabData(tab, page = 1) {
     let url;
     switch (tab) {
         case 'financeiro':   url = `${state.API_BASE_URL}/api/details/financial/${currentContractId}?${params.toString()}`; break;
-        case 'os':           url = `${state.API_BASE_URL}/api/details/complaints/${encodeURIComponent(currentClientName)}?type=os&${params.toString()}`; break;
+        case 'os':           url = `${state.API_BASE_URL}/api/details/complaints/${encodeURIComponent(currentClientName)}?type=os&contract_id=${encodeURIComponent(currentContractId)}&${params.toString()}`; break;
         case 'atendimentos': url = `${state.API_BASE_URL}/api/details/complaints/${encodeURIComponent(currentClientName)}?type=atendimentos&${params.toString()}`; break;
         case 'logins':       url = `${state.API_BASE_URL}/api/details/logins/${currentContractId}?${params.toString()}`; break;
         case 'comodato':

@@ -42,6 +42,7 @@ def api_complaints_details(client_name):
     conn = get_db()
     try:
         complaint_type = request.args.get('type')
+        contract_id    = request.args.get('contract_id', '').strip()
         limit  = request.args.get('limit', 15, type=int)
         offset = request.args.get('offset', 0, type=int)
 
@@ -56,11 +57,18 @@ def api_complaints_details(client_name):
         else:
             abort(400, "Tipo de 'complaint' inválido.")
 
-        where = f"WHERE UPPER(TRIM(Cliente)) = UPPER(TRIM(?))"
-        total_rows = conn.execute(f"SELECT COUNT(*) FROM {table} {where}", (client_name,)).fetchone()[0]
+        conditions = ["UPPER(TRIM(Cliente)) = UPPER(TRIM(?))"]
+        params_base = [client_name]
+
+        if complaint_type == 'os' and contract_id:
+            conditions.append("CAST(Contrato AS TEXT) = ?")
+            params_base.append(contract_id)
+
+        where = "WHERE " + " AND ".join(conditions)
+        total_rows = conn.execute(f"SELECT COUNT(*) FROM {table} {where}", params_base).fetchone()[0]
         data = conn.execute(
             f"SELECT {cols} FROM {table} {where} ORDER BY {order} DESC LIMIT ? OFFSET ?",
-            (client_name, limit, offset)
+            params_base + [limit, offset]
         ).fetchall()
 
         return jsonify({"data": [dict(r) for r in data], "total_rows": total_rows})
