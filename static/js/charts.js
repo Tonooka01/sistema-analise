@@ -172,17 +172,21 @@ export function renderChart(canvasId, selectedType, labels, datasets, titleText,
     } else if (selectedType.startsWith('bar')) {
         chartJsType = 'bar';
         options.indexAxis = (selectedType === 'bar_horizontal') ? 'y' : 'x';
-        
+
+        const isStacked = !!(additionalOptions.scales?.x?.stacked || additionalOptions.scales?.y?.stacked);
         options.plugins.datalabels = {
-            display: (context) => context.dataset.data[context.dataIndex] !== 0,
-            anchor: 'end',
-            align: selectedType === 'bar_horizontal' ? 'right' : 'end',
-            offset: 4,
-            color: '#4a5568',
-            font: { weight: 'bold', size: 10 },
+            display: (context) => {
+                const value = context.dataset.data[context.dataIndex];
+                return isStacked ? (value > 0) : (value !== 0);
+            },
+            anchor: isStacked ? 'center' : 'end',
+            align: isStacked ? 'center' : (selectedType === 'bar_horizontal' ? 'right' : 'end'),
+            offset: isStacked ? 0 : 4,
+            color: isStacked ? '#fff' : '#4a5568',
+            font: { weight: 'bold', size: isStacked ? 9 : 10 },
             formatter: (value) => new Intl.NumberFormat('pt-BR').format(value)
         };
-        
+
         if (!options.scales) options.scales = {};
         if (options.indexAxis === 'x' && !options.scales.y) options.scales.y = { beginAtZero: true };
         if (options.indexAxis === 'y' && !options.scales.x) options.scales.x = { beginAtZero: true };

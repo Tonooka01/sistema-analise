@@ -897,22 +897,33 @@ async function fetchBehaviorData_QoS() {
                     <canvas id="${cId}"></canvas>
                 </div></div>`);
             setTimeout(() => {
-                const totExc = data.signal_by_olt.reduce((s, d) => s + (d.excelente || 0), 0);
-                const totBoa = data.signal_by_olt.reduce((s, d) => s + (d.boa       || 0), 0);
-                const totMar = data.signal_by_olt.reduce((s, d) => s + (d.marginal  || 0), 0);
-                const totCri = data.signal_by_olt.reduce((s, d) => s + (d.critica   || 0), 0);
-                const LEVEL_LABELS = ['Excelente (> -20 dBm)', 'Boa (-20 a -25)', 'Marginal (-25 a -27)', 'Crítica (< -27 dBm)'];
-                const LEVEL_KEYS   = ['excellent', 'good', 'marginal', 'critical'];
-                renderChart(cId, 'pie', LEVEL_LABELS,
-                    [{ label: 'Clientes', data: [totExc, totBoa, totMar, totCri],
-                       backgroundColor: ['#15803dE6', '#22c55eE6', '#eab308E6', '#ef4444E6'] }],
-                    'Distribuição de Qualidade de Sinal', { formatterType: 'percent_only' });
-                _addChartClickHandler(cId, label => {
-                    const idx = LEVEL_LABELS.indexOf(label);
-                    const lvl = idx >= 0 ? LEVEL_KEYS[idx] : '';
-                    _openQoSModal(`Sinal — "${label}"`,
-                        `${state.API_BASE_URL}/api/behavior/signal_clients?level=${lvl}&city=${encodeURIComponent(city)}`);
-                });
+                const olts = data.signal_by_olt.map(d => d.olt || 'Desconhecido');
+                const LEVEL_KEYS = ['excellent', 'good', 'marginal', 'critical'];
+                renderChart(cId, 'bar_vertical', olts,
+                    [
+                        { label: 'Excelente (> -20 dBm)',  data: data.signal_by_olt.map(d => d.excelente || 0), backgroundColor: '#15803dE6' },
+                        { label: 'Boa (-20 a -25 dBm)',    data: data.signal_by_olt.map(d => d.boa       || 0), backgroundColor: '#22c55eE6' },
+                        { label: 'Marginal (-25 a -27 dBm)',data: data.signal_by_olt.map(d => d.marginal  || 0), backgroundColor: '#eab308E6' },
+                        { label: 'Crítica (< -27 dBm)',    data: data.signal_by_olt.map(d => d.critica   || 0), backgroundColor: '#ef4444E6' },
+                    ],
+                    'Qualidade de Sinal por OLT',
+                    { formatterType: 'number', scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
+                );
+                const cvs = document.getElementById(cId);
+                if (cvs) {
+                    cvs.style.cursor = 'pointer';
+                    cvs.addEventListener('click', ev => {
+                        const chart = state.getMainCharts()[cId];
+                        if (!chart) return;
+                        const els = chart.getElementsAtEventForMode(ev, 'nearest', { intersect: true }, false);
+                        if (!els.length) return;
+                        const olt = chart.data.labels[els[0].index];
+                        const lvl = LEVEL_KEYS[els[0].datasetIndex] || '';
+                        const lvlLabel = chart.data.datasets[els[0].datasetIndex]?.label || '';
+                        _openQoSModal(`Sinal — ${olt} · ${lvlLabel}`,
+                            `${state.API_BASE_URL}/api/behavior/signal_clients?olt=${encodeURIComponent(olt)}&level=${lvl}&city=${encodeURIComponent(city)}`);
+                    });
+                }
             }, 50);
         }
 
