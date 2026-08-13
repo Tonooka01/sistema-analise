@@ -768,22 +768,23 @@ def api_behavior_qos_overview():
 
         signal_sql = f"""
             SELECT CF.Transmissor AS olt, COUNT(*) AS total,
-                   SUM(CASE WHEN CF.Sinal_RX >= -25                        THEN 1 ELSE 0 END) AS boa,
+                   SUM(CASE WHEN CF.Sinal_RX > -20                        THEN 1 ELSE 0 END) AS excelente,
+                   SUM(CASE WHEN CF.Sinal_RX <= -20 AND CF.Sinal_RX >= -25 THEN 1 ELSE 0 END) AS boa,
                    SUM(CASE WHEN CF.Sinal_RX < -25 AND CF.Sinal_RX >= -27 THEN 1 ELSE 0 END) AS marginal,
                    SUM(CASE WHEN CF.Sinal_RX < -27                        THEN 1 ELSE 0 END) AS critica
             {base_join}
-              AND CF.Sinal_RX IS NOT NULL
+              AND CF.Sinal_RX IS NOT NULL AND CF.Sinal_RX != 0
               AND CF.Transmissor IS NOT NULL AND CF.Transmissor != '0'
               {city_sql}
             GROUP BY CF.Transmissor ORDER BY total DESC
         """
 
-        causes_sql = f"""
-            SELECT CF.Causa_ltima_queda AS causa, COUNT(*) AS count
+        onu_sql = f"""
+            SELECT CF.ONU_tipo AS onu, COUNT(*) AS count
             {base_join}
-              AND CF.Causa_ltima_queda IS NOT NULL AND CF.Causa_ltima_queda != ''
+              AND CF.ONU_tipo IS NOT NULL AND CF.ONU_tipo != ''
               {city_sql}
-            GROUP BY CF.Causa_ltima_queda ORDER BY count DESC LIMIT 10
+            GROUP BY CF.ONU_tipo ORDER BY count DESC LIMIT 10
         """
 
         instab_sql = f"""
@@ -798,8 +799,8 @@ def api_behavior_qos_overview():
 
         kpi_sql = f"""
             SELECT
-                SUM(CASE WHEN CF.Sinal_RX < -27 THEN 1 ELSE 0 END)          AS signal_critical,
-                SUM(CASE WHEN CF.Sinal_RX IS NOT NULL THEN 1 ELSE 0 END)     AS signal_total,
+                SUM(CASE WHEN CF.Sinal_RX < -27 AND CF.Sinal_RX != 0 THEN 1 ELSE 0 END) AS signal_critical,
+                SUM(CASE WHEN CF.Sinal_RX IS NOT NULL AND CF.Sinal_RX != 0 THEN 1 ELSE 0 END) AS signal_total,
                 SUM(CASE WHEN L.Franquia_atingida = 'S' THEN 1 ELSE 0 END)   AS quota_atingiram,
                 SUM(CASE WHEN L.Franquia > 0 THEN 1 ELSE 0 END)              AS quota_total,
                 SUM(COALESCE(L.Quantidade_de_desconex_es_no_dia_de_hoje, 0)) AS disc_total
@@ -807,7 +808,7 @@ def api_behavior_qos_overview():
         """
 
         signal_data = conn.execute(signal_sql, tuple(city_p)).fetchall()
-        causes_data = conn.execute(causes_sql, tuple(city_p)).fetchall()
+        onu_data    = conn.execute(onu_sql,    tuple(city_p)).fetchall()
         instab_data = conn.execute(instab_sql, tuple(city_p)).fetchall()
         kpi         = conn.execute(kpi_sql,    tuple(city_p)).fetchone()
 
@@ -821,7 +822,7 @@ def api_behavior_qos_overview():
 
         return jsonify({
             'signal_by_olt':      [dict(r) for r in signal_data],
-            'top_causes':         [dict(r) for r in causes_data],
+            'onu_distribution':   [dict(r) for r in onu_data],
             'instability_by_olt': [dict(r) for r in instab_data],
             'kpis': {
                 'signal_critical': kpi['signal_critical'] or 0,
@@ -854,9 +855,10 @@ def api_behavior_signal_clients():
         if city:  filters.append("C.Cidade = ?");             params.append(city)
         if olt:   filters.append("CF.Transmissor = ?");       params.append(olt)
         if cause: filters.append("CF.Causa_ltima_queda = ?"); params.append(cause)
-        if level == 'critical': filters.append("CF.Sinal_RX < -27")
+        if level == 'critical':   filters.append("CF.Sinal_RX < -27 AND CF.Sinal_RX != 0")
         elif level == 'marginal': filters.append("CF.Sinal_RX >= -27 AND CF.Sinal_RX < -25")
-        elif level == 'good':   filters.append("CF.Sinal_RX >= -25")
+        elif level == 'good':     filters.append("CF.Sinal_RX >= -25 AND CF.Sinal_RX <= -20")
+        elif level == 'excellent':filters.append("CF.Sinal_RX > -20 AND CF.Sinal_RX != 0")
 
         where = " AND ".join(filters)
         query = f"""

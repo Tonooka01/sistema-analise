@@ -897,39 +897,38 @@ async function fetchBehaviorData_QoS() {
                     <canvas id="${cId}"></canvas>
                 </div></div>`);
             setTimeout(() => {
-                const labels = data.signal_by_olt.map(d => d.olt);
-                renderChart(cId, 'bar_vertical', labels, [
-                    { label: 'Boa (≥ -25 dBm)',      data: data.signal_by_olt.map(d => d.boa),      backgroundColor: '#22c55eB3' },
-                    { label: 'Marginal (-27 a -25)',  data: data.signal_by_olt.map(d => d.marginal), backgroundColor: '#eab308B3' },
-                    { label: 'Crítica (< -27 dBm)',  data: data.signal_by_olt.map(d => d.critica),  backgroundColor: '#ef4444B3' },
-                ], 'Qualidade de Sinal por OLT', {
-                    formatterType: 'number',
-                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
-                });
+                const totExc = data.signal_by_olt.reduce((s, d) => s + (d.excelente || 0), 0);
+                const totBoa = data.signal_by_olt.reduce((s, d) => s + (d.boa       || 0), 0);
+                const totMar = data.signal_by_olt.reduce((s, d) => s + (d.marginal  || 0), 0);
+                const totCri = data.signal_by_olt.reduce((s, d) => s + (d.critica   || 0), 0);
+                const LEVEL_LABELS = ['Excelente (> -20 dBm)', 'Boa (-20 a -25)', 'Marginal (-25 a -27)', 'Crítica (< -27 dBm)'];
+                const LEVEL_KEYS   = ['excellent', 'good', 'marginal', 'critical'];
+                renderChart(cId, 'pie', LEVEL_LABELS,
+                    [{ label: 'Clientes', data: [totExc, totBoa, totMar, totCri],
+                       backgroundColor: ['#15803dE6', '#22c55eE6', '#eab308E6', '#ef4444E6'] }],
+                    'Distribuição de Qualidade de Sinal', { formatterType: 'percent_only' });
                 _addChartClickHandler(cId, label => {
+                    const idx = LEVEL_LABELS.indexOf(label);
+                    const lvl = idx >= 0 ? LEVEL_KEYS[idx] : '';
                     _openQoSModal(`Sinal — "${label}"`,
-                        `${state.API_BASE_URL}/api/behavior/signal_clients?olt=${encodeURIComponent(label)}&city=${encodeURIComponent(city)}`);
+                        `${state.API_BASE_URL}/api/behavior/signal_clients?level=${lvl}&city=${encodeURIComponent(city)}`);
                 });
             }, 50);
         }
 
-        // Chart 2: Causas de Queda
-        if (data.top_causes?.length) {
-            const cId = 'qosCausesChart';
+        // Chart 2: Distribuição por Tipo de ONU
+        if (data.onu_distribution?.length) {
+            const cId = 'qosOnuChart';
             gs.addWidget(`<div class="grid-stack-item" gs-w="6" gs-h="9" gs-x="0" gs-y="9">
                 <div class="grid-stack-item-content chart-widget">
-                    <h3 class="chart-title" id="${cId}Title">Causas de Queda (ONUs)</h3>
+                    <h3 class="chart-title" id="${cId}Title">Distribuição por Tipo de ONU</h3>
                     <canvas id="${cId}"></canvas>
                 </div></div>`);
             setTimeout(() => {
-                renderChart(cId, 'bar_horizontal',
-                    data.top_causes.map(d => d.causa),
-                    [{ label: 'Ocorrências', data: data.top_causes.map(d => d.count) }],
-                    'Causas de Queda (ONUs)', { formatterType: 'number' });
-                _addChartClickHandler(cId, label => {
-                    _openQoSModal(`Causa de queda: "${label}"`,
-                        `${state.API_BASE_URL}/api/behavior/signal_clients?cause=${encodeURIComponent(label)}&city=${encodeURIComponent(city)}`);
-                });
+                renderChart(cId, 'pie',
+                    data.onu_distribution.map(d => d.onu),
+                    [{ label: 'Quantidade', data: data.onu_distribution.map(d => d.count) }],
+                    'Distribuição por Tipo de ONU', { formatterType: 'number' });
             }, 50);
         }
 
