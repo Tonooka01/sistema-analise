@@ -61,6 +61,9 @@ export function handleBehaviorTabChange(tabName) {
             case 'qualidade':
                 renderQoSTab();
                 break;
+            case 'acoes':
+                renderAcoesTab();
+                break;
             default:
                 console.warn(`Aba de comportamento desconhecida: ${tabName}`);
                 if (targetPane) targetPane.innerHTML = `<p class="text-red-500">Conteúdo para aba "${tabName}" não definido.</p>`;
@@ -1028,3 +1031,210 @@ window._openQoSModal = async function(title, url) {
         console.error(e);
     }
 };
+// -------------------------------------------------------
+// ABA: PLANO DE ACOES ANTI-CHURN
+// -------------------------------------------------------
+
+async function renderAcoesTab() {
+    const pane = document.getElementById('tab-content-acoes');
+    if (!pane) return;
+    pane.innerHTML = '<p class="text-gray-400 p-8 text-center">Carregando...</p>';
+
+    let summary = { Altissimo: 0, Alto: 0, Medio: 0, Baixo: 0, Total: 0 };
+    try {
+        const r = await fetch(`${state.API_BASE_URL}/api/behavior/churn_clients?limit=1&offset=0`);
+        if (r.ok) { const d = await r.json(); if (d.summary) summary = { ...summary, ...d.summary }; }
+    } catch (_) {}
+
+    const STAGES = [
+        { key: 'Altissimo', label: 'Altissimo', count: summary.Altissimo || 0,
+          cor: '#7c3aed', corBg: '#ede9fe', corBd: '#c4b5fd', emoji: 'xx_EMOJ1',
+          scoreRange: '> 160', urgencia: 'MESMO DIA — resposta em ate 2 horas', urCor: '#7c3aed',
+          gatilhos: ['Score > 160 pontos', 'Multiplos sinais criticos simultaneos', 'Bloqueio + historico de atraso + queda de uso'],
+          acoes: [
+            { t: 'Ligacao de retencao especializada', d: 'Agente treinado com autoridade. Script LAER: Ouca -> Reconheca -> Explique/Oferea -> Peca compromisso.' },
+            { t: 'Callback executivo', d: 'Para clientes de alto valor: escalar para gerente. Contato pessoal tem impacto desproporcional.' },
+            { t: 'Oferta de retencao estruturada', d: 'Lock de preco 12 meses, upgrade de velocidade no preco atual, mes gratis ou bundle com servico adicional.' },
+            { t: 'Visita tecnica prioritaria', d: 'Se ha problemas em aberto: visita no mesmo dia. A rapidez da resposta e, por si, um argumento de retencao.' },
+            { t: 'Credito na fatura', d: 'Para falhas verificadas: oferea proativamente. "Identificamos instabilidade — creditamos R$Y na proxima fatura."' },
+          ],
+          nao: 'Nao delegue a atendimento nivel 1. Nao use scripts genericos. Personalize a oferta.' },
+        { key: 'Alto', label: 'Alto', count: summary.Alto || 0,
+          cor: '#dc2626', corBg: '#fee2e2', corBd: '#fca5a5', emoji: 'xx_EMOJ2',
+          scoreRange: '60 – 160', urgencia: 'MESMO DIA — resposta em ate 4 horas', urCor: '#dc2626',
+          gatilhos: ['Score 60-160', 'Concorrente mencionado ou cotado', 'Solicitacao de info sobre cancelamento', '5+ dias inadimplente', 'Zero uso por 7+ dias'],
+          acoes: [
+            { t: 'Ligacao de retencao (agente senior)', d: 'Revise o historico antes de ligar. Mencione tickets e datas de problema — mostre que conhece o caso.' },
+            { t: 'Oferta personalizada por motivo', d: 'Preco -> lock + upgrade. Tecnico -> visita + credito. Concorrente -> diferencial (suporte local, tempo de resposta).' },
+            { t: 'Reconexao imediata para inadimplentes', d: 'Ofereca reconexao ao pagar + parcelamento. Reconexao rapida evita migracao durante o bloqueio.' },
+            { t: 'Investigar churn silencioso', d: 'Se uso zerou sem motivo, o cliente ja usa outro provedor. WhatsApp: "Notamos sua conexao sem uso — esta tudo bem?"' },
+            { t: 'Proposta por escrito no WhatsApp', d: 'Apos a ligacao, envie resumo da oferta por escrito. Facilita a decisao e gera registro.' },
+          ],
+          nao: 'Nao ofereca desconto antes de ouvir o motivo real. Nao desista apos uma unica tentativa.' },
+        { key: 'Medio', label: 'Medio', count: summary.Medio || 0,
+          cor: '#ea580c', corBg: '#ffedd5', corBd: '#fdba74', emoji: 'xx_EMOJ3',
+          scoreRange: '25 – 59', urgencia: 'EM ATE 24 HORAS — proativo antes que escale', urCor: '#ea580c',
+          gatilhos: ['Score 25-59', '2-3 tickets no mes', '1a ou 2a cobranca em atraso', 'Downgrade sem motivo', 'NPS detractor (0-6)'],
+          acoes: [
+            { t: 'Ligacao proativa de servico (nao de vendas)', d: '"Notamos que voce teve problemas recentemente e queremos garantir que esta tudo bem." Ouca. Nao venda.' },
+            { t: 'Oferta de diagnostico gratuito', d: 'Ofereca visita tecnica preventiva dentro da semana. A oferta ja sinaliza cuidado.' },
+            { t: 'Relatorio personalizado de qualidade', d: 'WhatsApp: "Seu uptime no ultimo mes foi X%, velocidade media Y Mbps." Transparencia gera confianca.' },
+            { t: 'Revisao de plano', d: '"Seu plano atual ainda atende bem? Posso verificar se ha algo mais adequado." — nao e upsell, e otimizacao.' },
+          ],
+          nao: 'NAO ofereca desconto neste estagio. Clientes que recebem desconto por reclamar aprendem a reclamar para obter desconto.' },
+        { key: 'Baixo', label: 'Baixo', count: summary.Baixo || 0,
+          cor: '#ca8a04', corBg: '#fefce8', corBd: '#fde047', emoji: 'xx_EMOJ4',
+          scoreRange: '10 – 24', urgencia: 'EM ATE 72 HORAS — monitoramento e prevencao', urCor: '#ca8a04',
+          gatilhos: ['Score 10-24', '1 ticket no mes', '1o pagamento com pequeno atraso', 'Sinal de risco isolado'],
+          acoes: [
+            { t: 'Lembrete automatico de cobranca', d: 'Sequencia D-5, D-2, D0 via WhatsApp com link PIX. Recupera ate 42% dos atrasos sem contato humano.' },
+            { t: 'Monitorar tickets recorrentes', d: 'Se o mesmo problema se repete, eleve para Medio imediatamente. Problemas repetidos sao o maior preditor de churn tecnico.' },
+            { t: 'Pesquisa NPS pos-atendimento', d: 'Apos ticket encerrado: envie pesquisa rapida de satisfacao. Detractors disparam alerta automatico.' },
+            { t: 'Toque de aniversario de contrato', d: '1, 2 ou 3 anos: mensagem + beneficio (desconto, upgrade temporario). Custo quase zero, impacto alto.' },
+          ],
+          nao: 'Nao ignore sinais isolados. Acumulacao de sinais baixos e o padrao mais comum antes do churn.' },
+    ];
+
+    const CENARIOS = [
+        { motivo: 'Preco alto / concorrente', a1: 'Transparencia sobre promo do concorrente (validade, reajuste pos-promo)', a2: 'Lock de preco 12 meses + upgrade de velocidade no plano atual', au: 'Desconto 10-15% por compromisso de 12 meses' },
+        { motivo: 'Problemas tecnicos recorrentes', a1: 'Visita tecnica prioritaria no mesmo dia + timeline de resolucao', a2: 'Credito na fatura proporcional ao periodo de instabilidade', au: 'Troca de equipamento + mes gratis + tecnico dedicado por 60 dias' },
+        { motivo: 'Dificuldade financeira', a1: 'Flexibilidade de data de vencimento (sem custo, alto impacto)', a2: 'Parcelamento da divida + reconexao imediata', au: 'Downgrade temporario de plano para manter o relacionamento' },
+        { motivo: 'Sem uso / churn silencioso', a1: 'WhatsApp: "Notamos sua conexao sem uso — esta tudo certo?"', a2: 'Visita tecnica gratuita para verificar qualidade do sinal', au: 'Re-engajamento: 1 mes reduzido + upgrade de velocidade' },
+        { motivo: 'Mau atendimento', a1: 'Escalacao imediata para gerente + callback executivo', a2: 'Credito na fatura + contato dedicado por 60 dias', au: 'Reconhecimento formal + SLA escrito de resolucao' },
+        { motivo: 'Mudanca de endereco', a1: 'Verificar cobertura no novo endereco imediatamente', a2: 'Instalacao prioritaria sem custo', au: 'Se sem cobertura: win-back em 60 dias com oferta especial' },
+    ];
+
+    const DUNNING = [
+        { dia: 'D-5', acao: 'WhatsApp com lembrete e link de pagamento (PIX)', canal: 'WhatsApp' },
+        { dia: 'D-2', acao: 'Segundo lembrete via SMS ou push', canal: 'SMS/Push' },
+        { dia: 'D0',  acao: 'Confirmacao de vencimento ou lembrete se nao pago', canal: 'WhatsApp' },
+        { dia: 'D+1', acao: 'Primeiro contato de recuperacao — tom amigavel, ofereca PIX', canal: 'WhatsApp' },
+        { dia: 'D+3', acao: 'Segundo contato — ofereca negociacao (parcelar ou adiar 7 dias)', canal: 'Ligacao' },
+        { dia: 'D+5', acao: 'Aviso final antes de bloqueio — inclua oferta de regularizacao na mensagem', canal: 'WhatsApp' },
+        { dia: 'D+7', acao: 'Bloqueio (se contratual) — reconexao imediata ao pagar', canal: 'Sistema' },
+        { dia: 'D+10',acao: 'Oferta pos-bloqueio: isente taxa de reconexao se pagar em X dias', canal: 'WhatsApp' },
+    ];
+
+    const QUICKSTART = [
+        ['1', 'Automacao de cobranca WhatsApp', 'Sequencia D-5/D-2/D0 com link PIX. Recupera ate 42% da inadimplencia sem contato humano.', '#059669'],
+        ['2', 'Flag: 2+ tickets no mes', 'Alerta automatico + ligacao proativa em 48h. Previne 60-70% dos churns tecnicos.', '#0284c7'],
+        ['3', 'Save desk dedicado', '1-2 agentes treinados com script e autoridade para descontos. Reduz churn reativo em ate 50%.', '#7c3aed'],
+        ['4', 'Credito pos-falha proativo', 'Ofereca antes do cliente pedir. Elimina a conta mental "por que estou pagando por isso?".', '#dc2626'],
+        ['5', 'Contato de renovacao 30 dias antes', 'Proativo antes que o cliente busque alternativas. Janela mais eficaz de retencao.', '#ea580c'],
+        ['6', 'Aniversario de contrato', 'Mensagem + beneficio no 1o, 2o e 3o aniversario. Custo quase zero, impacto alto.', '#ca8a04'],
+    ];
+
+    const emojis = ['xx_EMOJ1','xx_EMOJ2','xx_EMOJ3','xx_EMOJ4'];
+    const emojiReals = ['\uD83D\uDEA8','\uD83D\uDD34','\uD83D\uDFE0','\uD83D\uDFE1'];
+
+    const stageHtml = STAGES.map((s, si) => {
+        const emoji = emojiReals[si];
+        const gatHtml = s.gatilhos.map(g => `<li style="margin-bottom:3px;">${g}</li>`).join('');
+        const acoHtml = s.acoes.map((a, i) => `
+            <div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid ${s.corBd};">
+                <div style="min-width:22px;height:22px;background:${s.cor};color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">${i+1}</div>
+                <div><div style="font-weight:600;color:#1e293b;font-size:12px;">${a.t}</div>
+                <div style="color:#64748b;font-size:11px;margin-top:1px;">${a.d}</div></div>
+            </div>`).join('');
+        return `
+        <div style="background:#fff;border:1px solid ${s.corBd};border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+            <div style="background:${s.corBg};padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:22px;">${emoji}</span>
+                    <div><div style="font-size:16px;font-weight:700;color:${s.cor};">Risco ${s.label}</div>
+                    <div style="font-size:11px;color:#64748b;">Score: ${s.scoreRange}</div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:14px;">
+                    <div style="text-align:center;"><div style="font-size:26px;font-weight:800;color:${s.cor};">${s.count}</div>
+                    <div style="font-size:10px;color:#64748b;">clientes agora</div></div>
+                    <button onclick="document.querySelector('[data-tab=preditiva]').click();setTimeout(()=>{const f=document.getElementById('predRiskFilter');if(f){f.value='${s.key === 'Altissimo' ? 'Alt\xEDssimo' : s.key === 'Medio' ? 'M\xE9dio' : s.label}';document.getElementById('btnFilterPredictive')?.click();}},500);"
+                        style="background:${s.cor};color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
+                        Ver clientes
+                    </button>
+                </div>
+            </div>
+            <div style="padding:14px 18px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
+                    <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:6px;">Gatilhos de alerta</div>
+                    <ul style="list-style:none;padding:0;margin:0;font-size:11px;color:#475569;">${gatHtml}</ul></div>
+                    <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:4px;">Urgencia</div>
+                    <div style="font-size:11px;font-weight:700;color:${s.urCor};padding:5px 8px;background:${s.corBg};border-radius:6px;margin-bottom:8px;">${s.urgencia}</div>
+                    <div style="font-size:10px;color:#94a3b8;padding:5px 8px;background:#fafafa;border-radius:6px;border:1px solid #e2e8f0;">${s.nao}</div></div>
+                </div>
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:2px;">Acoes em ordem de prioridade</div>
+                ${acoHtml}
+            </div>
+        </div>`;
+    }).join('');
+
+    const cenHtml = CENARIOS.map((c, i) => `
+        <tr style="background:${i%2===0?'#fff':'#f8fafc'};">
+            <td style="padding:9px 11px;font-size:12px;font-weight:600;color:#1e293b;border-right:1px solid #e2e8f0;">${c.motivo}</td>
+            <td style="padding:9px 11px;font-size:11px;color:#475569;border-right:1px solid #e2e8f0;">${c.a1}</td>
+            <td style="padding:9px 11px;font-size:11px;color:#475569;border-right:1px solid #e2e8f0;">${c.a2}</td>
+            <td style="padding:9px 11px;font-size:11px;color:#7c3aed;font-weight:600;">${c.au}</td>
+        </tr>`).join('');
+
+    const dunHtml = DUNNING.map((d, i) => `
+        <tr style="background:${i%2===0?'#fff':'#f8fafc'};">
+            <td style="padding:7px 11px;font-weight:700;color:${d.dia==='D+7'?'#dc2626':d.dia.startsWith('D+')?'#ea580c':'#1e293b'};font-size:12px;white-space:nowrap;">${d.dia}</td>
+            <td style="padding:7px 11px;font-size:11px;color:#475569;">${d.acao}</td>
+            <td style="padding:7px 11px;font-size:11px;color:#64748b;white-space:nowrap;">${d.canal}</td>
+        </tr>`).join('');
+
+    const qsHtml = QUICKSTART.map(([n,t,d,c]) => `
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:12px;display:flex;gap:10px;">
+            <div style="min-width:26px;height:26px;background:${c};color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">${n}</div>
+            <div><div style="font-weight:600;color:#1e293b;font-size:12px;">${t}</div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px;">${d}</div></div>
+        </div>`).join('');
+
+    pane.innerHTML = `
+    <div style="padding:20px;max-width:1200px;margin:0 auto;">
+        <div style="margin-bottom:18px;">
+            <h2 style="font-size:20px;font-weight:700;color:#1e293b;margin:0 0 4px;">Plano de Acoes Anti-Churn</h2>
+            <p style="font-size:12px;color:#64748b;margin:0;">Baseado em pesquisa com 15+ fontes especializadas em ISPs brasileiros. Acoes por nivel de risco com timing de resposta.</p>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:22px;">
+            ${STAGES.map((s,si) => `<div style="background:${s.corBg};border:1px solid ${s.corBd};border-radius:8px;padding:10px;text-align:center;">
+                <div style="font-size:11px;font-weight:600;color:${s.cor};">${emojiReals[si]} ${s.label}</div>
+                <div style="font-size:22px;font-weight:800;color:${s.cor};">${s.count}</div>
+                <div style="font-size:10px;color:#94a3b8;">clientes</div></div>`).join('')}
+            <div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center;">
+                <div style="font-size:11px;font-weight:600;color:#475569;">Total monitorados</div>
+                <div style="font-size:22px;font-weight:800;color:#1e293b;">${summary.Total||0}</div>
+                <div style="font-size:10px;color:#94a3b8;">com algum sinal</div></div>
+        </div>
+        <h3 style="font-size:14px;font-weight:700;color:#1e293b;margin:0 0 10px;">Playbook por Nivel de Risco</h3>
+        <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:28px;">${stageHtml}</div>
+        <h3 style="font-size:14px;font-weight:700;color:#1e293b;margin:0 0 10px;">Matriz: Motivo de Cancelamento x Acoes</h3>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:28px;overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;">
+                <thead><tr style="background:#1e293b;color:#fff;">
+                    <th style="padding:9px 11px;text-align:left;font-size:11px;">Motivo</th>
+                    <th style="padding:9px 11px;text-align:left;font-size:11px;">1a Abordagem</th>
+                    <th style="padding:9px 11px;text-align:left;font-size:11px;">2a Abordagem (escalada)</th>
+                    <th style="padding:9px 11px;text-align:left;font-size:11px;">Ultimo recurso</th>
+                </tr></thead>
+                <tbody>${cenHtml}</tbody>
+            </table>
+        </div>
+        <h3 style="font-size:14px;font-weight:700;color:#1e293b;margin:0 0 6px;">Regua de Cobranca (Dunning)</h3>
+        <p style="font-size:11px;color:#64748b;margin:0 0 8px;">Ate 40% do churn e involuntario (inadimplencia). Dunning automatizado recupera ate 70% dos pagamentos em atraso.</p>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:28px;">
+            <table style="width:100%;border-collapse:collapse;">
+                <thead><tr style="background:#1e293b;color:#fff;">
+                    <th style="padding:7px 11px;text-align:left;font-size:11px;">Dia</th>
+                    <th style="padding:7px 11px;text-align:left;font-size:11px;">Acao</th>
+                    <th style="padding:7px 11px;text-align:left;font-size:11px;">Canal</th>
+                </tr></thead>
+                <tbody>${dunHtml}</tbody>
+            </table>
+        </div>
+        <h3 style="font-size:14px;font-weight:700;color:#1e293b;margin:0 0 10px;">Quick Start — Maior ROI para ISPs Pequenos</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:8px;margin-bottom:20px;">${qsHtml}</div>
+        <p style="font-size:10px;color:#94a3b8;text-align:center;padding-top:8px;border-top:1px solid #f1f5f9;">
+            Fontes: Sonar Software, TTEC, CustomerGauge, GoContact, Alloyal, Mundiale AI, MK Solutions — pesquisa consolidada 2025
+        </p>
+    </div>`;
+}
