@@ -1167,19 +1167,21 @@ async function renderAcoesTab() {
         </div>`;
     }).join('');
 
+    const tdBase = 'padding:9px 11px;white-space:normal;word-break:break-word;overflow:visible;text-overflow:clip;vertical-align:top;';
     const cenHtml = CENARIOS.map((c, i) => `
         <tr style="background:${i%2===0?'#fff':'#f8fafc'};">
-            <td style="padding:9px 11px;font-size:12px;font-weight:600;color:#1e293b;border-right:1px solid #e2e8f0;">${c.motivo}</td>
-            <td style="padding:9px 11px;font-size:11px;color:#475569;border-right:1px solid #e2e8f0;">${c.a1}</td>
-            <td style="padding:9px 11px;font-size:11px;color:#475569;border-right:1px solid #e2e8f0;">${c.a2}</td>
-            <td style="padding:9px 11px;font-size:11px;color:#7c3aed;font-weight:600;">${c.au}</td>
+            <td style="${tdBase}font-size:12px;font-weight:600;color:#1e293b;border-right:1px solid #e2e8f0;min-width:120px;">${c.motivo}</td>
+            <td style="${tdBase}font-size:11px;color:#475569;border-right:1px solid #e2e8f0;min-width:200px;">${c.a1}</td>
+            <td style="${tdBase}font-size:11px;color:#475569;border-right:1px solid #e2e8f0;min-width:200px;">${c.a2}</td>
+            <td style="${tdBase}font-size:11px;color:#7c3aed;font-weight:600;min-width:180px;">${c.au}</td>
         </tr>`).join('');
 
+    const tdDun = 'padding:7px 11px;white-space:normal;word-break:break-word;overflow:visible;text-overflow:clip;vertical-align:top;';
     const dunHtml = DUNNING.map((d, i) => `
         <tr style="background:${i%2===0?'#fff':'#f8fafc'};">
-            <td style="padding:7px 11px;font-weight:700;color:${d.dia==='D+7'?'#dc2626':d.dia.startsWith('D+')?'#ea580c':'#1e293b'};font-size:12px;white-space:nowrap;">${d.dia}</td>
-            <td style="padding:7px 11px;font-size:11px;color:#475569;">${d.acao}</td>
-            <td style="padding:7px 11px;font-size:11px;color:#64748b;white-space:nowrap;">${d.canal}</td>
+            <td style="${tdDun}font-weight:700;color:${d.dia==='D+7'?'#dc2626':d.dia.startsWith('D+')?'#ea580c':'#1e293b'};font-size:12px;white-space:nowrap;min-width:55px;">${d.dia}</td>
+            <td style="${tdDun}font-size:11px;color:#475569;min-width:260px;">${d.acao}</td>
+            <td style="${tdDun}font-size:11px;color:#64748b;min-width:120px;">${d.canal}</td>
         </tr>`).join('');
 
     const qsHtml = QUICKSTART.map(([n,t,d,c]) => `
@@ -1208,25 +1210,25 @@ async function renderAcoesTab() {
         <h3 style="font-size:14px;font-weight:700;color:#1e293b;margin:0 0 10px;">Playbook por Nivel de Risco</h3>
         <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:28px;">${stageHtml}</div>
         <h3 style="font-size:14px;font-weight:700;color:#1e293b;margin:0 0 10px;">Matriz: Motivo de Cancelamento x Acoes</h3>
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:28px;overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;">
+        <div style="border:1px solid #e2e8f0;border-radius:10px;overflow-x:auto;margin-bottom:28px;">
+            <table style="min-width:760px;width:100%;border-collapse:collapse;table-layout:auto;">
                 <thead><tr style="background:#1e293b;color:#fff;">
-                    <th style="padding:9px 11px;text-align:left;font-size:11px;">Motivo</th>
-                    <th style="padding:9px 11px;text-align:left;font-size:11px;">1a Abordagem</th>
-                    <th style="padding:9px 11px;text-align:left;font-size:11px;">2a Abordagem (escalada)</th>
-                    <th style="padding:9px 11px;text-align:left;font-size:11px;">Ultimo recurso</th>
+                    <th style="padding:9px 11px;text-align:left;font-size:11px;white-space:nowrap;">Motivo</th>
+                    <th style="padding:9px 11px;text-align:left;font-size:11px;white-space:nowrap;">1a Abordagem</th>
+                    <th style="padding:9px 11px;text-align:left;font-size:11px;white-space:nowrap;">2a Abordagem (escalada)</th>
+                    <th style="padding:9px 11px;text-align:left;font-size:11px;white-space:nowrap;">Ultimo recurso</th>
                 </tr></thead>
                 <tbody>${cenHtml}</tbody>
             </table>
         </div>
         <h3 style="font-size:14px;font-weight:700;color:#1e293b;margin:0 0 6px;">Regua de Cobranca (Dunning)</h3>
         <p style="font-size:11px;color:#64748b;margin:0 0 8px;">Ate 40% do churn e involuntario (inadimplencia). Dunning automatizado recupera ate 70% dos pagamentos em atraso.</p>
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:28px;">
-            <table style="width:100%;border-collapse:collapse;">
+        <div style="border:1px solid #e2e8f0;border-radius:10px;overflow-x:auto;margin-bottom:28px;">
+            <table style="min-width:500px;width:100%;border-collapse:collapse;table-layout:auto;">
                 <thead><tr style="background:#1e293b;color:#fff;">
-                    <th style="padding:7px 11px;text-align:left;font-size:11px;">Dia</th>
-                    <th style="padding:7px 11px;text-align:left;font-size:11px;">Acao</th>
-                    <th style="padding:7px 11px;text-align:left;font-size:11px;">Canal</th>
+                    <th style="padding:7px 11px;text-align:left;font-size:11px;white-space:nowrap;">Dia</th>
+                    <th style="padding:7px 11px;text-align:left;font-size:11px;white-space:nowrap;">Acao</th>
+                    <th style="padding:7px 11px;text-align:left;font-size:11px;white-space:nowrap;">Canal</th>
                 </tr></thead>
                 <tbody>${dunHtml}</tbody>
             </table>
