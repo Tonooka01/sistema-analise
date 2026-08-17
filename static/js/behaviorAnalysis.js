@@ -1042,7 +1042,7 @@ async function renderAcoesTab() {
 
     let summary = { Altissimo: 0, Alto: 0, Medio: 0, Baixo: 0, Total: 0 };
     try {
-        const r = await fetch(`${state.API_BASE_URL}/api/behavior/churn_clients?limit=1&offset=0`);
+        const r = await fetch(`${state.API_BASE_URL}/api/behavior/predictive_churn?limit=1&offset=0`);
         if (r.ok) { const d = await r.json(); if (d.summary) summary = { ...summary, ...d.summary }; }
     } catch (_) {}
 
