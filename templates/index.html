@@ -28,6 +28,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
         if (selWrap) selWrap.style.display = 'none';
     }
+    // --- Análise de Comportamento ---
+    if (!perms.includes('behavior')) {
+        const opt = document.getElementById('behaviorAnalysisOption');
+        if (opt) opt.style.display = 'none';
+    } else {
+        // Filtra abas específicas se houver behavior:tab_name
+        const btabPerms = perms.filter(p => p.startsWith('behavior:'));
+        if (btabPerms.length > 0) {
+            document.querySelectorAll('#behavior-analysis-tabs .tab-link').forEach(link => {
+                const tab = link.dataset.tab;
+                if (tab && !perms.includes('behavior:' + tab)) {
+                    link.style.display = 'none';
+                }
+            });
+        }
+    }
 });
 </script>
 
@@ -68,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <option value="analise_juros_atraso" class="text-black bg-white">Análise de Juros por Atraso</option>
             <option value="faturamento_por_cidade" class="text-black bg-white">Faturamento por Período e Cidade</option>
             <option value="active_clients_evolution" class="text-black bg-white">Evolução de Clientes Ativos</option>
-            <option value="analise_comportamento" class="text-black bg-white">Análise de Comportamento</option>
+            <option value="analise_comportamento" id="behaviorAnalysisOption" class="text-black bg-white">Análise de Comportamento</option>
             <option value="activations_by_seller" class="text-black bg-white">Ativação por Vendedor</option>
             <option value="atrasos_e_nao_pagos" class="text-black bg-white">Atrasos e Faturas Não Pagas</option>
             <option value="saude_financeira_contrato_atraso" class="text-black bg-white">Saúde Financeira por Contrato (Financeiro em atraso)</option>

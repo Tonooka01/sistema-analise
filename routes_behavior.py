@@ -1,6 +1,8 @@
 import pandas as pd
 import sqlite3
+import json as _json
 from flask import Blueprint, jsonify, request, abort, current_app
+from flask_login import current_user
 
 # Define o Blueprint para rotas de comportamento
 # O prefixo '/api/behavior' será definido no api_server.py
@@ -8,6 +10,69 @@ behavior_bp = Blueprint('behavior_bp', __name__)
 
 from logger import get_logger
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Mapeamento de endpoint de rota → chave de aba para controle de permissão
+# ---------------------------------------------------------------------------
+_TAB_ROUTE_KEYS = {
+    '/complaint_patterns':        'reclamacoes',
+    '/complaint_clients':         'reclamacoes',
+    '/churn_pattern':             'churn',
+    '/churn_clients':             'churn',
+    '/predictive_churn':          'preditiva',
+    '/predictive_churn_export':   'preditiva',
+    '/qos_overview':              'qualidade',
+    '/signal_clients':            'qualidade',
+    '/action_plans':              'acoes',
+    '/temporal_support':          'temporal_suporte',
+    '/financial_behavior':        'financeiro_ativo',
+    '/connection_inactivity':     'inatividade',
+    '/cancellation_seasonality':  'sazonalidade_canc',
+    '/signal_causes':             'causa_queda',
+    '/contact_list':              'lista_retencao',
+    '/action_alerts':             'alertas_acao',
+    '/canc_reasons':              'motivos_canc',
+    '/pre_canc_behavior':         'padrao_pre_canc',
+    '/lifecycle_risk':            'lifecycle_risk',
+    '/plan_risk':                 'risco_plano',
+    '/payment_profile':           'perfil_pagamento',
+    # /client_detail/<id> — sem restrição de aba, apenas módulo
+}
+
+@behavior_bp.before_request
+def _require_behavior_access():
+    """Garante autenticação e verifica permissões de módulo e aba."""
+    if not current_user.is_authenticated:
+        return jsonify({"error": "Não autenticado"}), 401
+
+    # Admin e usuários com permissões nulas têm acesso total
+    if current_user.username == 'admin':
+        return None
+    raw = getattr(current_user, 'permissions', None)
+    if raw is None:
+        return None
+
+    try:
+        perm_list = _json.loads(raw) if isinstance(raw, str) else (raw or [])
+    except Exception:
+        perm_list = []
+
+    # Verifica acesso ao módulo behavior
+    if 'behavior' not in perm_list:
+        return jsonify({"error": "Sem acesso ao módulo de Análise de Comportamento"}), 403
+
+    # Verifica acesso à aba específica (somente se existirem behavior:* na lista)
+    behavior_tab_perms = [p for p in perm_list if p.startswith('behavior:')]
+    if behavior_tab_perms:
+        # Normaliza path: /api/behavior/payment_profile → /payment_profile
+        suffix = request.path[len('/api/behavior'):]
+        # Remove parâmetros de rota dinâmicos ex: /client_detail/123 → /client_detail
+        suffix_base = '/' + suffix.lstrip('/').split('/')[0]
+        tab_key = _TAB_ROUTE_KEYS.get(suffix_base)
+        if tab_key and ('behavior:' + tab_key) not in perm_list:
+            return jsonify({"error": f"Sem acesso à aba: {tab_key}"}), 403
+
+    return None
 
 def get_db():
     """Função auxiliar para obter a conexão do banco de dados a partir do app_context."""

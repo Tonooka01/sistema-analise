@@ -236,6 +236,35 @@ document.addEventListener('DOMContentLoaded', () => {
         { id: 'crescimento', label: '📈 Crescimento Analítico' },
     ];
 
+    const _BEHAVIOR_TABS = [
+        { id: 'reclamacoes',      label: 'Padrão de Reclamações' },
+        { id: 'churn',            label: 'Padrão de Churn' },
+        { id: 'preditiva',        label: 'Análise Preditiva de Churn' },
+        { id: 'qualidade',        label: 'Qualidade de Rede' },
+        { id: 'acoes',            label: 'Plano de Ações' },
+        { id: 'temporal_suporte', label: 'Padrão Temporal de Suporte' },
+        { id: 'financeiro_ativo', label: 'Comportamento Financeiro' },
+        { id: 'inatividade',      label: 'Inatividade de Conexão' },
+        { id: 'sazonalidade_canc',label: 'Sazonalidade de Cancelamentos' },
+        { id: 'causa_queda',      label: 'Monitoramento de ONUs' },
+        { id: 'lista_retencao',   label: 'Lista de Retenção Ativa' },
+        { id: 'alertas_acao',     label: 'Alertas de Ação' },
+        { id: 'motivos_canc',     label: 'Motivos de Cancelamento' },
+        { id: 'padrao_pre_canc',  label: 'Padrão Pré-Cancelamento' },
+        { id: 'lifecycle_risk',   label: 'Risco por Ciclo de Vida' },
+        { id: 'risco_plano',      label: 'Análise por Plano' },
+        { id: 'perfil_pagamento', label: 'Perfil de Pagamento' },
+    ];
+
+    window.toggleBehaviorTabs = function(checked) {
+        const sec = document.getElementById('perm-behavior-tabs');
+        if (sec) sec.style.display = checked ? '' : 'none';
+        if (checked) window.setAllBehaviorTabs(true);
+    };
+    window.setAllBehaviorTabs = function(val) {
+        document.querySelectorAll('.perm-btab').forEach(c => c.checked = val);
+    };
+
     window.openPermissions = function(userId) {
         const u = window._usersData[userId];
         if (!u) return;
@@ -243,27 +272,82 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('permUserLabel').textContent = `Usuário: ${u.username}`;
         let perms = null;
         try { perms = u.permissions ? JSON.parse(u.permissions) : null; } catch(e) {}
-        document.getElementById('permCheckboxes').innerHTML = _MODULES.map(m => `
+
+        const hasBehavior    = !perms || perms.includes('behavior');
+        const btabPerms      = perms ? perms.filter(p => p.startsWith('behavior:')) : [];
+        const allBtabs       = !perms || btabPerms.length === 0; // null or no specific tabs = all
+
+        const modulesHtml = _MODULES.map(m => `
             <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.4rem .6rem;
                           border:1px solid #e5e7eb;border-radius:.375rem;background:#f9fafb;">
-                <input type="checkbox" class="perm-check" value="${m.id}"
+                <input type="checkbox" class="perm-mod" value="${m.id}"
                        style="width:1rem;height:1rem;cursor:pointer;"
                        ${!perms || perms.includes(m.id) ? 'checked' : ''}>
                 <span style="font-size:.85rem;color:#374151;">${m.label}</span>
-            </label>
-        `).join('');
+            </label>`).join('');
+
+        const btabsHtml = _BEHAVIOR_TABS.map(t => `
+            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.3rem .5rem;
+                          border:1px solid #e0e7ff;border-radius:.25rem;background:#f5f3ff;">
+                <input type="checkbox" class="perm-btab" value="${t.id}"
+                       style="width:.85rem;height:.85rem;cursor:pointer;"
+                       ${hasBehavior && (allBtabs || perms.includes('behavior:' + t.id)) ? 'checked' : ''}>
+                <span style="font-size:.78rem;color:#4338ca;">${t.label}</span>
+            </label>`).join('');
+
+        const behaviorHtml = `
+            <div style="border:1px solid #c7d2fe;border-radius:.375rem;overflow:hidden;">
+                <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.4rem .6rem;background:#eef2ff;">
+                    <input type="checkbox" class="perm-mod" id="permBehaviorCheck" value="behavior"
+                           style="width:1rem;height:1rem;cursor:pointer;"
+                           onchange="toggleBehaviorTabs(this.checked)"
+                           ${hasBehavior ? 'checked' : ''}>
+                    <span style="font-size:.85rem;font-weight:600;color:#4338ca;">🧠 Análise de Comportamento</span>
+                </label>
+                <div id="perm-behavior-tabs" style="padding:.5rem .6rem;display:${hasBehavior ? '' : 'none'}">
+                    <div style="display:flex;gap:.4rem;margin-bottom:.4rem;align-items:center;">
+                        <button type="button" onclick="setAllBehaviorTabs(true)"
+                                style="font-size:.72rem;padding:.2rem .5rem;border:1px solid #c7d2fe;border-radius:.25rem;background:#eef2ff;color:#4338ca;cursor:pointer;">
+                            Todas
+                        </button>
+                        <button type="button" onclick="setAllBehaviorTabs(false)"
+                                style="font-size:.72rem;padding:.2rem .5rem;border:1px solid #e5e7eb;border-radius:.25rem;background:#fff;color:#6b7280;cursor:pointer;">
+                            Nenhuma
+                        </button>
+                        <span style="font-size:.7rem;color:#9ca3af;">Sem seleção = acesso a todas as abas</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem;">
+                        ${btabsHtml}
+                    </div>
+                </div>
+            </div>`;
+
+        document.getElementById('permCheckboxes').innerHTML = modulesHtml + behaviorHtml;
         document.getElementById('permissionsModal').style.display = 'flex';
     };
 
     window.savePermissions = async function() {
-        const userId = parseInt(document.getElementById('permUserId').value);
-        const checked = Array.from(document.querySelectorAll('.perm-check:checked')).map(c => c.value);
-        const allChecked = checked.length === _MODULES.length;
+        const userId    = parseInt(document.getElementById('permUserId').value);
+        const modChecks = Array.from(document.querySelectorAll('.perm-mod:checked')).map(c => c.value);
+        const behaviorOn = modChecks.includes('behavior');
+        const tabChecks  = Array.from(document.querySelectorAll('.perm-btab:checked')).map(c => c.value);
+        const allTabs    = tabChecks.length === _BEHAVIOR_TABS.length;
+
+        let perms = modChecks.filter(v => v !== 'behavior');
+        if (behaviorOn) {
+            perms.push('behavior');
+            if (!allTabs) perms.push(...tabChecks.map(t => 'behavior:' + t));
+        }
+
+        // null = pleno acesso (todos módulos + behavior + todas as abas)
+        const allMods = _MODULES.every(m => modChecks.includes(m.id));
+        const sendNull = allMods && behaviorOn && allTabs;
+
         try {
             const res = await fetch('/api/admin/users/permissions', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ user_id: userId, permissions: allChecked ? null : checked })
+                body: JSON.stringify({ user_id: userId, permissions: sendNull ? null : perms })
             });
             if (res.ok) {
                 document.getElementById('permissionsModal').style.display = 'none';

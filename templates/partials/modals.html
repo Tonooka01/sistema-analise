@@ -476,12 +476,12 @@
 
 <!-- Modal: Permissões de Acesso -->
 <div id="permissionsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:.75rem;padding:1.5rem;width:380px;max-width:95vw;box-shadow:0 20px 40px rgba(0,0,0,.3);">
-        <h4 style="margin:0 0 .25rem;font-size:1rem;font-weight:700;color:#1e293b;">🔒 Permissões de Acesso</h4>
-        <p id="permUserLabel" style="font-size:.8rem;color:#6b7280;margin:0 0 1rem;"></p>
+    <div style="background:#fff;border-radius:.75rem;padding:1.5rem;width:560px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 40px rgba(0,0,0,.3);">
+        <h4 style="margin:0 0 .25rem;font-size:1rem;font-weight:700;color:#1e293b;flex-shrink:0;">🔒 Permissões de Acesso</h4>
+        <p id="permUserLabel" style="font-size:.8rem;color:#6b7280;margin:0 0 .75rem;flex-shrink:0;"></p>
         <input type="hidden" id="permUserId">
-        <div id="permCheckboxes" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.25rem;"></div>
-        <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <div id="permCheckboxes" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:.45rem;margin-bottom:1rem;padding-right:.25rem;"></div>
+        <div style="display:flex;gap:.75rem;justify-content:flex-end;flex-shrink:0;border-top:1px solid #f1f5f9;padding-top:.75rem;">
             <button onclick="document.getElementById('permissionsModal').style.display='none'"
                     style="border:1px solid #d1d5db;background:#fff;border-radius:.375rem;padding:.5rem 1rem;cursor:pointer;font-size:.85rem;">
                 Cancelar
