@@ -103,12 +103,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     <div id="behavior-analysis-container" class="hidden">
         <div class="border-b border-gray-200 mb-4">
-            <nav id="behavior-analysis-tabs" class="-mb-px flex space-x-8" aria-label="Tabs">
+            <nav id="behavior-analysis-tabs" class="-mb-px flex flex-wrap gap-x-4" aria-label="Tabs">
                 <a href="#" data-tab="reclamacoes" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Padrão de Reclamações</a>
                 <a href="#" data-tab="churn" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Padrão de Churn</a>
                 <a href="#" data-tab="preditiva" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Análise Preditiva de Churn</a>
                 <a href="#" data-tab="qualidade" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Qualidade de Rede</a>
                 <a href="#" data-tab="acoes" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Plano de Ações</a>
+                <a href="#" data-tab="temporal_suporte" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Padrão Temporal de Suporte</a>
+                <a href="#" data-tab="financeiro_ativo" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Comportamento Financeiro</a>
+                <a href="#" data-tab="inatividade" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Inatividade de Conexão</a>
+                <a href="#" data-tab="sazonalidade_canc" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Sazonalidade de Cancelamentos</a>
+                <a href="#" data-tab="causa_queda" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Monitoramento de ONUs</a>
+                <a href="#" data-tab="lista_retencao" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Lista de Retenção Ativa</a>
+                <a href="#" data-tab="alertas_acao" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Alertas de Ação</a>
+                <a href="#" data-tab="motivos_canc" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Motivos de Cancelamento</a>
+                <a href="#" data-tab="padrao_pre_canc" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Padrão Pré-Cancelamento</a>
+                <a href="#" data-tab="lifecycle_risk" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Risco por Ciclo de Vida</a>
+                <a href="#" data-tab="risco_plano" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Análise por Plano</a>
+                <a href="#" data-tab="perfil_pagamento" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Perfil de Pagamento</a>
             </nav>
         </div>
         <div id="behavior-analysis-tab-content">
@@ -117,6 +129,18 @@ document.addEventListener('DOMContentLoaded', () => {
             <div id="tab-content-preditiva" class="tab-pane"></div>
             <div id="tab-content-qualidade" class="tab-pane"></div>
             <div id="tab-content-acoes" class="tab-pane"></div>
+            <div id="tab-content-temporal_suporte" class="tab-pane"></div>
+            <div id="tab-content-financeiro_ativo" class="tab-pane"></div>
+            <div id="tab-content-inatividade" class="tab-pane"></div>
+            <div id="tab-content-sazonalidade_canc" class="tab-pane"></div>
+            <div id="tab-content-causa_queda" class="tab-pane"></div>
+            <div id="tab-content-lista_retencao" class="tab-pane"></div>
+            <div id="tab-content-alertas_acao" class="tab-pane"></div>
+            <div id="tab-content-motivos_canc" class="tab-pane"></div>
+            <div id="tab-content-padrao_pre_canc" class="tab-pane"></div>
+            <div id="tab-content-lifecycle_risk" class="tab-pane"></div>
+            <div id="tab-content-risco_plano" class="tab-pane"></div>
+            <div id="tab-content-perfil_pagamento" class="tab-pane"></div>
         </div>
     </div>
 
@@ -420,4 +444,282 @@ document.addEventListener('DOMContentLoaded', () => {
         </button>
     </div>
 </div>
+
+<!-- =====================================================================
+     MODAL: Detalhes do Cliente (global — usado por todas as abas de comportamento)
+     ===================================================================== -->
+<div id="client-detail-backdrop"
+     class="fixed inset-0 z-40 bg-black bg-opacity-40 hidden"
+     onclick="closeClientDetail()"></div>
+
+<div id="client-detail-panel"
+     class="fixed top-0 right-0 h-full z-50 w-full max-w-xl bg-white shadow-2xl flex flex-col
+            translate-x-full transition-transform duration-300 ease-in-out"
+     style="transform: translateX(100%);">
+
+  <!-- Header -->
+  <div id="cdp-header" class="flex items-start justify-between px-5 py-4 bg-blue-700 text-white flex-shrink-0">
+    <div>
+      <p class="text-xs font-medium opacity-80 uppercase tracking-wide">Contrato #<span id="cdp-id">—</span></p>
+      <h2 id="cdp-nome" class="text-lg font-bold leading-tight mt-0.5">Carregando…</h2>
+      <p id="cdp-cidade" class="text-sm opacity-80 mt-0.5"></p>
+    </div>
+    <button onclick="closeClientDetail()"
+            class="ml-4 text-white opacity-70 hover:opacity-100 text-2xl leading-none font-light">&times;</button>
+  </div>
+
+  <!-- Tab nav -->
+  <div class="flex border-b border-gray-200 bg-gray-50 flex-shrink-0">
+    <button class="cdp-tab active px-5 py-3 text-sm font-medium border-b-2 border-blue-600 text-blue-700"
+            data-tab="contrato" onclick="switchCdpTab('contrato')">Contrato</button>
+    <button class="cdp-tab px-5 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700"
+            data-tab="contato" onclick="switchCdpTab('contato')">Contato</button>
+    <button class="cdp-tab px-5 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700"
+            data-tab="financeiro" onclick="switchCdpTab('financeiro')">Financeiro</button>
+    <button class="cdp-tab px-5 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700"
+            data-tab="atendimentos" onclick="switchCdpTab('atendimentos')">Atendimentos</button>
+  </div>
+
+  <!-- Loading / Error -->
+  <div id="cdp-loading" class="flex-1 flex items-center justify-center text-gray-400 text-sm hidden">
+    <svg class="animate-spin h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+    </svg>Carregando dados…
+  </div>
+
+  <!-- Content tabs -->
+  <div id="cdp-content" class="flex-1 overflow-y-auto hidden">
+
+    <!-- Contrato tab -->
+    <div id="cdp-tab-contrato" class="cdp-tab-pane p-5 space-y-4">
+      <div id="cdp-status-badges" class="flex gap-2 flex-wrap"></div>
+      <div id="cdp-contrato-grid" class="grid grid-cols-2 gap-3 text-sm"></div>
+    </div>
+
+    <!-- Contato tab -->
+    <div id="cdp-tab-contato" class="cdp-tab-pane p-5 hidden">
+      <div id="cdp-contato-grid" class="space-y-3 text-sm"></div>
+    </div>
+
+    <!-- Financeiro tab -->
+    <div id="cdp-tab-financeiro" class="cdp-tab-pane p-5 hidden">
+      <div id="cdp-fin-summary" class="grid grid-cols-2 gap-3 mb-4"></div>
+      <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Últimas 24 Faturas</h3>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-xs">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-2 py-1 text-left">Vencimento</th>
+              <th class="px-2 py-1 text-right">Valor</th>
+              <th class="px-2 py-1 text-center">Status</th>
+              <th class="px-2 py-1 text-left">Pagamento</th>
+              <th class="px-2 py-1 text-right">Atraso</th>
+            </tr>
+          </thead>
+          <tbody id="cdp-faturas-body" class="divide-y divide-gray-100"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Atendimentos tab -->
+    <div id="cdp-tab-atendimentos" class="cdp-tab-pane p-5 hidden">
+      <div id="cdp-atend-list" class="space-y-3"></div>
+    </div>
+
+  </div>
+</div>
+
+<style>
+  .cdp-tab.active { border-bottom-color: #2563eb; color: #1d4ed8; }
+</style>
+
+<script>
+function openClientDetail() {
+  document.getElementById('client-detail-backdrop').classList.remove('hidden');
+  const panel = document.getElementById('client-detail-panel');
+  panel.style.transform = 'translateX(0)';
+}
+function closeClientDetail() {
+  document.getElementById('client-detail-backdrop').classList.add('hidden');
+  document.getElementById('client-detail-panel').style.transform = 'translateX(100%)';
+}
+function switchCdpTab(name) {
+  document.querySelectorAll('.cdp-tab').forEach(b => {
+    const on = b.dataset.tab === name;
+    b.classList.toggle('active', on);
+    b.style.borderBottomColor = on ? '#2563eb' : 'transparent';
+    b.style.color = on ? '#1d4ed8' : '';
+  });
+  document.querySelectorAll('.cdp-tab-pane').forEach(p => {
+    p.classList.toggle('hidden', p.id !== `cdp-tab-${name}`);
+  });
+}
+function showClientDetail(contratoId) {
+  // Reset
+  document.getElementById('cdp-id').textContent    = contratoId;
+  document.getElementById('cdp-nome').textContent   = 'Carregando…';
+  document.getElementById('cdp-cidade').textContent = '';
+  document.getElementById('cdp-loading').classList.remove('hidden');
+  document.getElementById('cdp-content').classList.add('hidden');
+  document.getElementById('cdp-header').style.background = '#1d4ed8';
+  switchCdpTab('contrato');
+  openClientDetail();
+
+  fetch(`/api/behavior/client_detail/${contratoId}`)
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+    .then(data => _renderClientDetail(data))
+    .catch(err => {
+      document.getElementById('cdp-loading').textContent = 'Erro ao carregar: ' + err.message;
+    });
+}
+
+function _renderClientDetail(d) {
+  const c   = d.contrato  || {};
+  const cl  = d.cliente   || {};
+  const fin = d.financeiro || {};
+  const s   = fin.summary || {};
+
+  // Header
+  document.getElementById('cdp-id').textContent    = c.ID || '—';
+  document.getElementById('cdp-nome').textContent   = c.Cliente || '—';
+  document.getElementById('cdp-cidade').textContent = [c.Cidade, c.Bairro].filter(Boolean).join(' · ');
+
+  const isCanc = c.Data_cancelamento && c.Data_cancelamento !== '';
+  document.getElementById('cdp-header').style.background = isCanc ? '#991b1b' : '#1d4ed8';
+
+  // --- ABA CONTRATO ---
+  const badges = document.getElementById('cdp-status-badges');
+  badges.innerHTML = [
+    _badge(c.Status_contrato, c.Status_contrato === 'Ativo' ? 'green' : 'red'),
+    c.Status_acesso ? _badge(c.Status_acesso, c.Status_acesso === 'Bloqueado' ? 'red' : 'blue') : '',
+  ].join('');
+
+  const cGrid = document.getElementById('cdp-contrato-grid');
+  cGrid.innerHTML = [
+    _field('Plano',         c.Plano_de_venda),
+    _field('Ativação',      _fmtDate(c.data_ativacao)),
+    _field('Dia Venc.',     c.Dia_fixo_do_vencimento ? `Dia ${c.Dia_fixo_do_vencimento}` : null),
+    _field('Fidelidade',    c.Fidelidade),
+    _field('Filial',        c.Filial),
+    _field('Endereço',      [c.endereco, c.numero, c.Bairro, c.Complemento].filter(Boolean).join(', ') || null, true),
+    _field('CEP',           c.Cep),
+    isCanc ? _field('Cancelamento', _fmtDate(c.Data_cancelamento), false, 'text-red-600') : '',
+    isCanc && c.motivo_label ? _field('Motivo Canc.', c.motivo_label, false, 'text-red-600') : '',
+    isCanc && c.Obs_cancelamento ? _field('Obs. Canc.',  c.Obs_cancelamento, true) : '',
+    c.data_negativacao && c.data_negativacao !== '' ? _field('Negativação', _fmtDate(c.data_negativacao), false, 'text-orange-600') : '',
+    c.ultimo_bloqueio_auto ? _field('Últ. Bloqueio Auto', _fmtDate(c.ultimo_bloqueio_auto)) : '',
+  ].filter(Boolean).join('');
+
+  // --- ABA CONTATO ---
+  const cOrig = {
+    tel_res:    c.Telefone_residencial,
+    tel_cel:    c.Telefone_celular,
+  };
+  const phones = [
+    cl.Telefone    ? `<a href="tel:${cl.Telefone}"    class="text-blue-600 hover:underline">${cl.Telefone}</a>` : null,
+    cl.cel         ? `<a href="tel:${cl.cel}"          class="text-blue-600 hover:underline">${cl.cel} (cel)</a>` : null,
+    cl.comercial   ? `<a href="tel:${cl.comercial}"    class="text-blue-600 hover:underline">${cl.comercial} (com.)</a>` : null,
+    cOrig.tel_res  ? `<a href="tel:${cOrig.tel_res}"   class="text-blue-600 hover:underline">${cOrig.tel_res} (res. contrato)</a>` : null,
+    cOrig.tel_cel  ? `<a href="tel:${cOrig.tel_cel}"   class="text-blue-600 hover:underline">${cOrig.tel_cel} (cel. contrato)</a>` : null,
+  ].filter(Boolean);
+
+  const waRaw = cl.WhatsApp || '';
+  const waNum = waRaw.replace(/\D/g, '');
+  const waDisplay = waRaw.trim() || waNum;
+  const waLink = waNum
+    ? `<a href="https://wa.me/55${waNum}" target="_blank" class="inline-flex items-center gap-1 text-green-600 hover:underline font-medium">
+         <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+         ${waDisplay}
+       </a>` : null;
+
+  const cgrid = document.getElementById('cdp-contato-grid');
+  cgrid.innerHTML = [
+    phones.length ? `<div class="space-y-1"><p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Telefones</p>${phones.map(p=>`<p>${p}</p>`).join('')}</div>` : '',
+    waLink ? `<div><p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">WhatsApp</p><p>${waLink}</p></div>` : '',
+    cl.email ? `<div><p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">E-mail</p><a href="mailto:${cl.email}" class="text-blue-600 hover:underline">${cl.email}</a></div>` : '',
+    cl.cpf_cnpj ? `<div><p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">CPF / CNPJ</p><p>${cl.cpf_cnpj}</p></div>` : '',
+    (cl.Data_nascimento||cl.data_nascimento) ? `<div><p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Nascimento</p><p>${_fmtDate(cl.Data_nascimento||cl.data_nascimento)}</p></div>` : '',
+    cl.endereco ? `<div><p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Endereço (Cadastro)</p><p>${[cl.endereco,cl.Cidade,cl.UF].filter(Boolean).join(', ')}</p></div>` : '',
+    !phones.length && !waLink && !cl.email ? '<p class="text-gray-400 text-sm">Nenhum contato encontrado no cadastro.</p>' : '',
+  ].filter(Boolean).join('');
+
+  // --- ABA FINANCEIRO ---
+  const fmtBRL = v => v != null ? 'R$ ' + Number(v).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—';
+  const fsGrid = document.getElementById('cdp-fin-summary');
+  fsGrid.innerHTML = [
+    _kpiCard('Faturas Vencidas',  s.fat_vencidas || 0,            s.fat_vencidas > 0 ? 'red' : 'green'),
+    _kpiCard('Valor em Atraso',   fmtBRL(s.valor_vencido),        s.valor_vencido > 0 ? 'red' : 'green'),
+    _kpiCard('Média de Atraso',   s.media_atraso_dias ? s.media_atraso_dias + ' dias' : 'Em dia', s.media_atraso_dias > 15 ? 'red' : s.media_atraso_dias > 0 ? 'orange' : 'green'),
+    _kpiCard('Total Atrasos',     s.total_atrasos || 0,           s.total_atrasos > 5 ? 'red' : s.total_atrasos > 0 ? 'orange' : 'green'),
+  ].join('');
+
+  const tbody = document.getElementById('cdp-faturas-body');
+  tbody.innerHTML = (fin.faturas || []).map(f => {
+    const atrasado = f.dias_atraso > 0;
+    const vencida  = f.Status === 'A receber' && atrasado;
+    const statusCls = f.Status === 'Quitado' ? 'bg-green-100 text-green-800'
+                    : vencida                ? 'bg-red-100 text-red-800'
+                    : 'bg-yellow-100 text-yellow-800';
+    return `<tr class="hover:bg-gray-50 ${vencida ? 'bg-red-50' : ''}">
+      <td class="px-2 py-1">${_fmtDate(f.Vencimento)}</td>
+      <td class="px-2 py-1 text-right font-mono">${fmtBRL(f.Valor)}</td>
+      <td class="px-2 py-1 text-center"><span class="px-1.5 py-0.5 rounded text-xs ${statusCls}">${f.Status}</span></td>
+      <td class="px-2 py-1">${_fmtDate(f.Data_pagamento)}</td>
+      <td class="px-2 py-1 text-right ${atrasado ? 'text-red-600 font-semibold' : 'text-gray-400'}">${atrasado ? f.dias_atraso + 'd' : '—'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="text-center text-gray-400 py-4">Nenhuma fatura encontrada.</td></tr>';
+
+  // --- ABA ATENDIMENTOS ---
+  const atList = document.getElementById('cdp-atend-list');
+  const atds = d.atendimentos || [];
+  atList.innerHTML = atds.length === 0
+    ? '<p class="text-gray-400 text-sm">Nenhum atendimento recente encontrado.</p>'
+    : atds.map(a => `
+        <div class="border border-gray-200 rounded-lg p-3">
+          <div class="flex justify-between items-start gap-2">
+            <p class="font-medium text-sm text-gray-800">${a.Assunto || a.assunto || '—'}</p>
+            <span class="text-xs text-gray-400 whitespace-nowrap">${_fmtDate(a.Criado_em||a.criado_em)}</span>
+          </div>
+          ${a.descricao ? `<p class="text-xs text-gray-500 mt-1">${a.descricao}</p>` : ''}
+          <div class="flex gap-2 mt-2 flex-wrap">
+            ${a.status     ? `<span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">${a.status}</span>` : ''}
+            ${a.Prioridade ? `<span class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">${a.Prioridade}</span>` : ''}
+            ${a.Departamento ? `<span class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">${a.Departamento}</span>` : ''}
+          </div>
+        </div>`).join('');
+
+  // Show content
+  document.getElementById('cdp-loading').classList.add('hidden');
+  document.getElementById('cdp-content').classList.remove('hidden');
+}
+
+// helpers
+function _badge(text, color) {
+  if (!text) return '';
+  const cls = { green:'bg-green-100 text-green-800', red:'bg-red-100 text-red-800', blue:'bg-blue-100 text-blue-800', orange:'bg-orange-100 text-orange-800' }[color] || 'bg-gray-100 text-gray-600';
+  return `<span class="px-2 py-0.5 rounded-full text-xs font-medium ${cls}">${text}</span>`;
+}
+function _field(label, value, full, extraCls) {
+  if (value === null || value === undefined || value === '') return '';
+  return `<div class="${full ? 'col-span-2' : ''}">
+    <p class="text-xs text-gray-400 uppercase tracking-wide font-semibold">${label}</p>
+    <p class="text-sm text-gray-800 mt-0.5 ${extraCls||''}">${value}</p>
+  </div>`;
+}
+function _kpiCard(label, value, color) {
+  const cls = { green:'text-green-600', red:'text-red-600', orange:'text-orange-500' }[color] || 'text-gray-700';
+  return `<div class="bg-gray-50 rounded-lg p-3 border border-gray-100">
+    <p class="text-xs text-gray-400 uppercase tracking-wide">${label}</p>
+    <p class="text-xl font-bold ${cls} mt-0.5">${value}</p>
+  </div>`;
+}
+function _fmtDate(d) {
+  if (!d) return '—';
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : d;
+}
+// Close on ESC
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeClientDetail(); });
+</script>
 {% endblock %}

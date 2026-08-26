@@ -64,6 +64,42 @@ export function handleBehaviorTabChange(tabName) {
             case 'acoes':
                 renderAcoesTab();
                 break;
+            case 'temporal_suporte':
+                renderTemporalSuporteTab();
+                break;
+            case 'financeiro_ativo':
+                renderFinanceiroAtivoTab();
+                break;
+            case 'inatividade':
+                renderInatividadeTab();
+                break;
+            case 'sazonalidade_canc':
+                renderSazonalidadeCanc();
+                break;
+            case 'causa_queda':
+                renderCausaQuedaTab();
+                break;
+            case 'lista_retencao':
+                renderListaRetencaoTab();
+                break;
+            case 'alertas_acao':
+                renderAlertasAcaoTab();
+                break;
+            case 'motivos_canc':
+                renderMotivosCancTab();
+                break;
+            case 'padrao_pre_canc':
+                renderPadraoPrecancTab();
+                break;
+            case 'lifecycle_risk':
+                renderLifecycleRiskTab();
+                break;
+            case 'risco_plano':
+                renderRiscoPlanoTab();
+                break;
+            case 'perfil_pagamento':
+                renderPerfilPagamentoTab();
+                break;
             default:
                 console.warn(`Aba de comportamento desconhecida: ${tabName}`);
                 if (targetPane) targetPane.innerHTML = `<p class="text-red-500">Conteúdo para aba "${tabName}" não definido.</p>`;
@@ -1239,4 +1275,1714 @@ async function renderAcoesTab() {
             Fontes: Sonar Software, TTEC, CustomerGauge, GoContact, Alloyal, Mundiale AI, MK Solutions — pesquisa consolidada 2025
         </p>
     </div>`;
+}
+
+// =====================================================================
+// ABA: PADRÃO TEMPORAL DE SUPORTE
+// =====================================================================
+
+async function renderTemporalSuporteTab() {
+    const tabContent = document.getElementById('tab-content-temporal_suporte');
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <div class="flex flex-wrap justify-center gap-4 mb-6 items-end">
+            <div class="flex flex-col items-center">
+                <label for="tempCityFilter" class="text-gray-700 font-medium mb-1 text-sm">Filtrar por Cidade:</label>
+                <select id="tempCityFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-w-[180px]">
+                    <option value="">Todas as Cidades</option>
+                </select>
+            </div>
+            <div class="flex flex-col items-center">
+                <label for="tempPeriodFilter" class="text-gray-700 font-medium mb-1 text-sm">Período:</label>
+                <select id="tempPeriodFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    <option value="30">Últimos 30 dias</option>
+                    <option value="90" selected>Últimos 90 dias</option>
+                    <option value="180">Últimos 180 dias</option>
+                    <option value="365">Último Ano</option>
+                </select>
+            </div>
+            <div class="flex flex-col items-center">
+                <label for="tempTypeFilter" class="text-gray-700 font-medium mb-1 text-sm">Tipo de Ticket:</label>
+                <select id="tempTypeFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    <option value="both" selected>OS + Atendimentos</option>
+                    <option value="os">Somente OS</option>
+                    <option value="atendimento">Somente Atendimentos</option>
+                </select>
+            </div>
+            <button id="btnFilterTemporal" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
+        </div>
+        <div id="temp-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div id="temp-charts-area" class="grid-stack"></div>
+    `;
+
+    tabContent.querySelector('#btnFilterTemporal').addEventListener('click', () => {
+        const city = tabContent.querySelector('#tempCityFilter').value;
+        const period = tabContent.querySelector('#tempPeriodFilter').value;
+        const type = tabContent.querySelector('#tempTypeFilter').value;
+        fetchTemporalSuporteData(city, period, type);
+    });
+
+    await fetchTemporalSuporteData();
+}
+
+async function fetchTemporalSuporteData(city = '', period = '90', ticket_type = 'both') {
+    const chartsArea = document.getElementById('temp-charts-area');
+    const kpiRow = document.getElementById('temp-kpi-row');
+    if (!chartsArea || !kpiRow) return;
+
+    if (chartsArea.gridstack) chartsArea.gridstack.destroy(false);
+    chartsArea.innerHTML = '<div class="loading-spinner"></div>';
+    kpiRow.innerHTML = '';
+
+    try {
+        const params = new URLSearchParams({ city, period, ticket_type });
+        const response = await fetch(`${state.API_BASE_URL}/api/behavior/temporal_support?${params}`);
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar dados temporais.'));
+        const data = await response.json();
+
+        const cityFilter = document.getElementById('tempCityFilter');
+        if (cityFilter && data.cities && cityFilter.options.length <= 1) {
+            utils.populateCityFilter(cityFilter, data.cities, city);
+        }
+
+        // KPIs
+        const kpis = data.kpis || {};
+        kpiRow.innerHTML = `
+            <div class="summary-card bg-blue-50"><p class="summary-card-title">Total de Tickets</p><p class="summary-card-value text-blue-700">${(kpis.total_tickets || 0).toLocaleString('pt-BR')}</p></div>
+            <div class="summary-card bg-purple-50"><p class="summary-card-title">Hora de Pico</p><p class="summary-card-value text-purple-700">${kpis.peak_hour || '--'}</p></div>
+            <div class="summary-card bg-orange-50"><p class="summary-card-title">Dia de Maior Volume</p><p class="summary-card-value text-orange-700" style="font-size:1.4rem">${kpis.peak_weekday || '--'}</p></div>
+            <div class="summary-card bg-red-50"><p class="summary-card-title">Assunto Mais Frequente</p><p class="summary-card-value text-red-700" style="font-size:1rem;padding-top:8px">${kpis.top_subject || '--'}</p></div>
+        `;
+
+        chartsArea.innerHTML = '';
+
+        const grid = GridStack.init({ cellHeight: 70, minRow: 1, margin: 10, float: true, column: 12, disableOneColumnMode: false }, chartsArea);
+
+        if (!grid) return;
+
+        // Gráfico 1: Volume por hora
+        const hourLabels = (data.by_hour || []).map(d => d.label);
+        const hourData = (data.by_hour || []).map(d => d.total);
+        grid.addWidget({ w: 12, h: 7, x: 0, y: 0, content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 class="chart-title">Volume de Tickets por Hora do Dia</h3></div><div class="chart-canvas-container"><canvas id="tempHourChart"></canvas></div></div>` });
+
+        // Gráfico 2: Volume por dia da semana
+        const weekLabels = (data.by_weekday || []).map(d => d.label);
+        const weekData = (data.by_weekday || []).map(d => d.total);
+        grid.addWidget({ w: 6, h: 7, x: 0, y: 7, content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 class="chart-title">Volume por Dia da Semana</h3></div><div class="chart-canvas-container"><canvas id="tempWeekChart"></canvas></div></div>` });
+
+        // Gráfico 3: Top assuntos
+        const subjLabels = (data.top_subjects || []).map(d => d.assunto);
+        const subjData = (data.top_subjects || []).map(d => d.total);
+        grid.addWidget({ w: 6, h: 7, x: 6, y: 7, content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 class="chart-title">Top 10 Assuntos</h3></div><div class="chart-canvas-container"><canvas id="tempSubjChart"></canvas></div></div>` });
+
+        // Gráfico 4: Tendência semanal
+        const trendLabels = (data.weekly_trend || []).map(d => d.week);
+        const trendData = (data.weekly_trend || []).map(d => d.total);
+        grid.addWidget({ w: 12, h: 7, x: 0, y: 14, content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 class="chart-title">Tendência Semanal de Abertura (últimas 12 semanas)</h3></div><div class="chart-canvas-container"><canvas id="tempTrendChart"></canvas></div></div>` });
+
+        setTimeout(() => {
+            renderChart('tempHourChart', 'bar_vertical', hourLabels, [{ label: 'Tickets', data: hourData }], 'Volume por Hora', { formatterType: 'number' });
+            renderChart('tempWeekChart', 'bar_vertical', weekLabels, [{ label: 'Tickets', data: weekData }], 'Volume por Dia da Semana', { formatterType: 'number' });
+            renderChart('tempSubjChart', 'bar_horizontal', subjLabels, [{ label: 'Tickets', data: subjData }], 'Top 10 Assuntos', { formatterType: 'number' });
+            renderChart('tempTrendChart', 'line', trendLabels, [{ label: 'Tickets por Semana', data: trendData }], 'Tendência Semanal', { formatterType: 'number' });
+        }, 50);
+
+    } catch (err) {
+        chartsArea.innerHTML = `<p class="text-center text-red-500 mt-4">Erro: ${err.message}</p>`;
+    }
+}
+
+// =====================================================================
+// ABA: COMPORTAMENTO FINANCEIRO
+// =====================================================================
+
+async function renderFinanceiroAtivoTab() {
+    const tabContent = document.getElementById('tab-content-financeiro_ativo');
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <div class="flex flex-wrap justify-center gap-4 mb-6 items-end">
+            <div class="flex flex-col items-center">
+                <label for="finCityFilter" class="text-gray-700 font-medium mb-1 text-sm">Filtrar por Cidade:</label>
+                <select id="finCityFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-w-[180px]">
+                    <option value="">Todas as Cidades</option>
+                </select>
+            </div>
+            <div class="flex flex-col items-center">
+                <label for="finPeriodFilter" class="text-gray-700 font-medium mb-1 text-sm">Período de Referência:</label>
+                <select id="finPeriodFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    <option value="3">Últimos 3 meses</option>
+                    <option value="6" selected>Últimos 6 meses</option>
+                    <option value="12">Último Ano</option>
+                </select>
+            </div>
+            <button id="btnFilterFinanceiro" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
+        </div>
+        <div id="fin-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div id="fin-charts-area" class="grid-stack"></div>
+    `;
+
+    tabContent.querySelector('#btnFilterFinanceiro').addEventListener('click', () => {
+        const city = tabContent.querySelector('#finCityFilter').value;
+        const period = tabContent.querySelector('#finPeriodFilter').value;
+        fetchFinanceiroAtivoData(city, period);
+    });
+
+    await fetchFinanceiroAtivoData();
+}
+
+async function fetchFinanceiroAtivoData(city = '', period_months = '6') {
+    const chartsArea = document.getElementById('fin-charts-area');
+    const kpiRow = document.getElementById('fin-kpi-row');
+    if (!chartsArea || !kpiRow) return;
+
+    if (chartsArea.gridstack) chartsArea.gridstack.destroy(false);
+    chartsArea.innerHTML = '<div class="loading-spinner"></div>';
+    kpiRow.innerHTML = '';
+
+    try {
+        const params = new URLSearchParams({ city, period_months });
+        const response = await fetch(`${state.API_BASE_URL}/api/behavior/financial_behavior?${params}`);
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar dados financeiros.'));
+        const data = await response.json();
+
+        const cityFilter = document.getElementById('finCityFilter');
+        if (cityFilter && data.cities && cityFilter.options.length <= 1) {
+            utils.populateCityFilter(cityFilter, data.cities, city);
+        }
+
+        const kpis = data.kpis || {};
+        const fmtBRL = v => `R$ ${(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        kpiRow.innerHTML = `
+            <div class="summary-card bg-green-50"><p class="summary-card-title">Faturas Pagas em Dia</p><p class="summary-card-value text-green-700">${(kpis.pct_em_dia || 0).toFixed(1)}%</p></div>
+            <div class="summary-card bg-red-50"><p class="summary-card-title">Receita em Risco</p><p class="summary-card-value text-red-700" style="font-size:1.5rem">${fmtBRL(kpis.valor_em_risco)}</p></div>
+            <div class="summary-card bg-orange-50"><p class="summary-card-title">Média de Atraso</p><p class="summary-card-value text-orange-700">${(kpis.media_atraso || 0).toFixed(0)} dias</p></div>
+            <div class="summary-card bg-purple-50"><p class="summary-card-title">Clientes c/ 2+ Faturas Vencidas</p><p class="summary-card-value text-purple-700">${(kpis.clientes_multiplos_vencidos || 0).toLocaleString('pt-BR')}</p></div>
+        `;
+
+        chartsArea.innerHTML = '';
+
+        const grid = GridStack.init({ cellHeight: 70, minRow: 1, margin: 10, float: true, column: 12, disableOneColumnMode: false }, chartsArea);
+        if (!grid) return;
+
+        // Gráfico 1: Distribuição de status (doughnut)
+        const statusLabels = (data.status_distribution || []).map(d => d.status);
+        const statusQtd = (data.status_distribution || []).map(d => d.qtd);
+        grid.addWidget({ w: 5, h: 8, x: 0, y: 0, content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 class="chart-title">Status das Faturas (Ativos)</h3></div><div class="chart-canvas-container"><canvas id="finStatusChart"></canvas></div></div>` });
+
+        // Gráfico 2: Receita em risco por cidade
+        const cidadeLabels = (data.risco_por_cidade || []).map(d => d.cidade);
+        const cidadeValores = (data.risco_por_cidade || []).map(d => d.valor_vencido);
+        grid.addWidget({ w: 7, h: 8, x: 5, y: 0, content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 class="chart-title">Receita em Risco por Cidade (R$)</h3></div><div class="chart-canvas-container"><canvas id="finCidadeChart"></canvas></div></div>` });
+
+        // Gráfico 3: Distribuição de atraso
+        const atrasoLabels = (data.distribuicao_atraso || []).map(d => d.faixa);
+        const atrasoData = (data.distribuicao_atraso || []).map(d => d.clientes);
+        grid.addWidget({ w: 6, h: 7, x: 0, y: 8, content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 class="chart-title">Distribuição de Atraso por Cliente</h3></div><div class="chart-canvas-container"><canvas id="finAtrasoChart"></canvas></div></div>` });
+
+        // Gráfico 4: Concentração de pagamento por dia do mês
+        const diaLabels = (data.concentracao_pagamento || []).map(d => `Dia ${d.dia_mes}`);
+        const diaData = (data.concentracao_pagamento || []).map(d => d.pagamentos);
+        grid.addWidget({ w: 6, h: 7, x: 6, y: 8, content: `<div class="grid-stack-item-content"><div class="chart-container-header"><h3 class="chart-title">Concentração de Pagamentos por Dia do Mês</h3></div><div class="chart-canvas-container"><canvas id="finDiaChart"></canvas></div></div>` });
+
+        setTimeout(() => {
+            renderChart('finStatusChart', 'doughnut', statusLabels, [{ label: 'Faturas', data: statusQtd }], 'Status das Faturas', { formatterType: 'number' });
+            renderChart('finCidadeChart', 'bar_horizontal', cidadeLabels, [{ label: 'Valor Vencido (R$)', data: cidadeValores }], 'Receita em Risco por Cidade', { formatterType: 'currency' });
+            renderChart('finAtrasoChart', 'bar_vertical', atrasoLabels, [{ label: 'Clientes', data: atrasoData }], 'Distribuição de Atraso', { formatterType: 'number' });
+            renderChart('finDiaChart', 'bar_vertical', diaLabels, [{ label: 'Pagamentos', data: diaData }], 'Concentração por Dia do Mês', { formatterType: 'number' });
+        }, 50);
+
+    } catch (err) {
+        chartsArea.innerHTML = `<p class="text-center text-red-500 mt-4">Erro: ${err.message}</p>`;
+    }
+}
+
+// =====================================================================
+// ABA: INATIVIDADE DE CONEXÃO
+// =====================================================================
+
+async function renderInatividadeTab() {
+    const tabContent = document.getElementById('tab-content-inatividade');
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <div class="flex flex-wrap justify-center gap-4 mb-6 items-end">
+            <div class="flex flex-col items-center">
+                <label for="inatCityFilter" class="text-gray-700 font-medium mb-1 text-sm">Filtrar por Cidade:</label>
+                <select id="inatCityFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-w-[180px]">
+                    <option value="">Todas as Cidades</option>
+                </select>
+            </div>
+            <div class="flex flex-col items-center">
+                <label for="inatMinDaysFilter" class="text-gray-700 font-medium mb-1 text-sm">Inatividade Mínima:</label>
+                <select id="inatMinDaysFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    <option value="1">1+ dia</option>
+                    <option value="8">8+ dias</option>
+                    <option value="15">15+ dias</option>
+                    <option value="30">30+ dias</option>
+                </select>
+            </div>
+            <button id="btnFilterInat" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
+        </div>
+        <div id="inat-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div id="inat-charts-area" class="grid-stack"></div>
+    `;
+
+    tabContent.querySelector('#btnFilterInat').addEventListener('click', () => {
+        const city = tabContent.querySelector('#inatCityFilter').value;
+        const min_days = tabContent.querySelector('#inatMinDaysFilter').value;
+        fetchInatividadeData(city, min_days);
+    });
+
+    await fetchInatividadeData();
+}
+
+async function fetchInatividadeData(city = '', min_days = '1') {
+    const chartsArea = document.getElementById('inat-charts-area');
+    const kpiRow = document.getElementById('inat-kpi-row');
+    if (!chartsArea || !kpiRow) return;
+
+    if (chartsArea.gridstack) chartsArea.gridstack.destroy(false);
+    chartsArea.innerHTML = '<div class="loading-spinner"></div>';
+    kpiRow.innerHTML = '';
+
+    try {
+        const params = new URLSearchParams({ city, min_days });
+        const response = await fetch(`${state.API_BASE_URL}/api/behavior/connection_inactivity?${params}`);
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar dados de inatividade.'));
+        const data = await response.json();
+
+        const cityFilter = document.getElementById('inatCityFilter');
+        if (cityFilter && data.cities && cityFilter.options.length <= 1) {
+            utils.populateCityFilter(cityFilter, data.cities, city);
+        }
+
+        const kpis = data.kpis || {};
+        kpiRow.innerHTML = `
+            <div class="summary-card" style="border-left:4px solid #3b82f6;">
+                <div class="summary-card-label">Total Monitorados</div>
+                <div class="summary-card-value" style="color:#3b82f6;">${(kpis.total_monitorados || 0).toLocaleString('pt-BR')}</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #ef4444;">
+                <div class="summary-card-label">Inativos 30+ dias</div>
+                <div class="summary-card-value" style="color:#ef4444;">${(kpis.total_inativos_30d || 0).toLocaleString('pt-BR')}</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #f97316;">
+                <div class="summary-card-label">Inativos 15+ dias</div>
+                <div class="summary-card-value" style="color:#f97316;">${(kpis.total_inativos_15d || 0).toLocaleString('pt-BR')}</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #8b5cf6;">
+                <div class="summary-card-label">Média de Inatividade</div>
+                <div class="summary-card-value" style="color:#8b5cf6;">${(kpis.media_dias_inativo || 0).toFixed(0)} dias</div>
+            </div>
+        `;
+
+        chartsArea.innerHTML = '';
+
+        const grid = GridStack.init({ cellHeight: 70, minRow: 1, margin: 10, float: true, column: 12, disableOneColumnMode: false }, chartsArea);
+        if (!grid) return;
+
+        // Chart 1: Distribuição por Período de Inatividade
+        if (data.distribuicao?.length) {
+            grid.addWidget({
+                w: 6, h: 7, x: 0, y: 0,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">Distribuição por Período de Inatividade</h3></div>
+                    <div class="chart-canvas-container"><canvas id="inatHoraChart"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => {
+                renderChart('inatHoraChart', 'bar_vertical',
+                    data.distribuicao.map(d => d.faixa),
+                    [{ label: 'Clientes', data: data.distribuicao.map(d => d.clientes) }],
+                    'Distribuição por Período de Inatividade',
+                    { formatterType: 'number' }
+                );
+            }, 50);
+        }
+
+        // Chart 2: Cidades com Mais Clientes Inativos (14+ dias)
+        if (data.por_cidade?.length) {
+            grid.addWidget({
+                w: 6, h: 7, x: 6, y: 0,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">Cidades com Mais Clientes Inativos (14+ dias)</h3></div>
+                    <div class="chart-canvas-container"><canvas id="inatCidadeChart"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => {
+                renderChart('inatCidadeChart', 'bar_horizontal',
+                    data.por_cidade.map(d => d.cidade),
+                    [{ label: 'Inativos', data: data.por_cidade.map(d => d.inativos) }],
+                    'Cidades com Mais Clientes Inativos',
+                    { formatterType: 'number' }
+                );
+            }, 50);
+        }
+
+        // Table: Lista dos clientes mais inativos
+        if (data.lista_inativos?.length) {
+            const rows = data.lista_inativos.map((r, i) => {
+                const digits = (r.whatsapp || '').replace(/\D/g, '');
+                const wa = digits ? (digits.startsWith('55') ? digits : '55' + digits) : null;
+                const waLink = wa
+                    ? `<a href="https://wa.me/${wa}" target="_blank" class="text-green-600 font-bold">💬</a>`
+                    : '-';
+                return `<tr style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:6px 10px;font-size:.8rem;font-weight:600;">${r.contrato || ''}</td>
+                    <td style="padding:6px 10px;font-size:.8rem;">${r.cliente || ''}</td>
+                    <td style="padding:6px 10px;font-size:.8rem;">${r.cidade || ''}</td>
+                    <td style="padding:6px 10px;font-size:.8rem;color:#dc2626;font-weight:700;">${r.dias_inativo || 0}d</td>
+                    <td style="padding:6px 10px;font-size:.8rem;font-family:monospace;">${r.login || ''}</td>
+                    <td style="padding:6px 10px;font-size:.8rem;">${r.telefone || '-'}</td>
+                    <td style="padding:6px 10px;font-size:.8rem;text-align:center;">${waLink}</td>
+                </tr>`;
+            }).join('');
+
+            const tableHtml = `
+                <div class="grid-stack-item-content" style="overflow-y:auto;">
+                    <h3 style="font-size:.85rem;font-weight:700;color:#1e293b;padding:10px 12px 4px;">Lista dos Clientes Mais Inativos</h3>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
+                            <thead><tr style="background:#1e293b;color:#fff;">
+                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Contrato</th>
+                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Cliente</th>
+                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Cidade</th>
+                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Dias Inativo</th>
+                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Login</th>
+                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Telefone</th>
+                                <th style="padding:7px 10px;text-align:center;white-space:nowrap;">WhatsApp</th>
+                            </tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>`;
+
+            grid.addWidget({ w: 12, h: 10, x: 0, y: 7, id: 'inatListaTable', content: tableHtml });
+        }
+
+    } catch (err) {
+        chartsArea.innerHTML = `<p class="text-center text-red-500 mt-4">Erro: ${err.message}</p>`;
+    }
+}
+
+// =====================================================================
+// ABA: SAZONALIDADE DE CANCELAMENTOS
+// =====================================================================
+
+async function renderSazonalidadeCanc() {
+    const tabContent = document.getElementById('tab-content-sazonalidade_canc');
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <div class="flex flex-wrap justify-center gap-4 mb-6 items-end">
+            <div class="flex flex-col items-center">
+                <label for="sazCityFilter" class="text-gray-700 font-medium mb-1 text-sm">Filtrar por Cidade:</label>
+                <select id="sazCityFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm min-w-[180px]">
+                    <option value="">Todas as Cidades</option>
+                </select>
+            </div>
+            <button id="btnFilterSaz" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
+        </div>
+        <div id="saz-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div id="saz-charts-area" class="grid-stack"></div>
+    `;
+
+    tabContent.querySelector('#btnFilterSaz').addEventListener('click', () => {
+        const city = tabContent.querySelector('#sazCityFilter').value;
+        fetchSazonalidadeCancData(city);
+    });
+
+    await fetchSazonalidadeCancData();
+}
+
+async function fetchSazonalidadeCancData(city = '') {
+    const chartsArea = document.getElementById('saz-charts-area');
+    const kpiRow = document.getElementById('saz-kpi-row');
+    if (!chartsArea || !kpiRow) return;
+
+    if (chartsArea.gridstack) chartsArea.gridstack.destroy(false);
+    chartsArea.innerHTML = '<div class="loading-spinner"></div>';
+    kpiRow.innerHTML = '';
+
+    try {
+        const params = new URLSearchParams({ city });
+        const response = await fetch(`${state.API_BASE_URL}/api/behavior/cancellation_seasonality?${params}`);
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar sazonalidade de cancelamentos.'));
+        const data = await response.json();
+
+        const cityFilter = document.getElementById('sazCityFilter');
+        if (cityFilter && data.cities && cityFilter.options.length <= 1) {
+            utils.populateCityFilter(cityFilter, data.cities, city);
+        }
+
+        const kpis = data.kpis || {};
+        kpiRow.innerHTML = `
+            <div class="summary-card" style="border-left:4px solid #ef4444;">
+                <div class="summary-card-title">Total Cancelamentos</div>
+                <div class="summary-card-value" style="color:#ef4444;">${(kpis.total_cancelamentos || 0).toLocaleString('pt-BR')}</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #f97316;">
+                <div class="summary-card-title">Mês de Maior Cancelamento</div>
+                <div class="summary-card-value" style="color:#f97316;font-size:1.1rem;">${kpis.mes_pico || '--'}</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #8b5cf6;">
+                <div class="summary-card-title">Dia da Semana Pico</div>
+                <div class="summary-card-value" style="color:#8b5cf6;font-size:1.1rem;">${kpis.dia_semana_pico || '--'}</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #6b7280;">
+                <div class="summary-card-title">Permanência Média até Cancelar</div>
+                <div class="summary-card-value" style="color:#6b7280;">${(kpis.media_permanencia_meses || 0).toFixed(1)} meses</div>
+            </div>
+        `;
+
+        chartsArea.innerHTML = '';
+
+        const grid = GridStack.init({ cellHeight: 70, minRow: 1, margin: 10, float: true, column: 12, disableOneColumnMode: false }, chartsArea);
+        if (!grid) return;
+
+        // Chart 1: Cancelamentos por Mês do Ano
+        if (data.por_mes?.length) {
+            grid.addWidget({
+                w: 12, h: 7, x: 0, y: 0,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">Cancelamentos por Mês do Ano</h3></div>
+                    <div class="chart-canvas-container"><canvas id="sazMesChart"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => {
+                renderChart('sazMesChart', 'bar_vertical',
+                    data.por_mes.map(d => d.mes),
+                    [{ label: 'Cancelamentos', data: data.por_mes.map(d => d.total) }],
+                    'Cancelamentos por Mês do Ano',
+                    { formatterType: 'number' }
+                );
+            }, 50);
+        }
+
+        // Chart 2: Cancelamentos por Dia da Semana
+        if (data.por_dia_semana?.length) {
+            grid.addWidget({
+                w: 6, h: 7, x: 0, y: 7,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">Cancelamentos por Dia da Semana</h3></div>
+                    <div class="chart-canvas-container"><canvas id="sazDiaChart"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => {
+                renderChart('sazDiaChart', 'bar_vertical',
+                    data.por_dia_semana.map(d => d.dia),
+                    [{ label: 'Cancelamentos', data: data.por_dia_semana.map(d => d.total) }],
+                    'Cancelamentos por Dia da Semana',
+                    { formatterType: 'number' }
+                );
+            }, 50);
+        }
+
+        // Chart 3: Permanência no Cancelamento
+        if (data.por_permanencia?.length) {
+            grid.addWidget({
+                w: 6, h: 7, x: 6, y: 7,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">Permanência no Cancelamento</h3></div>
+                    <div class="chart-canvas-container"><canvas id="sazPermChart"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => {
+                renderChart('sazPermChart', 'bar_horizontal',
+                    data.por_permanencia.map(d => d.faixa),
+                    [{ label: 'Cancelamentos', data: data.por_permanencia.map(d => d.total) }],
+                    'Permanência no Cancelamento',
+                    { formatterType: 'number' }
+                );
+            }, 50);
+        }
+
+        // Chart 4: Tendência Anual de Cancelamentos
+        if (data.por_ano?.length) {
+            grid.addWidget({
+                w: 12, h: 6, x: 0, y: 14,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">Tendência Anual de Cancelamentos</h3></div>
+                    <div class="chart-canvas-container"><canvas id="sazAnoChart"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => {
+                renderChart('sazAnoChart', 'line',
+                    data.por_ano.map(d => String(d.ano)),
+                    [{ label: 'Cancelamentos', data: data.por_ano.map(d => d.total) }],
+                    'Tendência Anual de Cancelamentos',
+                    { formatterType: 'number' }
+                );
+            }, 50);
+        }
+
+    } catch (err) {
+        chartsArea.innerHTML = `<p class="text-center text-red-500 mt-4">Erro: ${err.message}</p>`;
+    }
+}
+
+// =====================================================================
+// ABA: CAUSAS DE QUEDA DE SINAL
+// =====================================================================
+
+async function renderCausaQuedaTab() {
+    const tabContent = document.getElementById('tab-content-causa_queda');
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <div id="cq-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div id="cq-charts-area" class="grid-stack"></div>
+    `;
+
+    await fetchCausaQuedaData();
+}
+
+async function fetchCausaQuedaData() {
+    const chartsArea = document.getElementById('cq-charts-area');
+    const kpiRow = document.getElementById('cq-kpi-row');
+    if (!chartsArea || !kpiRow) return;
+
+    if (chartsArea.gridstack) chartsArea.gridstack.destroy(false);
+    chartsArea.innerHTML = '<div class="loading-spinner"></div>';
+    kpiRow.innerHTML = '';
+
+    try {
+        const response = await fetch(`${state.API_BASE_URL}/api/behavior/signal_causes`);
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar monitoramento de ONUs.'));
+        const data = await response.json();
+
+        const kpis = data.kpis || {};
+        kpiRow.innerHTML = `
+            <div class="summary-card" style="border-left:4px solid #3b82f6;">
+                <div class="summary-card-title">Total de ONUs</div>
+                <div class="summary-card-value" style="color:#3b82f6;">${(kpis.total_onus || 0).toLocaleString('pt-BR')}</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #22c55e;">
+                <div class="summary-card-title">Com Sinal</div>
+                <div class="summary-card-value" style="color:#22c55e;">${(kpis.com_sinal || 0).toLocaleString('pt-BR')}</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #6b7280;">
+                <div class="summary-card-title">Sem Sinal (offline)</div>
+                <div class="summary-card-value" style="color:#6b7280;">${(kpis.sem_sinal || 0).toLocaleString('pt-BR')}</div>
+            </div>
+            <div class="summary-card" style="border-left:4px solid #ef4444;">
+                <div class="summary-card-title">Sinal Crítico (< -27dBm)</div>
+                <div class="summary-card-value" style="color:#ef4444;">${(kpis.pct_critico || 0).toFixed(1)}%</div>
+            </div>
+        `;
+
+        chartsArea.innerHTML = '';
+        const grid = GridStack.init({ cellHeight: 70, minRow: 1, margin: 10, float: true, column: 12, disableOneColumnMode: false }, chartsArea);
+        if (!grid) return;
+
+        // Chart 1: Qualidade de Sinal (doughnut)
+        if (data.qualidade_labels?.length) {
+            grid.addWidget({
+                w: 5, h: 8, x: 0, y: 0,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">Qualidade de Sinal RX</h3></div>
+                    <div class="chart-canvas-container"><canvas id="cqQualChart"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => {
+                renderChart('cqQualChart', 'doughnut',
+                    data.qualidade_labels,
+                    [{ label: 'ONUs', data: data.qualidade_vals,
+                       backgroundColor: ['#22c55e', '#84cc16', '#f97316', '#ef4444'] }],
+                    'Qualidade de Sinal RX',
+                    { formatterType: 'number' }
+                );
+            }, 50);
+        }
+
+        // Chart 2: Tipos de ONU (bar)
+        if (data.por_onu_tipo?.length) {
+            grid.addWidget({
+                w: 7, h: 8, x: 5, y: 0,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">Distribuição por Tipo de ONU</h3></div>
+                    <div class="chart-canvas-container"><canvas id="cqOnuChart"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => {
+                renderChart('cqOnuChart', 'bar_vertical',
+                    data.por_onu_tipo.map(d => d.tipo),
+                    [{ label: 'Quantidade', data: data.por_onu_tipo.map(d => d.total) }],
+                    'Distribuição por Tipo de ONU',
+                    { formatterType: 'number' }
+                );
+            }, 50);
+        }
+
+        // Chart 3: ONUs por OLT com sinal médio
+        if (data.por_olt?.length) {
+            grid.addWidget({
+                w: 12, h: 8, x: 0, y: 8,
+                content: `<div class="grid-stack-item-content">
+                    <div class="chart-container-header"><h3 class="chart-title">ONUs por OLT — Total e Sinal Médio (dBm)</h3></div>
+                    <div class="chart-canvas-container"><canvas id="cqOltChart"></canvas></div>
+                </div>`
+            });
+            setTimeout(() => {
+                renderChart('cqOltChart', 'bar_vertical',
+                    data.por_olt.map(d => d.olt),
+                    [
+                        { label: 'Total ONUs',   data: data.por_olt.map(d => d.total),   yAxisID: 'y' },
+                        { label: 'Sinal Médio',  data: data.por_olt.map(d => d.avg_rx),  type: 'line', yAxisID: 'y1',
+                          borderColor: '#ef4444', backgroundColor: 'transparent', pointRadius: 4 },
+                    ],
+                    'ONUs por OLT — Total e Sinal Médio',
+                    { formatterType: 'number', dualAxis: true, y1Label: 'dBm' }
+                );
+            }, 50);
+        }
+
+    } catch (err) {
+        chartsArea.innerHTML = `<p class="text-center text-red-500 mt-4">Erro: ${err.message}</p>`;
+    }
+}
+
+// =====================================================================
+// ABA: LISTA DE RETENÇÃO ATIVA
+// =====================================================================
+
+async function renderListaRetencaoTab() {
+    const tabContent = document.getElementById('tab-content-lista_retencao');
+    if (!tabContent) return;
+
+    let _retCurrentPage = 1;
+    let _retFilters = { city: '', risk_level: '', min_score: 25 };
+
+    tabContent.innerHTML = `
+        <div id="ret-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div class="flex flex-wrap justify-center gap-4 mb-4 items-end">
+            <div>
+                <label class="text-sm font-medium text-gray-700 mr-1">Cidade:</label>
+                <select id="retCityFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm min-w-[160px]">
+                    <option value="">Todas</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mr-1">Nível de Risco:</label>
+                <select id="retRiskFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
+                    <option value="">Todos</option>
+                    <option value="Altíssimo">🚨 Altíssimo</option>
+                    <option value="Alto">🔴 Alto</option>
+                    <option value="Médio">🟠 Médio</option>
+                    <option value="Baixo">🟡 Baixo</option>
+                </select>
+            </div>
+            <button id="btnFilterRet" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
+            <button id="btnExportRet" class="bg-green-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-green-700 transition font-semibold text-sm h-10">⬇ Baixar CSV</button>
+        </div>
+        <div id="ret-table-area"></div>
+    `;
+
+    const RISK_CLS = {
+        'Altíssimo': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
+        'Alto':      'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;',
+        'Médio':     'background:#ffedd5;color:#ea580c;border:1px solid #fdba74;',
+        'Baixo':     'background:#fefce8;color:#ca8a04;border:1px solid #fde047;',
+    };
+
+    function buildRetUrl(page) {
+        const rowsPerPage = 50;
+        const offset = (page - 1) * rowsPerPage;
+        const p = new URLSearchParams({
+            city: _retFilters.city,
+            risk_level: _retFilters.risk_level,
+            min_score: _retFilters.min_score,
+            limit: rowsPerPage,
+            offset
+        });
+        return `${state.API_BASE_URL}/api/behavior/contact_list?${p}`;
+    }
+
+    async function fetchAndRenderRetTable(page) {
+        _retCurrentPage = page;
+        const container = document.getElementById('ret-table-area');
+        if (!container) return;
+        container.innerHTML = '<div class="loading-spinner"></div>';
+
+        try {
+            const response = await fetch(buildRetUrl(page));
+            if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar lista de retenção.'));
+            const result = await response.json();
+
+            // KPI tiles (on first page only to avoid re-render noise)
+            const kpiRow = document.getElementById('ret-kpi-row');
+            if (kpiRow && result.summary && page === 1) {
+                const s = result.summary;
+                kpiRow.innerHTML = `
+                    <div class="summary-card" style="border-left:4px solid #7c3aed;cursor:pointer;" onclick="document.getElementById('retRiskFilter').value='Altíssimo';document.getElementById('btnFilterRet').click()">
+                        <div class="summary-card-title">🚨 Altíssimo Risco</div>
+                        <div class="summary-card-value" style="color:#7c3aed;">${s.altissimo || 0}</div>
+                        <div style="font-size:0.7rem;color:#9ca3af;">Score &gt; 160 · clique para filtrar</div>
+                    </div>
+                    <div class="summary-card" style="border-left:4px solid #ef4444;cursor:pointer;" onclick="document.getElementById('retRiskFilter').value='Alto';document.getElementById('btnFilterRet').click()">
+                        <div class="summary-card-title">🔴 Alto Risco</div>
+                        <div class="summary-card-value" style="color:#ef4444;">${s.alto || 0}</div>
+                        <div style="font-size:0.7rem;color:#9ca3af;">Score 60–160 · clique para filtrar</div>
+                    </div>
+                    <div class="summary-card" style="border-left:4px solid #f97316;cursor:pointer;" onclick="document.getElementById('retRiskFilter').value='Médio';document.getElementById('btnFilterRet').click()">
+                        <div class="summary-card-title">🟠 Médio Risco</div>
+                        <div class="summary-card-value" style="color:#f97316;">${s.medio || 0}</div>
+                        <div style="font-size:0.7rem;color:#9ca3af;">Score 25–59 · clique para filtrar</div>
+                    </div>
+                    <div class="summary-card" style="border-left:4px solid #eab308;cursor:pointer;" onclick="document.getElementById('retRiskFilter').value='Baixo';document.getElementById('btnFilterRet').click()">
+                        <div class="summary-card-title">🟡 Baixo Risco</div>
+                        <div class="summary-card-value" style="color:#eab308;">${s.baixo || 0}</div>
+                        <div style="font-size:0.7rem;color:#9ca3af;">Score 10–24 · clique para filtrar</div>
+                    </div>
+                `;
+            }
+
+            // City filter on first load
+            const cityFilter = document.getElementById('retCityFilter');
+            if (cityFilter && result.cities?.length && cityFilter.options.length <= 1) {
+                utils.populateCityFilter(cityFilter, result.cities, _retFilters.city);
+            }
+
+            const rowsPerPage = 50;
+            const n = result.total_rows || 0;
+            const totalPages = Math.ceil(n / rowsPerPage);
+
+            let tableHtml = '<p class="text-center text-gray-500 mt-4">Nenhum cliente encontrado para os filtros selecionados.</p>';
+            if (result.data?.length > 0) {
+                const rows = result.data.map((r, i) => {
+                    const digits = (r.whatsapp || '').replace(/\D/g, '');
+                    const wa = digits ? (digits.startsWith('55') ? digits : '55' + digits) : null;
+                    const waCell = wa
+                        ? `<a href="https://wa.me/${wa}" target="_blank" class="text-green-600 font-bold">💬 WhatsApp</a>`
+                        : '-';
+                    const riskStyle = RISK_CLS[r.risco] || '';
+                    return `<tr data-contrato="${r.contrato}" style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;cursor:pointer;" title="Clique para ver detalhes">
+                        <td style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${(page - 1) * rowsPerPage + i + 1}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;font-family:monospace;">#${r.contrato || ''}</td>
+                        <td style="padding:6px 10px;font-size:.8rem;font-weight:500;">${r.cliente || ''}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;">${r.cidade || ''}</td>
+                        <td style="padding:6px 10px;">
+                            <span style="padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap;${riskStyle}">${r.risco || ''}</span>
+                        </td>
+                        <td style="padding:6px 10px;font-size:.8rem;font-weight:700;font-family:monospace;">${r.score || 0}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;${r.fat_vencidas > 0 ? 'color:#dc2626;font-weight:700;' : ''}">${r.fat_vencidas || 0}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;">${r.atend_30d || 0}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;">${r.telefone ? `<a href="tel:${r.telefone}">${r.telefone}</a>` : '-'}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;">${waCell}</td>
+                    </tr>`;
+                }).join('');
+
+                tableHtml = `
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
+                            <thead><tr style="background:#1e293b;color:#fff;position:sticky;top:0;">
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">#</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Contrato</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Cliente</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Cidade</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Risco</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Score</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Fat. Vencidas</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Dias Vencido</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Atend. 30d</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Sem Conexão</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Telefone</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">WhatsApp</th>
+                            </tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>`;
+            }
+
+            let paginationHtml = '';
+            if (totalPages > 1) {
+                paginationHtml = `
+                    <div class="pagination-controls flex justify-center items-center gap-2 mt-4">
+                        <button class="ret-page-btn bg-gray-200 px-3 py-1 rounded disabled:opacity-50"
+                                data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>Anterior</button>
+                        <span class="text-sm text-gray-500">Página ${page} de ${totalPages} · ${n.toLocaleString('pt-BR')} registros</span>
+                        <button class="ret-page-btn bg-blue-500 text-white px-3 py-1 rounded disabled:opacity-50"
+                                data-page="${page + 1}" ${page >= totalPages ? 'disabled' : ''}>Próxima</button>
+                    </div>`;
+            } else if (n > 0) {
+                paginationHtml = `<p class="text-sm text-gray-400 mt-2 text-center">${n.toLocaleString('pt-BR')} registros</p>`;
+            }
+
+            container.innerHTML = `<div class="border rounded-lg overflow-hidden"><div style="overflow-y:auto;max-height:560px;">${tableHtml}</div></div>${paginationHtml}`;
+            container.querySelectorAll('.ret-page-btn').forEach(btn => {
+                btn.addEventListener('click', () => fetchAndRenderRetTable(parseInt(btn.dataset.page)));
+            });
+
+        } catch (err) {
+            const container = document.getElementById('ret-table-area');
+            if (container) container.innerHTML = `<p class="text-red-500 p-4">${err.message}</p>`;
+        }
+    }
+
+    // Delegated click → modal de detalhes
+    tabContent.addEventListener('click', (e) => {
+        const tr = e.target.closest('tr[data-contrato]');
+        if (tr && typeof showClientDetail === 'function') showClientDetail(tr.dataset.contrato);
+    });
+
+    // Filtrar button
+    tabContent.querySelector('#btnFilterRet').addEventListener('click', () => {
+        _retFilters.city       = document.getElementById('retCityFilter')?.value || '';
+        _retFilters.risk_level = document.getElementById('retRiskFilter')?.value || '';
+        fetchAndRenderRetTable(1);
+    });
+
+    // Export CSV button
+    tabContent.querySelector('#btnExportRet').addEventListener('click', () => {
+        const p = new URLSearchParams({
+            city: _retFilters.city,
+            risk_level: _retFilters.risk_level,
+            min_score: _retFilters.min_score,
+            limit: 5000,
+            offset: 0
+        });
+        window.open(`${state.API_BASE_URL}/api/behavior/contact_list?${p}`);
+    });
+
+    await fetchAndRenderRetTable(1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Alertas de Ação
+// ─────────────────────────────────────────────────────────────────────────────
+async function renderAlertasAcaoTab() {
+    const tabContent = document.getElementById('tab-content-alertas_acao');
+    if (!tabContent) return;
+
+    let _alertaCurrentPage = 1;
+    let _alertaFilters = { city: '', tier: '' };
+
+    const TIER_STYLE = {
+        'Crítico': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
+        'Alto':    'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;',
+        'Médio':   'background:#ffedd5;color:#ea580c;border:1px solid #fdba74;',
+        'Baixo':   'background:#fefce8;color:#ca8a04;border:1px solid #fde047;',
+    };
+
+    tabContent.innerHTML = `
+        <div id="alerta-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div class="flex flex-wrap justify-center gap-4 mb-4 items-end">
+            <div>
+                <label class="text-sm font-medium text-gray-700 mr-1">Cidade:</label>
+                <select id="alertaCityFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm min-w-[160px]">
+                    <option value="">Todas</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mr-1">Urgência:</label>
+                <select id="alertaTierFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
+                    <option value="">Todos</option>
+                    <option value="Crítico">Crítico</option>
+                    <option value="Alto">Alto</option>
+                    <option value="Médio">Médio</option>
+                    <option value="Baixo">Baixo</option>
+                </select>
+            </div>
+            <button id="btnFilterAlerta" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
+        </div>
+        <div id="alerta-table-area"></div>
+    `;
+
+    async function fetchAndRenderAlertaTable(page) {
+        _alertaCurrentPage = page;
+        const container = document.getElementById('alerta-table-area');
+        if (!container) return;
+        container.innerHTML = '<div class="loading-spinner"></div>';
+
+        const rowsPerPage = 50;
+        const offset = (page - 1) * rowsPerPage;
+        const p = new URLSearchParams({
+            city: _alertaFilters.city,
+            tier: _alertaFilters.tier,
+            limit: rowsPerPage,
+            offset
+        });
+
+        try {
+            const response = await fetch(`${state.API_BASE_URL}/api/behavior/action_alerts?${p}`);
+            if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar alertas de ação.'));
+            const result = await response.json();
+
+            // KPI tiles on first page
+            const kpiRow = document.getElementById('alerta-kpi-row');
+            if (kpiRow && result.summary && page === 1) {
+                const s = result.summary;
+                kpiRow.innerHTML = `
+                    <div class="summary-card" style="border-left:4px solid #7c3aed;">
+                        <div class="summary-card-title">Crítico</div>
+                        <div class="summary-card-value" style="color:#7c3aed;">${s.critico || 0}</div>
+                    </div>
+                    <div class="summary-card" style="border-left:4px solid #ef4444;">
+                        <div class="summary-card-title">Alto</div>
+                        <div class="summary-card-value" style="color:#ef4444;">${s.alto || 0}</div>
+                    </div>
+                    <div class="summary-card" style="border-left:4px solid #f97316;">
+                        <div class="summary-card-title">Médio</div>
+                        <div class="summary-card-value" style="color:#f97316;">${s.medio || 0}</div>
+                    </div>
+                    <div class="summary-card" style="border-left:4px solid #eab308;">
+                        <div class="summary-card-title">Baixo</div>
+                        <div class="summary-card-value" style="color:#eab308;">${s.baixo || 0}</div>
+                    </div>
+                `;
+            }
+
+            // Populate city filter on first load
+            const cityFilter = document.getElementById('alertaCityFilter');
+            if (cityFilter && result.cities?.length && cityFilter.options.length <= 1) {
+                utils.populateCityFilter(cityFilter, result.cities, _alertaFilters.city);
+            }
+
+            const n = result.total_rows || 0;
+            const totalPages = Math.ceil(n / rowsPerPage);
+
+            let tableHtml = '<p class="text-center text-gray-500 mt-4">Nenhum alerta encontrado para os filtros selecionados.</p>';
+            if (result.data?.length > 0) {
+                const rows = result.data.map((r, i) => {
+                    const digits = (r.whatsapp || '').replace(/\D/g, '');
+                    const wa = digits ? (digits.startsWith('55') ? digits : '55' + digits) : null;
+                    const waCell = wa
+                        ? `<a href="https://wa.me/${wa}" target="_blank" class="text-green-600 font-bold">💬 WhatsApp</a>`
+                        : '-';
+                    const tierStyle = TIER_STYLE[r.tier] || '';
+                    const acaoText = (r.acao || '');
+                    const acaoShort = acaoText.length > 80 ? acaoText.slice(0, 80) + '…' : acaoText;
+                    return `<tr data-contrato="${r.contrato}" style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;cursor:pointer;" title="Clique para ver detalhes">
+                        <td style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${(page - 1) * rowsPerPage + i + 1}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;font-family:monospace;">#${r.contrato || ''}</td>
+                        <td style="padding:6px 10px;font-size:.8rem;font-weight:500;">${r.cliente || ''}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;">${r.cidade || ''}</td>
+                        <td style="padding:6px 10px;">
+                            <span style="padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap;${tierStyle}">${r.tier || ''}</span>
+                        </td>
+                        <td style="padding:6px 10px;font-size:.78rem;" title="${acaoText}">${acaoShort}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;${r.fat_vencidas > 0 ? 'color:#dc2626;font-weight:700;' : ''}">${r.fat_vencidas || 0}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;">${waCell}</td>
+                    </tr>`;
+                }).join('');
+
+                tableHtml = `
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
+                            <thead><tr style="background:#1e293b;color:#fff;position:sticky;top:0;">
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">#</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Contrato</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Cliente</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Cidade</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Urgência</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Ação Recomendada</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Fat. Vencidas</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Dias Venc.</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Sem Conexão</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">WhatsApp</th>
+                            </tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>`;
+            }
+
+            let paginationHtml = '';
+            if (totalPages > 1) {
+                paginationHtml = `
+                    <div class="pagination-controls flex justify-center items-center gap-2 mt-4">
+                        <button class="alerta-page-btn bg-gray-200 px-3 py-1 rounded disabled:opacity-50"
+                                data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>Anterior</button>
+                        <span class="text-sm text-gray-500">Página ${page} de ${totalPages} · ${n.toLocaleString('pt-BR')} registros</span>
+                        <button class="alerta-page-btn bg-blue-500 text-white px-3 py-1 rounded disabled:opacity-50"
+                                data-page="${page + 1}" ${page >= totalPages ? 'disabled' : ''}>Próxima</button>
+                    </div>`;
+            } else if (n > 0) {
+                paginationHtml = `<p class="text-sm text-gray-400 mt-2 text-center">${n.toLocaleString('pt-BR')} registros</p>`;
+            }
+
+            container.innerHTML = `<div class="border rounded-lg overflow-hidden"><div style="overflow-y:auto;max-height:560px;">${tableHtml}</div></div>${paginationHtml}`;
+            container.querySelectorAll('.alerta-page-btn').forEach(btn => {
+                btn.addEventListener('click', () => fetchAndRenderAlertaTable(parseInt(btn.dataset.page)));
+            });
+
+        } catch (err) {
+            const container = document.getElementById('alerta-table-area');
+            if (container) container.innerHTML = `<p class="text-red-500 p-4">${err.message}</p>`;
+        }
+    }
+
+    tabContent.querySelector('#btnFilterAlerta').addEventListener('click', () => {
+        _alertaFilters.city = document.getElementById('alertaCityFilter')?.value || '';
+        _alertaFilters.tier = document.getElementById('alertaTierFilter')?.value || '';
+        fetchAndRenderAlertaTable(1);
+    });
+
+    tabContent.addEventListener('click', (e) => {
+        const tr = e.target.closest('tr[data-contrato]');
+        if (tr && typeof showClientDetail === 'function') showClientDetail(tr.dataset.contrato);
+    });
+
+    await fetchAndRenderAlertaTable(1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Motivos de Cancelamento
+// ─────────────────────────────────────────────────────────────────────────────
+async function renderMotivosCancTab() {
+    const tabContent = document.getElementById('tab-content-motivos_canc');
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <div id="motivos-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div id="motivos-charts-area"></div>
+    `;
+
+    await fetchMotivosCancData();
+}
+
+async function fetchMotivosCancData() {
+    const kpiRow = document.getElementById('motivos-kpi-row');
+    const chartsArea = document.getElementById('motivos-charts-area');
+    if (!chartsArea) return;
+    chartsArea.innerHTML = '<div class="loading-spinner"></div>';
+
+    try {
+        const response = await fetch(`${state.API_BASE_URL}/api/behavior/canc_reasons`);
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar motivos de cancelamento.'));
+        const data = await response.json();
+
+        if (kpiRow) {
+            const k = data.kpis || {};
+            kpiRow.innerHTML = `
+                <div class="summary-card" style="border-left:4px solid #ef4444;">
+                    <div class="summary-card-title">Total Cancelamentos</div>
+                    <div class="summary-card-value" style="color:#ef4444;">${(k.total || 0).toLocaleString('pt-BR')}</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #6b7280;">
+                    <div class="summary-card-title">Sem Motivo Registrado</div>
+                    <div class="summary-card-value" style="color:#6b7280;">${(k.sem_motivo || 0).toLocaleString('pt-BR')}</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #f97316;">
+                    <div class="summary-card-title">Top Motivo</div>
+                    <div class="summary-card-value" style="color:#f97316;font-size:0.95rem;">${k.top_motivo || '-'}</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #7c3aed;">
+                    <div class="summary-card-title">Permanência Média</div>
+                    <div class="summary-card-value" style="color:#7c3aed;">${(k.avg_permanencia || 0).toFixed(1)} meses</div>
+                </div>
+            `;
+        }
+
+        chartsArea.innerHTML = '';
+        const grid = GridStack.init(
+            { cellHeight: 70, minRow: 1, margin: 10, float: true, column: 12, disableOneColumnMode: false },
+            chartsArea
+        );
+
+        // Chart 1: Distribuição por Motivo (bar_vertical)
+        const motLabels = (data.por_motivo || []).map(d => d.label);
+        const motTotals = (data.por_motivo || []).map(d => d.total);
+        grid.addWidget({ w: 7, h: 8, x: 0, y: 0, content: `<div style="padding:8px;height:100%;box-sizing:border-box;"><canvas id="chart-motivos-dist"></canvas></div>` });
+        setTimeout(() => renderChart('chart-motivos-dist', 'bar_vertical', motLabels, [{ label: 'Cancelamentos', data: motTotals }], 'Distribuição por Motivo', { formatterType: 'number' }), 50);
+
+        // Chart 2: Tempo Médio até Cancelar por Motivo (bar_horizontal)
+        const avgMeses = (data.por_motivo || []).map(d => d.avg_meses);
+        const blueShades = (data.por_motivo || []).map((_, i) => {
+            const v = Math.round(80 + (i / Math.max((data.por_motivo.length - 1), 1)) * 120);
+            return `rgb(30,${v},220)`;
+        });
+        grid.addWidget({ w: 5, h: 8, x: 7, y: 0, content: `<div style="padding:8px;height:100%;box-sizing:border-box;"><canvas id="chart-motivos-tempo"></canvas></div>` });
+        setTimeout(() => renderChart('chart-motivos-tempo', 'bar_horizontal', motLabels, [{ label: 'Meses Médios', data: avgMeses, backgroundColor: blueShades }], 'Tempo Médio até Cancelar por Motivo', {}), 50);
+
+        // Chart 3: Tendência Anual por Motivo (line)
+        // Build map: { ano: { label: total } }
+        const anoMap = {};
+        const labelsSet = new Set();
+        (data.por_ano || []).forEach(d => {
+            if (!anoMap[d.ano]) anoMap[d.ano] = {};
+            anoMap[d.ano][d.label] = d.total;
+            labelsSet.add(d.label);
+        });
+        const anos = Object.keys(anoMap).sort();
+        const uniqueLabels = Array.from(labelsSet);
+        const PALETTE = ['#3b82f6','#ef4444','#f97316','#22c55e','#7c3aed','#eab308','#06b6d4','#ec4899','#84cc16','#f43f5e'];
+        const lineDatasets = uniqueLabels.map((lbl, idx) => ({
+            label: lbl,
+            data: anos.map(ano => anoMap[ano][lbl] || 0),
+            borderColor: PALETTE[idx % PALETTE.length],
+            backgroundColor: PALETTE[idx % PALETTE.length] + '33',
+            fill: false,
+        }));
+        grid.addWidget({ w: 12, h: 8, x: 0, y: 8, content: `<div style="padding:8px;height:100%;box-sizing:border-box;"><canvas id="chart-motivos-tendencia"></canvas></div>` });
+        setTimeout(() => renderChart('chart-motivos-tendencia', 'line', anos, lineDatasets, 'Tendência Anual por Motivo', {}), 50);
+
+    } catch (err) {
+        chartsArea.innerHTML = `<p class="text-center text-red-500 mt-4">Erro: ${err.message}</p>`;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Padrão Pré-Cancelamento
+// ─────────────────────────────────────────────────────────────────────────────
+async function renderPadraoPrecancTab() {
+    const tabContent = document.getElementById('tab-content-padrao_pre_canc');
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <p class="text-sm text-gray-500 text-center mb-4">Analisa o comportamento dos contratos cancelados para identificar padrões de alerta precoce.</p>
+        <div id="precanc-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div id="precanc-charts-area"></div>
+    `;
+
+    await fetchPadraoPrecancData();
+}
+
+async function fetchPadraoPrecancData() {
+    const kpiRow = document.getElementById('precanc-kpi-row');
+    const chartsArea = document.getElementById('precanc-charts-area');
+    if (!chartsArea) return;
+    chartsArea.innerHTML = '<div class="loading-spinner"></div>';
+
+    try {
+        const response = await fetch(`${state.API_BASE_URL}/api/behavior/pre_canc_behavior`);
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar padrão pré-cancelamento.'));
+        const data = await response.json();
+
+        const k = data.kpis || {};
+
+        if (kpiRow) {
+            kpiRow.innerHTML = `
+                <div class="summary-card" style="border-left:4px solid #ef4444;">
+                    <div class="summary-card-title">Tiveram Fatura Vencida</div>
+                    <div class="summary-card-value" style="color:#ef4444;">${(k.pct_had_overdue || 0).toFixed(1)}%</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #f97316;">
+                    <div class="summary-card-title">Abriram Atendimento</div>
+                    <div class="summary-card-value" style="color:#f97316;">${(k.pct_had_tickets || 0).toFixed(1)}%</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #6b7280;">
+                    <div class="summary-card-title">Total Cancelados Analisados</div>
+                    <div class="summary-card-value" style="color:#6b7280;">${(k.total_cancelled || 0).toLocaleString('pt-BR')}</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #3b82f6;">
+                    <div class="summary-card-title">Permanência Média</div>
+                    <div class="summary-card-value" style="color:#3b82f6;">${(k.avg_meses_contrato || 0).toFixed(1)} meses</div>
+                </div>
+            `;
+            // Insight box after KPI row
+            const insightDiv = document.createElement('div');
+            insightDiv.style.cssText = 'background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-top:8px;font-size:0.875rem;color:#78350f;';
+            insightDiv.innerHTML = `💡 <strong>Insight:</strong> ${(k.pct_had_overdue || 0).toFixed(1)}% dos clientes que cancelaram tinham faturas vencidas e ${(k.pct_had_tickets || 0).toFixed(1)}% tinham atendimentos recentes. Monitore esses dois sinais em conjunto para antecipar cancelamentos.`;
+            kpiRow.appendChild(insightDiv);
+        }
+
+        chartsArea.innerHTML = '';
+        const grid = GridStack.init(
+            { cellHeight: 70, minRow: 1, margin: 10, float: true, column: 12, disableOneColumnMode: false },
+            chartsArea
+        );
+
+        // Chart 1: Sinais de Alerta (doughnut)
+        const sinaisLabels = (data.por_num_sinais || []).map(d => {
+            if (d.sinais === 0) return 'Nenhum Sinal';
+            if (d.sinais === 1) return '1 Sinal';
+            return '2 Sinais';
+        });
+        const sinaisTotals = (data.por_num_sinais || []).map(d => d.total);
+        grid.addWidget({ w: 6, h: 8, x: 0, y: 0, content: `<div style="padding:8px;height:100%;box-sizing:border-box;"><canvas id="chart-precanc-sinais"></canvas></div>` });
+        setTimeout(() => renderChart('chart-precanc-sinais', 'doughnut', sinaisLabels, [{ label: 'Contratos', data: sinaisTotals, backgroundColor: ['#22c55e', '#f97316', '#ef4444'] }], 'Sinais de Alerta Identificados antes do Cancelamento', { formatterType: 'number' }), 50);
+
+        // Chart 2: Quando Cancelaram (bar_vertical)
+        const permLabels = (data.por_permanencia || []).map(d => d.faixa);
+        const permTotals = (data.por_permanencia || []).map(d => d.total);
+        grid.addWidget({ w: 6, h: 8, x: 6, y: 0, content: `<div style="padding:8px;height:100%;box-sizing:border-box;"><canvas id="chart-precanc-permanencia"></canvas></div>` });
+        setTimeout(() => renderChart('chart-precanc-permanencia', 'bar_vertical', permLabels, [{ label: 'Cancelamentos', data: permTotals }], 'Quando Cancelaram (Permanência)', {}), 50);
+
+    } catch (err) {
+        chartsArea.innerHTML = `<p class="text-center text-red-500 mt-4">Erro: ${err.message}</p>`;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Risco por Ciclo de Vida
+// ─────────────────────────────────────────────────────────────────────────────
+async function renderLifecycleRiskTab() {
+    const tabContent = document.getElementById('tab-content-lifecycle_risk');
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <div id="lifecycle-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div id="lifecycle-charts-area"></div>
+    `;
+
+    await fetchLifecycleRiskData();
+}
+
+async function fetchLifecycleRiskData() {
+    const kpiRow = document.getElementById('lifecycle-kpi-row');
+    const chartsArea = document.getElementById('lifecycle-charts-area');
+    if (!chartsArea) return;
+    chartsArea.innerHTML = '<div class="loading-spinner"></div>';
+
+    try {
+        const response = await fetch(`${state.API_BASE_URL}/api/behavior/lifecycle_risk`);
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar risco por ciclo de vida.'));
+        const data = await response.json();
+
+        const k = data.kpis || {};
+
+        if (kpiRow) {
+            kpiRow.innerHTML = `
+                <div class="summary-card" style="border-left:4px solid #3b82f6;">
+                    <div class="summary-card-title">Contratos Ativos</div>
+                    <div class="summary-card-value" style="color:#3b82f6;">${(k.total_ativos || 0).toLocaleString('pt-BR')}</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #ef4444;">
+                    <div class="summary-card-title">Em Zona de Risco</div>
+                    <div class="summary-card-value" style="color:#ef4444;">${(k.em_risco || 0).toLocaleString('pt-BR')}</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #f97316;">
+                    <div class="summary-card-title">Fase de Maior Risco</div>
+                    <div class="summary-card-value" style="color:#f97316;font-size:0.9rem;">${k.faixa_maior_risco || '-'}</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #7c3aed;">
+                    <div class="summary-card-title">Fase de Maior Cancelamento</div>
+                    <div class="summary-card-value" style="color:#7c3aed;font-size:0.9rem;">${k.faixa_mais_cancelamentos || '-'}</div>
+                </div>
+            `;
+        }
+
+        chartsArea.innerHTML = '';
+        const grid = GridStack.init(
+            { cellHeight: 70, minRow: 1, margin: 10, float: true, column: 12, disableOneColumnMode: false },
+            chartsArea
+        );
+
+        // Chart 1: Score Médio por Fase (bar + line dual axis)
+        const faixasAtivos = (data.ativos_por_faixa || []).map(d => d.faixa);
+        const avgScores = (data.ativos_por_faixa || []).map(d => d.avg_score);
+        const pctRisco = (data.ativos_por_faixa || []).map(d => d.pct_em_risco);
+        const barColors = avgScores.map(s => s > 40 ? '#ef4444' : s > 20 ? '#f97316' : '#22c55e');
+        grid.addWidget({ w: 12, h: 8, x: 0, y: 0, content: `<div style="padding:8px;height:100%;box-sizing:border-box;"><canvas id="chart-lifecycle-score"></canvas></div>` });
+        setTimeout(() => renderChart(
+            'chart-lifecycle-score',
+            'bar_vertical',
+            faixasAtivos,
+            [
+                { label: 'Score Médio', data: avgScores, backgroundColor: barColors },
+                { label: '% em Risco', data: pctRisco, type: 'line', yAxisID: 'y1', borderColor: '#ef4444', backgroundColor: '#ef444433', fill: false }
+            ],
+            'Score de Risco Médio por Fase do Contrato (Ativos)',
+            { dualAxis: true, y1Label: '%' }
+        ), 50);
+
+        // Chart 2: Distribuição de Cancelamentos por Fase
+        const faixasCancelados = (data.cancelados_por_faixa || []).map(d => d.faixa);
+        const cancelTotals = (data.cancelados_por_faixa || []).map(d => d.total);
+        const cancelPct = (data.cancelados_por_faixa || []).map(d => d.pct);
+        grid.addWidget({ w: 12, h: 8, x: 0, y: 8, content: `<div style="padding:8px;height:100%;box-sizing:border-box;"><canvas id="chart-lifecycle-cancel"></canvas></div>` });
+        setTimeout(() => renderChart(
+            'chart-lifecycle-cancel',
+            'bar_vertical',
+            faixasCancelados,
+            [
+                { label: 'Cancelamentos', data: cancelTotals },
+                { label: '% do Total', data: cancelPct, type: 'line', yAxisID: 'y1', borderColor: '#7c3aed', backgroundColor: '#7c3aed33', fill: false }
+            ],
+            'Distribuição de Cancelamentos por Fase',
+            { dualAxis: true, y1Label: '%' }
+        ), 50);
+
+    } catch (err) {
+        chartsArea.innerHTML = `<p class="text-center text-red-500 mt-4">Erro: ${err.message}</p>`;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Análise por Plano
+// ─────────────────────────────────────────────────────────────────────────────
+async function renderRiscoPlanoTab() {
+    const tabContent = document.getElementById('tab-content-risco_plano');
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <div id="plano-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+        <div id="plano-charts-area"></div>
+    `;
+
+    await fetchRiscoPlanoData();
+}
+
+async function fetchRiscoPlanoData() {
+    const kpiRow = document.getElementById('plano-kpi-row');
+    const chartsArea = document.getElementById('plano-charts-area');
+    if (!chartsArea) return;
+    chartsArea.innerHTML = '<div class="loading-spinner"></div>';
+
+    try {
+        const response = await fetch(`${state.API_BASE_URL}/api/behavior/plan_risk`);
+        if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar análise por plano.'));
+        const data = await response.json();
+
+        const k = data.kpis || {};
+        const planoLabel = (k.plano_maior_churn_label || '-');
+        const planoLabelShort = planoLabel.length > 30 ? planoLabel.slice(0, 30) + '…' : planoLabel;
+
+        if (kpiRow) {
+            kpiRow.innerHTML = `
+                <div class="summary-card" style="border-left:4px solid #3b82f6;">
+                    <div class="summary-card-title">Total de Planos</div>
+                    <div class="summary-card-value" style="color:#3b82f6;">${k.total_planos || 0}</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #ef4444;" title="${planoLabel}">
+                    <div class="summary-card-title">Plano de Maior Churn</div>
+                    <div class="summary-card-value" style="color:#ef4444;font-size:0.8rem;">${planoLabelShort}</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #f97316;">
+                    <div class="summary-card-title">Taxa de Churn Máxima</div>
+                    <div class="summary-card-value" style="color:#f97316;">${(k.plano_maior_churn_rate || 0).toFixed(1)}%</div>
+                </div>
+                <div class="summary-card" style="border-left:4px solid #7c3aed;">
+                    <div class="summary-card-title">Planos em Alto Risco (&gt;30% churn)</div>
+                    <div class="summary-card-value" style="color:#7c3aed;">${k.total_em_risco || 0}</div>
+                </div>
+            `;
+        }
+
+        chartsArea.innerHTML = '';
+        const grid = GridStack.init(
+            { cellHeight: 70, minRow: 1, margin: 10, float: true, column: 12, disableOneColumnMode: false },
+            chartsArea
+        );
+
+        const planos = (data.por_plano || []);
+        const planoNames = planos.map(d => (d.plano || '').length > 25 ? (d.plano || '').slice(0, 25) + '…' : (d.plano || ''));
+        const churnRates = planos.map(d => d.churn_rate);
+        const churnColors = churnRates.map(r => r > 50 ? '#ef4444' : r > 30 ? '#f97316' : '#3b82f6');
+
+        // Chart 1: Taxa de Churn por Plano
+        grid.addWidget({ w: 12, h: 9, x: 0, y: 0, content: `<div style="padding:8px;height:100%;box-sizing:border-box;"><canvas id="chart-plano-churn"></canvas></div>` });
+        setTimeout(() => renderChart(
+            'chart-plano-churn',
+            'bar_vertical',
+            planoNames,
+            [{ label: 'Taxa de Churn (%)', data: churnRates, backgroundColor: churnColors }],
+            'Taxa de Churn por Plano',
+            { formatterType: 'number' }
+        ), 50);
+
+        // Chart 2: Ativos vs Cancelados por Plano (stacked)
+        grid.addWidget({ w: 7, h: 8, x: 0, y: 9, content: `<div style="padding:8px;height:100%;box-sizing:border-box;"><canvas id="chart-plano-ativos-canc"></canvas></div>` });
+        setTimeout(() => renderChart(
+            'chart-plano-ativos-canc',
+            'bar_vertical',
+            planoNames,
+            [
+                { label: 'Ativos', data: planos.map(d => d.ativos), backgroundColor: '#3b82f6' },
+                { label: 'Cancelados', data: planos.map(d => d.cancelados), backgroundColor: '#ef4444' }
+            ],
+            'Ativos vs Cancelados por Plano',
+            { stacked: true }
+        ), 50);
+
+        // Chart 3: Tempo Médio até Cancelar por Plano (bar_horizontal)
+        const planoNamesH = planos.map(d => (d.plano || '').length > 25 ? (d.plano || '').slice(0, 25) + '…' : (d.plano || ''));
+        grid.addWidget({ w: 5, h: 8, x: 7, y: 9, content: `<div style="padding:8px;height:100%;box-sizing:border-box;"><canvas id="chart-plano-tempo"></canvas></div>` });
+        setTimeout(() => renderChart(
+            'chart-plano-tempo',
+            'bar_horizontal',
+            planoNamesH,
+            [{ label: 'Meses Médios', data: planos.map(d => d.avg_meses) }],
+            'Tempo Médio até Cancelar por Plano',
+            {}
+        ), 50);
+
+    } catch (err) {
+        chartsArea.innerHTML = `<p class="text-center text-red-500 mt-4">Erro: ${err.message}</p>`;
+    }
+}
+
+// ============================================================
+// TAB: Perfil de Pagamento
+// ============================================================
+function renderPerfilPagamentoTab() {
+    const pane = document.getElementById('tab-content-perfil_pagamento');
+    if (!pane) return;
+
+    let _pfFilters  = { city: '', perfil: '' };
+    let _pfPage     = 0;
+    const PAGE_SIZE = 50;
+
+    pane.innerHTML = `
+      <div class="p-4 space-y-4">
+        <!-- Filtros -->
+        <div class="flex flex-wrap gap-3 items-end">
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Cidade</label>
+            <select id="pf-city" class="rounded border border-gray-300 text-sm px-2 py-1">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Perfil</label>
+            <select id="pf-perfil" class="rounded border border-gray-300 text-sm px-2 py-1">
+              <option value="">Todos</option>
+              <option value="Atrasou pela 1ª vez">Atrasou pela 1ª vez</option>
+              <option value="Sempre atrasa">Sempre atrasa</option>
+              <option value="Atrasa com frequência">Atrasa com frequência</option>
+              <option value="Raramente atrasa">Raramente atrasa</option>
+              <option value="Nunca atrasou">Nunca atrasou</option>
+              <option value="Sem histórico">Sem histórico</option>
+            </select>
+          </div>
+          <button id="pf-filter-btn" class="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">Filtrar</button>
+        </div>
+
+        <!-- KPIs -->
+        <div id="pf-kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+
+        <!-- Gráficos -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-white rounded-lg shadow p-4">
+            <canvas id="chart-pf-perfil" height="220"></canvas>
+          </div>
+          <div class="bg-white rounded-lg shadow p-4">
+            <canvas id="chart-pf-faixa" height="220"></canvas>
+          </div>
+        </div>
+
+        <!-- Alerta: Atrasou pela 1ª vez -->
+        <div id="pf-primeira-vez-section" class="bg-red-50 border border-red-200 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-red-700 mb-2">Atrasou pela 1ª vez — ação imediata recomendada</h3>
+          <div id="pf-primeira-table"></div>
+        </div>
+
+        <!-- Tabela geral -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-3 py-2 text-left">Contrato</th>
+                  <th class="px-3 py-2 text-left">Cliente</th>
+                  <th class="px-3 py-2 text-left">Cidade</th>
+                  <th class="px-3 py-2 text-center">Perfil</th>
+                  <th class="px-3 py-2 text-right">Pagas</th>
+                  <th class="px-3 py-2 text-right">Atrasos</th>
+                  <th class="px-3 py-2 text-right">% Atraso</th>
+                  <th class="px-3 py-2 text-right">Med. Atraso</th>
+                  <th class="px-3 py-2 text-right">Vencidas Hoje</th>
+                </tr>
+              </thead>
+              <tbody id="pf-table-body" class="divide-y divide-gray-100"></tbody>
+            </table>
+          </div>
+          <div class="flex items-center justify-between px-4 py-2 bg-gray-50">
+            <span id="pf-pagination-info" class="text-xs text-gray-500"></span>
+            <div class="flex gap-2">
+              <button id="pf-prev" class="px-3 py-1 text-xs rounded border disabled:opacity-40">Anterior</button>
+              <button id="pf-next" class="px-3 py-1 text-xs rounded border disabled:opacity-40">Proximo</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    const PERFIL_COLORS = {
+        'Nunca atrasou':         '#22c55e',
+        'Raramente atrasa':      '#86efac',
+        'Atrasa com frequência': '#f97316',
+        'Sempre atrasa':         '#ef4444',
+        'Atrasou pela 1ª vez':   '#dc2626',
+        'Sem histórico':         '#94a3b8',
+    };
+
+    async function _loadPf() {
+        const params = new URLSearchParams({
+            city:   _pfFilters.city,
+            perfil: _pfFilters.perfil,
+            limit:  PAGE_SIZE,
+            offset: _pfPage * PAGE_SIZE,
+        });
+        const data = await fetchPerfilPagamentoData(params.toString());
+        if (!data) return;
+
+        // Populate city dropdown once
+        const cityEl = document.getElementById('pf-city');
+        if (cityEl && cityEl.options.length === 1 && data.cities) {
+            data.cities.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c; opt.textContent = c;
+                cityEl.appendChild(opt);
+            });
+            cityEl.value = _pfFilters.city;
+        }
+
+        // KPIs — adapta conforme filtro de perfil selecionado
+        const s = data.summary || {};
+        const kpiRow = document.getElementById('pf-kpi-row');
+        if (kpiRow) {
+            const pf = _pfFilters.perfil;
+            let kpis;
+            if (pf) {
+                // filtro específico: mostra total filtrado + média de atraso + max atraso + sem_historico como contexto
+                const PERFIL_COLOR_MAP = {
+                    'Atrasou pela 1ª vez':   'red',
+                    'Sempre atrasa':         'red',
+                    'Atrasa com frequência': 'orange',
+                    'Raramente atrasa':      'green',
+                    'Nunca atrasou':         'green',
+                    'Sem histórico':         'gray',
+                };
+                kpis = [
+                    { label: 'Total Filtrado', value: s.total ?? 0, color: PERFIL_COLOR_MAP[pf] || 'blue' },
+                    { label: 'Media de Atraso', value: s.media_geral_atraso ? s.media_geral_atraso + ' dias' : 'Em dia', color: 'blue' },
+                    { label: 'Atrasou 1ª Vez', value: s.primeira_vez ?? 0, color: 'red' },
+                    { label: 'Sempre Atrasa', value: s.sempre ?? 0, color: 'orange' },
+                ];
+            } else {
+                kpis = [
+                    { label: 'Media de Atraso (dias)', value: s.media_geral_atraso ?? 0, color: 'blue' },
+                    { label: 'Atrasou 1ª Vez', value: s.primeira_vez ?? 0, color: 'red' },
+                    { label: 'Sempre Atrasa', value: s.sempre ?? 0, color: 'orange' },
+                    { label: 'Nunca Atrasou', value: s.nunca_atrasou ?? 0, color: 'green' },
+                ];
+            }
+            kpiRow.innerHTML = kpis.map(k => `
+              <div class="bg-white rounded-lg shadow p-3">
+                <p class="summary-card-title text-xs text-gray-500">${k.label}</p>
+                <p class="text-2xl font-bold text-${k.color}-600">${k.value}</p>
+              </div>`).join('');
+        }
+
+        // Doughnut — distribuicao por perfil
+        if (data.por_perfil && data.por_perfil.length) {
+            const labels   = data.por_perfil.map(d => d.perfil);
+            const totals   = data.por_perfil.map(d => d.total);
+            const bgColors = labels.map(l => PERFIL_COLORS[l] || '#94a3b8');
+            setTimeout(() => renderChart(
+                'chart-pf-perfil', 'doughnut', labels,
+                [{ label: 'Clientes', data: totals, backgroundColor: bgColors }],
+                'Distribuicao por Perfil de Pagamento',
+                { formatterType: 'number' }
+            ), 50);
+        }
+
+        // Bar — faixa de atraso medio
+        if (data.por_faixa_atraso && data.por_faixa_atraso.length) {
+            const labels = data.por_faixa_atraso.map(d => d.faixa);
+            const totals = data.por_faixa_atraso.map(d => d.total);
+            setTimeout(() => renderChart(
+                'chart-pf-faixa', 'bar_vertical', labels,
+                [{ label: 'Clientes', data: totals, backgroundColor: '#3b82f6' }],
+                'Faixa de Atraso Medio (dias)',
+                { formatterType: 'number' }
+            ), 50);
+        }
+
+        // Tabela "Atrasou pela 1a vez"
+        const primeiraSection = document.getElementById('pf-primeira-vez-section');
+        const primeiraTable   = document.getElementById('pf-primeira-table');
+        if (primeiraTable) {
+            if (!data.primeira_vez || data.primeira_vez.length === 0) {
+                if (primeiraSection) primeiraSection.style.display = 'none';
+            } else {
+                if (primeiraSection) primeiraSection.style.display = '';
+                primeiraTable.innerHTML = `
+                  <div class="overflow-x-auto">
+                  <table class="min-w-full text-xs">
+                    <thead><tr class="text-red-700">
+                      <th class="px-2 py-1 text-left">Contrato</th>
+                      <th class="px-2 py-1 text-left">Cliente</th>
+                      <th class="px-2 py-1 text-left">Cidade</th>
+                      <th class="px-2 py-1 text-right">Faturas Vencidas</th>
+                      <th class="px-2 py-1 text-right">Total Pagas</th>
+                    </tr></thead>
+                    <tbody class="divide-y divide-red-100">
+                      ${data.primeira_vez.slice(0, 30).map(r => `
+                        <tr class="cursor-pointer hover:bg-red-100" data-contrato="${r.contrato}" title="Clique para ver detalhes">
+                          <td class="px-2 py-1">${r.contrato}</td>
+                          <td class="px-2 py-1">${r.cliente}</td>
+                          <td class="px-2 py-1">${r.cidade || '-'}</td>
+                          <td class="px-2 py-1 text-right font-semibold text-red-600">${r.fat_vencidas_hoje}</td>
+                          <td class="px-2 py-1 text-right">${r.total_pagas}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                  </table>
+                  </div>`;
+            }
+        }
+
+        // Tabela geral paginada
+        const tbody = document.getElementById('pf-table-body');
+        if (tbody) {
+            const perfilBadge = p => {
+                const cls = {
+                    'Nunca atrasou':         'bg-green-100 text-green-800',
+                    'Raramente atrasa':      'bg-green-50 text-green-700',
+                    'Atrasa com frequência': 'bg-orange-100 text-orange-800',
+                    'Sempre atrasa':         'bg-red-100 text-red-800',
+                    'Atrasou pela 1ª vez':   'bg-red-200 text-red-900 font-bold',
+                    'Sem histórico':         'bg-gray-100 text-gray-600',
+                }[p] || 'bg-gray-100 text-gray-600';
+                return `<span class="px-2 py-0.5 rounded-full text-xs ${cls}">${p}</span>`;
+            };
+            tbody.innerHTML = (data.data || []).map(r => `
+              <tr class="hover:bg-gray-50 cursor-pointer" data-contrato="${r.contrato}" title="Clique para ver detalhes">
+                <td class="px-3 py-2">${r.contrato}</td>
+                <td class="px-3 py-2">${r.cliente}</td>
+                <td class="px-3 py-2">${r.cidade || '-'}</td>
+                <td class="px-3 py-2 text-center">${perfilBadge(r.perfil)}</td>
+                <td class="px-3 py-2 text-right">${r.total_pagas}</td>
+                <td class="px-3 py-2 text-right">${r.total_atrasos}</td>
+                <td class="px-3 py-2 text-right">${r.pct_atraso}%</td>
+                <td class="px-3 py-2 text-right">${r.media_atraso_dias > 0 ? r.media_atraso_dias + ' d' : '-'}</td>
+                <td class="px-3 py-2 text-right ${r.fat_vencidas_hoje > 0 ? 'text-red-600 font-semibold' : ''}">${r.fat_vencidas_hoje || '-'}</td>
+              </tr>`).join('');
+        }
+
+        // Pagination
+        const total   = data.total_rows || 0;
+        const info    = document.getElementById('pf-pagination-info');
+        const prevBtn = document.getElementById('pf-prev');
+        const nextBtn = document.getElementById('pf-next');
+        if (info)    info.textContent = `${_pfPage * PAGE_SIZE + 1}–${Math.min((_pfPage + 1) * PAGE_SIZE, total)} de ${total}`;
+        if (prevBtn) prevBtn.disabled = _pfPage === 0;
+        if (nextBtn) nextBtn.disabled = (_pfPage + 1) * PAGE_SIZE >= total;
+    }
+
+    // Wire events
+    pane.querySelector('#pf-filter-btn').addEventListener('click', () => {
+        _pfFilters.city   = document.getElementById('pf-city').value;
+        _pfFilters.perfil = document.getElementById('pf-perfil').value;
+        _pfPage = 0;
+        _loadPf();
+    });
+    pane.querySelector('#pf-prev').addEventListener('click', () => { if (_pfPage > 0) { _pfPage--; _loadPf(); } });
+    pane.querySelector('#pf-next').addEventListener('click', () => { _pfPage++; _loadPf(); });
+
+    // Delegated click → modal de detalhes
+    pane.addEventListener('click', (e) => {
+        const tr = e.target.closest('tr[data-contrato]');
+        if (tr && typeof showClientDetail === 'function') showClientDetail(tr.dataset.contrato);
+    });
+
+    _loadPf();
+}
+
+async function fetchPerfilPagamentoData(queryString) {
+    try {
+        const res = await fetch(`/api/behavior/payment_profile?${queryString}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+    } catch (err) {
+        console.error('Erro ao buscar payment_profile:', err);
+        return null;
+    }
 }
