@@ -15,33 +15,61 @@ document.addEventListener('DOMContentLoaded', () => {
     const user = window._currentUser;
     if (!user || user.is_admin || user.permissions === null) return;
     const perms = user.permissions;
+
+    const hasDashboard  = perms.includes('dashboard');
+    const hasBehavior   = perms.includes('behavior');
+    const hasOtherMods  = ['cashflow','dre','dre2','crescimento'].some(m => perms.includes(m));
+    const behaviorOnly  = hasBehavior && !hasDashboard && !hasOtherMods;
+
+    // --- Botões de módulo (Cashflow, DRE, Gestão, Crescimento) ---
     const moduleMap = { cashflow: 'btnCashflow', dre: 'btnDRE', dre2: 'btnDRE2', crescimento: 'btnCrescimento' };
     Object.entries(moduleMap).forEach(([mod, id]) => {
         const btn = document.getElementById(id);
         if (btn && !perms.includes(mod)) btn.style.display = 'none';
     });
-    if (!perms.includes('dashboard')) {
+
+    // --- Botões operacionais (Clientes, OS, Logins, etc.) ---
+    if (!hasDashboard) {
         document.querySelectorAll('.collection-selector button').forEach(btn => {
-            if (!['btnCashflow','btnDRE','btnDRE2','btnCrescimento','saveLayoutBtn'].includes(btn.id))
+            if (!['btnCashflow','btnDRE','btnDRE2','btnCrescimento'].includes(btn.id))
                 btn.style.display = 'none';
         });
-        const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
-        if (selWrap) selWrap.style.display = 'none';
     }
+
     // --- Análise de Comportamento ---
-    if (!perms.includes('behavior')) {
+    if (!hasBehavior) {
+        // Esconde a opção no seletor
         const opt = document.getElementById('behaviorAnalysisOption');
-        if (opt) opt.style.display = 'none';
+        if (opt) opt.remove();
+        // Se também sem dashboard, esconde o wrapper do seletor
+        if (!hasDashboard) {
+            const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
+            if (selWrap) selWrap.style.display = 'none';
+        }
     } else {
-        // Filtra abas específicas se houver behavior:tab_name
+        // Filtra abas específicas (behavior:tab_name)
         const btabPerms = perms.filter(p => p.startsWith('behavior:'));
         if (btabPerms.length > 0) {
             document.querySelectorAll('#behavior-analysis-tabs .tab-link').forEach(link => {
                 const tab = link.dataset.tab;
-                if (tab && !perms.includes('behavior:' + tab)) {
-                    link.style.display = 'none';
-                }
+                if (tab && !perms.includes('behavior:' + tab)) link.style.display = 'none';
             });
+        }
+
+        // Usuário SÓ behavior → auto-abre e esconde tudo mais
+        if (behaviorOnly) {
+            // Esconde o seletor de análises (não precisa escolher, já vai direto)
+            const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
+            if (selWrap) selWrap.style.display = 'none';
+
+            // Navega automaticamente para Análise de Comportamento
+            setTimeout(() => {
+                const sel = document.getElementById('customAnalysisSelector');
+                if (sel) {
+                    sel.value = 'analise_comportamento';
+                    sel.dispatchEvent(new Event('change'));
+                }
+            }, 150);
         }
     }
 });
