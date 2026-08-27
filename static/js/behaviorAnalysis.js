@@ -2363,8 +2363,8 @@ async function fetchMotivosCancData() {
             const k = data.kpis || {};
             kpiRow.innerHTML = `
                 <div class="summary-card" style="border-left:4px solid #ef4444;">
-                    <div class="summary-card-title">Total Cancelamentos</div>
-                    <div class="summary-card-value" style="color:#ef4444;">${(k.total || 0).toLocaleString('pt-BR')}</div>
+                    <div class="summary-card-title">Com Motivo Registrado</div>
+                    <div class="summary-card-value" style="color:#ef4444;">${(k.com_motivo || 0).toLocaleString('pt-BR')}</div>
                 </div>
                 <div class="summary-card" style="border-left:4px solid #6b7280;">
                     <div class="summary-card-title">Sem Motivo Registrado</div>
@@ -2375,7 +2375,7 @@ async function fetchMotivosCancData() {
                     <div class="summary-card-value" style="color:#f97316;font-size:0.95rem;">${k.top_motivo || '-'}</div>
                 </div>
                 <div class="summary-card" style="border-left:4px solid #7c3aed;">
-                    <div class="summary-card-title">Permanência Média</div>
+                    <div class="summary-card-title">Permanência Média (Real Paga)</div>
                     <div class="summary-card-value" style="color:#7c3aed;">${(k.avg_permanencia || 0).toFixed(1)} meses</div>
                 </div>
             `;
@@ -2400,7 +2400,7 @@ async function fetchMotivosCancData() {
             return `rgb(30,${v},220)`;
         });
         grid.addWidget({ w: 5, h: 8, x: 7, y: 0, content: `<div style="padding:8px;height:100%;box-sizing:border-box;"><canvas id="chart-motivos-tempo"></canvas></div>` });
-        setTimeout(() => renderChart('chart-motivos-tempo', 'bar_horizontal', motLabels, [{ label: 'Meses Médios', data: avgMeses, backgroundColor: blueShades }], 'Tempo Médio até Cancelar por Motivo', {}), 50);
+        setTimeout(() => renderChart('chart-motivos-tempo', 'bar_horizontal', motLabels, [{ label: 'Meses Médios', data: avgMeses, backgroundColor: blueShades }], 'Permanência Real Paga por Motivo (meses)', { formatterType: 'number' }), 50);
 
         // Chart 3: Tendência Anual por Motivo (line)
         // Build map: { ano: { label: total } }

@@ -2047,28 +2047,54 @@ def api_behavior_canc_reasons():
         }
 
         kpi_row = conn.execute("""
+            WITH PaidMonths AS (
+                SELECT CR.ID_Contrato_Recorrente,
+                       SUM(CASE WHEN CR.Data_pagamento IS NOT NULL AND CR.Data_pagamento != ''
+                                THEN 1 ELSE 0 END) AS Meses_Pagos
+                FROM Contas_a_Receber CR
+                INNER JOIN Contratos C2 ON CR.ID_Contrato_Recorrente = C2.ID
+                WHERE C2.Data_cancelamento IS NOT NULL AND C2.Data_cancelamento != ''
+                GROUP BY CR.ID_Contrato_Recorrente
+            )
             SELECT
-                COUNT(*) AS total,
-                SUM(CASE WHEN Motivo_cancelamento IS NULL
-                              OR TRIM(Motivo_cancelamento) = ''
-                              OR CAST(Motivo_cancelamento AS INTEGER) = 0
+                COUNT(C.ID) AS total,
+                SUM(CASE WHEN C.Motivo_cancelamento IS NULL
+                              OR TRIM(C.Motivo_cancelamento) = ''
+                              OR CAST(C.Motivo_cancelamento AS INTEGER) = 0
                          THEN 1 ELSE 0 END) AS sem_motivo,
-                AVG((JULIANDAY(Data_cancelamento) - JULIANDAY(Data_ativa_o)) / 30.0) AS avg_permanencia
-            FROM Contratos
-            WHERE Data_cancelamento IS NOT NULL AND Data_cancelamento != ''
+                AVG(CASE WHEN C.Motivo_cancelamento IS NOT NULL
+                              AND TRIM(C.Motivo_cancelamento) != ''
+                              AND CAST(C.Motivo_cancelamento AS INTEGER) != 0
+                         THEN COALESCE(PM.Meses_Pagos, 0) END) AS avg_permanencia
+            FROM Contratos C
+            LEFT JOIN PaidMonths PM ON PM.ID_Contrato_Recorrente = C.ID
+            WHERE C.Data_cancelamento IS NOT NULL AND C.Data_cancelamento != ''
         """).fetchone()
 
         motivo_rows = conn.execute("""
+            WITH PaidMonths AS (
+                SELECT CR.ID_Contrato_Recorrente,
+                       SUM(CASE WHEN CR.Data_pagamento IS NOT NULL AND CR.Data_pagamento != ''
+                                THEN 1 ELSE 0 END) AS Meses_Pagos
+                FROM Contas_a_Receber CR
+                INNER JOIN Contratos C2 ON CR.ID_Contrato_Recorrente = C2.ID
+                WHERE C2.Data_cancelamento IS NOT NULL AND C2.Data_cancelamento != ''
+                  AND C2.Motivo_cancelamento IS NOT NULL
+                  AND TRIM(C2.Motivo_cancelamento) != ''
+                  AND CAST(C2.Motivo_cancelamento AS INTEGER) != 0
+                GROUP BY CR.ID_Contrato_Recorrente
+            )
             SELECT
-                CAST(Motivo_cancelamento AS INTEGER) AS motivo_id,
+                CAST(C.Motivo_cancelamento AS INTEGER) AS motivo_id,
                 COUNT(*) AS total,
-                AVG((JULIANDAY(Data_cancelamento) - JULIANDAY(Data_ativa_o)) / 30.0) AS avg_meses
-            FROM Contratos
-            WHERE Data_cancelamento IS NOT NULL AND Data_cancelamento != ''
-              AND Motivo_cancelamento IS NOT NULL
-              AND TRIM(Motivo_cancelamento) != ''
-              AND CAST(Motivo_cancelamento AS INTEGER) != 0
-            GROUP BY Motivo_cancelamento
+                AVG(COALESCE(PM.Meses_Pagos, 0)) AS avg_meses
+            FROM Contratos C
+            LEFT JOIN PaidMonths PM ON PM.ID_Contrato_Recorrente = C.ID
+            WHERE C.Data_cancelamento IS NOT NULL AND C.Data_cancelamento != ''
+              AND C.Motivo_cancelamento IS NOT NULL
+              AND TRIM(C.Motivo_cancelamento) != ''
+              AND CAST(C.Motivo_cancelamento AS INTEGER) != 0
+            GROUP BY C.Motivo_cancelamento
             ORDER BY total DESC
         """).fetchall()
 
@@ -2120,10 +2146,15 @@ def api_behavior_canc_reasons():
                     "total": r['total'],
                 })
 
+        total_geral  = kpi_row['total'] or 0
+        sem_motivo   = kpi_row['sem_motivo'] or 0
+        com_motivo   = total_geral - sem_motivo
+
         return jsonify({
             "kpis": {
-                "total":           kpi_row['total'],
-                "sem_motivo":      kpi_row['sem_motivo'],
+                "total":           total_geral,
+                "com_motivo":      com_motivo,
+                "sem_motivo":      sem_motivo,
                 "top_motivo":      top_motivo or '',
                 "avg_permanencia": round(kpi_row['avg_permanencia'] or 0, 1),
             },
