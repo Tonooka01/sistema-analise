@@ -11,7 +11,8 @@ import { populateContractStatusFilters } from './customAnalysisTables.js';
  * Inicializa a primeira aba da Análise de Comportamento.
  */
 export function initializeBehaviorAnalysis() {
-    const firstTab = dom.behaviorAnalysisTabs?.querySelector('.tab-link');
+    const allTabs = dom.behaviorAnalysisTabs?.querySelectorAll('.tab-link') || [];
+    const firstTab = Array.from(allTabs).find(t => t.style.display !== 'none');
     if (firstTab) {
         handleBehaviorTabChange(firstTab.dataset.tab);
     } else {

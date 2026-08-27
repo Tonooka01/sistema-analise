@@ -58,9 +58,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Usuário SÓ behavior → auto-abre e esconde tudo mais
         if (behaviorOnly) {
-            // Esconde o seletor de análises (não precisa escolher, já vai direto)
+            // Esconde seletor e conteúdo de contratos imediatamente (não espera 150ms)
             const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
             if (selWrap) selWrap.style.display = 'none';
+            const dashContent = document.getElementById('dashboard-content');
+            if (dashContent) dashContent.classList.add('hidden');
+            const mainCharts = document.getElementById('main-charts-area');
+            if (mainCharts) mainCharts.classList.add('hidden');
 
             // Navega automaticamente para Análise de Comportamento
             setTimeout(() => {
