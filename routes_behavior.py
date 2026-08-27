@@ -168,6 +168,7 @@ def api_behavior_churn_pattern():
                   AND Data_cancelamento IS NOT NULL
                   AND Data_cancelamento != ''
                   {city_sql}
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
                 {neg_union}
             )
         """
@@ -329,6 +330,9 @@ def api_behavior_predictive_churn():
         active_conds = [
             "Status_contrato = 'Ativo'",
             "Status_acesso != 'Desativado'",
+            "Cidade IS NOT NULL",
+            "TRIM(Cidade) != ''",
+            "NOT (Cidade GLOB '[0-9]*')",
         ]
         active_p = []
         if status_acesso:
@@ -506,6 +510,9 @@ def api_behavior_predictive_churn_export():
         active_conds = [
             "Status_contrato = 'Ativo'",
             "Status_acesso != 'Desativado'",
+            "Cidade IS NOT NULL",
+            "TRIM(Cidade) != ''",
+            "NOT (Cidade GLOB '[0-9]*')",
         ]
         active_p = []
         if status_acesso:
@@ -705,6 +712,7 @@ def api_behavior_churn_clients():
                   AND Data_cancelamento IS NOT NULL
                   AND Data_cancelamento != ''
                   {city_sql}
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
                 {neg_union}
             )
         """
@@ -835,6 +843,7 @@ def api_behavior_qos_overview():
             JOIN Logins L ON CF.Nome = L.Login
             JOIN Contratos C ON CAST(L.ID_contrato AS INTEGER) = C.ID
             WHERE C.Status_contrato = 'Ativo'
+              AND C.Cidade IS NOT NULL AND TRIM(C.Cidade) != '' AND NOT (C.Cidade GLOB '[0-9]*')
         """
 
         signal_sql = f"""
@@ -888,7 +897,7 @@ def api_behavior_qos_overview():
         quota_pct       = round(100 * quota_atingiram / quota_total, 1) if quota_total > 0 else 0
 
         cities_data = conn.execute(
-            "SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' AND Status_contrato = 'Ativo' ORDER BY Cidade"
+            "SELECT DISTINCT Cidade FROM Contratos WHERE Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*') AND Status_contrato = 'Ativo' ORDER BY Cidade"
         ).fetchall()
 
         return jsonify({
@@ -920,7 +929,8 @@ def api_behavior_signal_clients():
         cause = request.args.get('cause', '').strip()
         city  = request.args.get('city',  '').strip()
 
-        filters = ["C.Status_contrato = 'Ativo'", "CF.Sinal_RX IS NOT NULL"]
+        filters = ["C.Status_contrato = 'Ativo'", "CF.Sinal_RX IS NOT NULL",
+                   "C.Cidade IS NOT NULL", "TRIM(C.Cidade) != ''", "NOT (C.Cidade GLOB '[0-9]*')"]
         params  = []
 
         if city:  filters.append("C.Cidade = ?");             params.append(city)
@@ -1167,6 +1177,7 @@ def api_behavior_financial_behavior():
             WITH ActiveContracts AS (
                 SELECT ID, Cidade FROM Contratos
                 WHERE Status_contrato = 'Ativo' {city_cond}
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
             )
             SELECT
                 CASE
@@ -1190,6 +1201,7 @@ def api_behavior_financial_behavior():
             WITH ActiveContracts AS (
                 SELECT ID, Cidade FROM Contratos
                 WHERE Status_contrato = 'Ativo' {city_cond}
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
             )
             SELECT AC.Cidade AS cidade,
                    ROUND(SUM(CAST(CR.Valor AS FLOAT)), 2) AS valor_vencido,
@@ -1205,6 +1217,7 @@ def api_behavior_financial_behavior():
             WITH ActiveContracts AS (
                 SELECT ID, Cidade FROM Contratos
                 WHERE Status_contrato = 'Ativo' {city_cond}
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
             ),
             DaysLate AS (
                 SELECT CR.ID_Contrato_Recorrente,
@@ -1259,6 +1272,7 @@ def api_behavior_financial_behavior():
             WITH ActiveContracts AS (
                 SELECT ID, Cidade FROM Contratos
                 WHERE Status_contrato = 'Ativo' {city_cond}
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
             )
             SELECT ROUND(AVG(JULIANDAY(CR.Data_pagamento) - JULIANDAY(CR.Vencimento)), 1) AS media_atraso
             FROM Contas_a_Receber CR
@@ -1273,6 +1287,7 @@ def api_behavior_financial_behavior():
             WITH ActiveContracts AS (
                 SELECT ID, Cidade FROM Contratos
                 WHERE Status_contrato = 'Ativo' {city_cond}
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
             )
             SELECT COUNT(*) AS cnt FROM (
                 SELECT CR.ID_Contrato_Recorrente
@@ -1288,6 +1303,7 @@ def api_behavior_financial_behavior():
             SELECT DISTINCT Cidade FROM Contratos
             WHERE Status_contrato = 'Ativo'
               AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+              AND NOT (Cidade GLOB '[0-9]*')
             ORDER BY Cidade
         """
 
@@ -1368,6 +1384,7 @@ def api_behavior_connection_inactivity():
               AND Logins.ltima_conex_o_final IS NOT NULL
               AND Logins.ltima_conex_o_final != ''
               {city_sql}
+              AND Contratos.Cidade IS NOT NULL AND TRIM(Contratos.Cidade) != '' AND NOT (Contratos.Cidade GLOB '[0-9]*')
         """
         rows = conn.execute(query, tuple(city_p)).fetchall()
 
@@ -1423,6 +1440,7 @@ def api_behavior_connection_inactivity():
             SELECT DISTINCT Cidade FROM Contratos
             WHERE Status_contrato = 'Ativo'
               AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+              AND NOT (Cidade GLOB '[0-9]*')
             ORDER BY Cidade
         """).fetchall()
 
@@ -1458,6 +1476,7 @@ def api_behavior_cancellation_seasonality():
             WHERE Data_cancelamento IS NOT NULL
               AND Data_cancelamento != ''
               {city_sql}
+              AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
         """
 
         month_sql = f"""
@@ -1492,6 +1511,7 @@ def api_behavior_cancellation_seasonality():
             WHERE Data_cancelamento IS NOT NULL AND Data_cancelamento != ''
               AND Data_ativa_o IS NOT NULL AND Data_ativa_o != ''
               {city_sql}
+              AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
             GROUP BY faixa
         """
 
@@ -1502,12 +1522,14 @@ def api_behavior_cancellation_seasonality():
             WHERE Data_cancelamento IS NOT NULL AND Data_cancelamento != ''
               AND Data_ativa_o IS NOT NULL AND Data_ativa_o != ''
               {city_sql}
+              AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
         """
 
         cities_sql = """
             SELECT DISTINCT Cidade FROM Contratos
             WHERE Data_cancelamento IS NOT NULL AND Data_cancelamento != ''
               AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+              AND NOT (Cidade GLOB '[0-9]*')
             ORDER BY Cidade
         """
 
@@ -1614,6 +1636,7 @@ def api_behavior_signal_causes():
             SELECT DISTINCT Cidade FROM Contratos
             WHERE Status_contrato = 'Ativo'
               AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
+              AND NOT (Cidade GLOB '[0-9]*')
             ORDER BY Cidade
         """
 
@@ -1690,6 +1713,7 @@ def api_behavior_contact_list():
                 WHERE Status_contrato = 'Ativo'
                   AND Status_acesso != 'Desativado'
                   {city_cond}
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
             ),
             PaymentProfile AS (
                 SELECT
@@ -1857,6 +1881,7 @@ def api_behavior_action_alerts():
                 WHERE Status_contrato = 'Ativo'
                   AND Status_acesso != 'Desativado'
                   {city_cond}
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
             ),
             PaymentProfile AS (
                 SELECT
@@ -2054,6 +2079,7 @@ def api_behavior_canc_reasons():
                 FROM Contas_a_Receber CR
                 INNER JOIN Contratos C2 ON CR.ID_Contrato_Recorrente = C2.ID
                 WHERE C2.Data_cancelamento IS NOT NULL AND C2.Data_cancelamento != ''
+                  AND C2.Cidade IS NOT NULL AND TRIM(C2.Cidade) != '' AND NOT (C2.Cidade GLOB '[0-9]*')
                 GROUP BY CR.ID_Contrato_Recorrente
             )
             SELECT
@@ -2069,6 +2095,7 @@ def api_behavior_canc_reasons():
             FROM Contratos C
             LEFT JOIN PaidMonths PM ON PM.ID_Contrato_Recorrente = C.ID
             WHERE C.Data_cancelamento IS NOT NULL AND C.Data_cancelamento != ''
+              AND C.Cidade IS NOT NULL AND TRIM(C.Cidade) != '' AND NOT (C.Cidade GLOB '[0-9]*')
         """).fetchone()
 
         motivo_rows = conn.execute("""
@@ -2082,6 +2109,7 @@ def api_behavior_canc_reasons():
                   AND C2.Motivo_cancelamento IS NOT NULL
                   AND TRIM(C2.Motivo_cancelamento) != ''
                   AND CAST(C2.Motivo_cancelamento AS INTEGER) != 0
+                  AND C2.Cidade IS NOT NULL AND TRIM(C2.Cidade) != '' AND NOT (C2.Cidade GLOB '[0-9]*')
                 GROUP BY CR.ID_Contrato_Recorrente
             )
             SELECT
@@ -2094,6 +2122,7 @@ def api_behavior_canc_reasons():
               AND C.Motivo_cancelamento IS NOT NULL
               AND TRIM(C.Motivo_cancelamento) != ''
               AND CAST(C.Motivo_cancelamento AS INTEGER) != 0
+              AND C.Cidade IS NOT NULL AND TRIM(C.Cidade) != '' AND NOT (C.Cidade GLOB '[0-9]*')
             GROUP BY C.Motivo_cancelamento
             ORDER BY total DESC
         """).fetchall()
@@ -2134,6 +2163,7 @@ def api_behavior_canc_reasons():
                   AND Motivo_cancelamento IS NOT NULL
                   AND TRIM(Motivo_cancelamento) != ''
                   AND CAST(Motivo_cancelamento AS INTEGER) IN ({placeholders})
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
                 GROUP BY ano, Motivo_cancelamento
                 ORDER BY ano, total DESC
             """, top5_ids).fetchall()
@@ -2177,7 +2207,14 @@ def api_behavior_canc_reasons():
 def api_behavior_pre_canc_behavior():
     conn = get_db()
     try:
-        kpi_row = conn.execute("""
+        # Filtro para excluir cidades nulas, vazias ou com valores numéricos (dados inválidos)
+        VALID_CITY = """
+            c.Cidade IS NOT NULL
+            AND TRIM(c.Cidade) != ''
+            AND NOT (c.Cidade GLOB '[0-9]*')
+        """
+
+        kpi_row = conn.execute(f"""
             SELECT
                 COUNT(*) AS total_cancelled,
                 SUM(CASE WHEN pp.fat_vencidas > 0 THEN 1 ELSE 0 END) AS had_overdue,
@@ -2198,9 +2235,10 @@ def api_behavior_pre_canc_behavior():
             ) att ON c.Cliente = att.Cliente
             WHERE c.Data_cancelamento IS NOT NULL AND c.Data_cancelamento != ''
               AND c.Data_ativa_o IS NOT NULL AND c.Data_ativa_o != ''
+              AND {VALID_CITY}
         """).fetchone()
 
-        sinais_rows = conn.execute("""
+        sinais_rows = conn.execute(f"""
             SELECT
                 (CASE WHEN pp.fat_vencidas > 0 THEN 1 ELSE 0 END) +
                 (CASE WHEN att.cnt > 0 THEN 1 ELSE 0 END) AS num_sinais,
@@ -2220,11 +2258,12 @@ def api_behavior_pre_canc_behavior():
             ) att ON c.Cliente = att.Cliente
             WHERE c.Data_cancelamento IS NOT NULL AND c.Data_cancelamento != ''
               AND c.Data_ativa_o IS NOT NULL AND c.Data_ativa_o != ''
+              AND {VALID_CITY}
             GROUP BY num_sinais
             ORDER BY num_sinais
         """).fetchall()
 
-        perm_rows = conn.execute("""
+        perm_rows = conn.execute(f"""
             SELECT faixa, COUNT(*) AS total
             FROM (
                 SELECT
@@ -2237,11 +2276,12 @@ def api_behavior_pre_canc_behavior():
                     END AS faixa,
                     months
                 FROM (
-                    SELECT CAST((JULIANDAY(Data_cancelamento) - JULIANDAY(Data_ativa_o)) / 30.44
+                    SELECT CAST((JULIANDAY(c.Data_cancelamento) - JULIANDAY(c.Data_ativa_o)) / 30.44
                                 AS INTEGER) AS months
-                    FROM Contratos
-                    WHERE Data_cancelamento IS NOT NULL AND Data_cancelamento != ''
-                      AND Data_ativa_o IS NOT NULL AND Data_ativa_o != ''
+                    FROM Contratos c
+                    WHERE c.Data_cancelamento IS NOT NULL AND c.Data_cancelamento != ''
+                      AND c.Data_ativa_o IS NOT NULL AND c.Data_ativa_o != ''
+                      AND {VALID_CITY}
                 )
             )
             GROUP BY faixa
@@ -2373,6 +2413,7 @@ def api_behavior_lifecycle_risk():
                 LEFT JOIN ConnectionStatus CS ON C.ID = CS.ID_contrato
                 WHERE C.Status_contrato = 'Ativo' AND C.Status_acesso != 'Desativado'
                   AND C.Data_ativa_o IS NOT NULL AND C.Data_ativa_o != ''
+                  AND C.Cidade IS NOT NULL AND TRIM(C.Cidade) != '' AND NOT (C.Cidade GLOB '[0-9]*')
             ) sub
             GROUP BY faixa
             ORDER BY MIN(age_months)
@@ -2396,6 +2437,7 @@ def api_behavior_lifecycle_risk():
                     FROM Contratos
                     WHERE Data_cancelamento IS NOT NULL AND Data_cancelamento != ''
                       AND Data_ativa_o IS NOT NULL AND Data_ativa_o != ''
+                      AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
                 )
             )
             GROUP BY faixa
@@ -2473,6 +2515,7 @@ def api_behavior_plan_risk():
                     END) AS avg_meses_ate_cancel
             FROM Contratos
             WHERE Descri_o IS NOT NULL AND Descri_o != ''
+              AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
             GROUP BY plano
             HAVING (ativos + cancelados) > 10
             ORDER BY cancelados DESC
@@ -2550,6 +2593,7 @@ def api_behavior_payment_profile():
                 WHERE Status_contrato = 'Ativo'
                   AND Status_acesso != 'Desativado'
                   {city_cond}
+                  AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
             ),
             PaymentHistory AS (
                 SELECT
