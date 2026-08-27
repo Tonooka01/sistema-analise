@@ -18,11 +18,19 @@ function initializeApp() {
     initializeGridStack();
     initializeEventListeners();
     
-    // Agora dom.btnContratos não será 'null'
-    const defaultButton = dom.btnContratos; 
-    if (defaultButton) {
-        setActiveControl(defaultButton);
-        fetchAndRenderMainAnalysis('Contratos');
+    // Usuário behavior-only não precisa carregar Contratos por padrão
+    const _cu = window._currentUser;
+    const _p = _cu && !_cu.is_admin && _cu.permissions;
+    const _behaviorOnly = _p && _p.includes('behavior') &&
+        !_p.includes('dashboard') &&
+        !['cashflow','dre','dre2','crescimento'].some(m => _p.includes(m));
+
+    if (!_behaviorOnly) {
+        const defaultButton = dom.btnContratos;
+        if (defaultButton) {
+            setActiveControl(defaultButton);
+            fetchAndRenderMainAnalysis('Contratos');
+        }
     }
     
     setupResponsiveGridStack();
