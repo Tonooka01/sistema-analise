@@ -3075,6 +3075,8 @@ function _renderAcompTable() {
     const pgDiv = document.getElementById('acomp-pagination');
     if (!wrap) return;
 
+    const isAdmin = window._currentUser?.is_admin || window._currentUser?.username === 'admin';
+
     const total = _acompData.length;
     const pages = Math.max(1, Math.ceil(total / _ACOMP_PAGE_SIZE));
     if (_acompPage > pages) _acompPage = pages;
@@ -3097,6 +3099,13 @@ function _renderAcompTable() {
 
     const esc = s => (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+    const acoesHeader = isAdmin ? '<th class="px-3 py-2 border-b border-gray-200">Ações</th>' : '';
+    const acoesCell = (r) => isAdmin ? `
+        <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">
+          <button onclick="_acompEdit(${r.id})" class="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 mr-1">Editar</button>
+          <button onclick="_acompDelete(${r.id})" class="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 border border-red-200">Excluir</button>
+        </td>` : '';
+
     wrap.innerHTML = `
     <table class="w-full text-sm border-collapse">
       <thead>
@@ -3111,11 +3120,12 @@ function _renderAcompTable() {
           <th class="px-3 py-2 border-b border-gray-200">Retorno</th>
           <th class="px-3 py-2 border-b border-gray-200">Snooze</th>
           <th class="px-3 py-2 border-b border-gray-200">Usuário</th>
+          ${acoesHeader}
         </tr>
       </thead>
-      <tbody>
+      <tbody id="acomp-tbody">
         ${slice.map((r, i) => `
-        <tr class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50">
+        <tr id="acomp-row-${r.id}" class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50">
           <td class="px-3 py-2 border-b border-gray-100 font-mono text-blue-700">${esc(r.contrato_id)}</td>
           <td class="px-3 py-2 border-b border-gray-100">${esc(r.cliente)}</td>
           <td class="px-3 py-2 border-b border-gray-100">${esc(r.cidade)}</td>
@@ -3126,6 +3136,7 @@ function _renderAcompTable() {
           <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">${esc(r.data_retorno||'–')}</td>
           <td class="px-3 py-2 border-b border-gray-100">${statusBadge(r)}</td>
           <td class="px-3 py-2 border-b border-gray-100">${esc(r.usuario)}</td>
+          ${acoesCell(r)}
         </tr>`).join('')}
       </tbody>
     </table>
@@ -3156,3 +3167,80 @@ function _renderAcompTable() {
         }
     }
 }
+
+window._acompEdit = function(id) {
+    const r = _acompData.find(x => x.id === id);
+    if (!r) return;
+
+    const row = document.getElementById(`acomp-row-${id}`);
+    if (!row) return;
+
+    const tipoOpts = ['ligacao','whatsapp','visita','email']
+        .map(v => `<option value="${v}"${r.tipo_acao===v?' selected':''}>${v}</option>`).join('');
+    const resOpts = ['retido','nao_atendeu','cancelou','pendente','resolvido']
+        .map(v => `<option value="${v}"${r.resultado===v?' selected':''}>${v}</option>`).join('');
+
+    const cols = row.children.length;
+    row.innerHTML = `
+      <td colspan="${cols}" class="px-3 py-3 border-b border-blue-200 bg-blue-50">
+        <div class="flex flex-wrap gap-2 items-end">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Tipo Ação</label>
+            <select id="ae-tipo" class="border rounded px-2 py-1 text-sm">${tipoOpts}</select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Resultado</label>
+            <select id="ae-resultado" class="border rounded px-2 py-1 text-sm">${resOpts}</select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Data Retorno</label>
+            <input id="ae-retorno" type="date" value="${r.data_retorno||''}" class="border rounded px-2 py-1 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Snooze até</label>
+            <input id="ae-snooze" type="date" value="${r.snooze_ate||''}" class="border rounded px-2 py-1 text-sm">
+          </div>
+          <div style="flex:1;min-width:180px;">
+            <label class="block text-xs text-gray-500 mb-1">Observação</label>
+            <input id="ae-obs" type="text" value="${(r.observacao||'').replace(/"/g,'&quot;')}" class="border rounded px-2 py-1 text-sm w-full">
+          </div>
+          <button onclick="_acompEditSave(${id})" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded">Salvar</button>
+          <button onclick="_loadAcompanhamento()" class="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded">Cancelar</button>
+        </div>
+      </td>`;
+};
+
+window._acompEditSave = async function(id) {
+    const body = {
+        tipo_acao:    document.getElementById('ae-tipo')?.value      || '',
+        resultado:    document.getElementById('ae-resultado')?.value || '',
+        observacao:   document.getElementById('ae-obs')?.value       || '',
+        data_retorno: document.getElementById('ae-retorno')?.value   || '',
+        snooze_ate:   document.getElementById('ae-snooze')?.value    || '',
+    };
+    try {
+        const res = await fetch(`/api/behavior/acompanhamento/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Erro ao salvar'); return; }
+        await _loadAcompanhamento();
+    } catch (err) {
+        alert('Erro ao salvar: ' + err.message);
+    }
+};
+
+window._acompDelete = async function(id) {
+    if (!confirm('Excluir este registro de acompanhamento?')) return;
+    try {
+        const res = await fetch(`/api/behavior/acompanhamento/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Erro ao excluir'); return; }
+        _acompData = _acompData.filter(r => r.id !== id);
+        _renderAcompTable();
+    } catch (err) {
+        alert('Erro ao excluir: ' + err.message);
+    }
+};

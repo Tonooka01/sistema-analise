@@ -3085,3 +3085,71 @@ def api_behavior_acompanhamento_all():
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Route: PUT /api/behavior/acompanhamento/<int:record_id>  (admin only)
+# ---------------------------------------------------------------------------
+@behavior_bp.route('/acompanhamento/<int:record_id>', methods=['PUT'])
+def api_behavior_acompanhamento_put(record_id):
+    if not current_user.is_authenticated:
+        return jsonify({"error": "Não autenticado"}), 401
+    if current_user.username != 'admin':
+        return jsonify({"error": "Apenas administradores podem editar registros"}), 403
+
+    conn = get_db()
+    try:
+        _ensure_acompanhamento_table(conn)
+        data         = request.get_json(force=True)
+        tipo_acao    = (data.get('tipo_acao')    or '').strip()
+        resultado    = (data.get('resultado')    or '').strip() or None
+        observacao   = (data.get('observacao')   or '').strip() or None
+        data_retorno = (data.get('data_retorno') or '').strip() or None
+        snooze_ate   = (data.get('snooze_ate')   or '').strip() or None
+
+        if not tipo_acao:
+            return jsonify({"error": "tipo_acao é obrigatório"}), 400
+
+        conn.execute("""
+            UPDATE Acompanhamento_Clientes
+               SET tipo_acao    = ?,
+                   resultado    = ?,
+                   observacao   = ?,
+                   data_retorno = ?,
+                   snooze_ate   = ?
+             WHERE id = ?
+        """, (tipo_acao, resultado, observacao, data_retorno, snooze_ate, record_id))
+        conn.commit()
+
+        if conn.execute("SELECT changes()").fetchone()[0] == 0:
+            return jsonify({"error": "Registro não encontrado"}), 404
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        logger.error(f"Erro em acompanhamento_put: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Route: DELETE /api/behavior/acompanhamento/<int:record_id>  (admin only)
+# ---------------------------------------------------------------------------
+@behavior_bp.route('/acompanhamento/<int:record_id>', methods=['DELETE'])
+def api_behavior_acompanhamento_delete(record_id):
+    if not current_user.is_authenticated:
+        return jsonify({"error": "Não autenticado"}), 401
+    if current_user.username != 'admin':
+        return jsonify({"error": "Apenas administradores podem excluir registros"}), 403
+
+    conn = get_db()
+    try:
+        _ensure_acompanhamento_table(conn)
+        conn.execute("DELETE FROM Acompanhamento_Clientes WHERE id = ?", (record_id,))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        logger.error(f"Erro em acompanhamento_delete: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
