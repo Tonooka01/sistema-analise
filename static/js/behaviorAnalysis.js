@@ -3088,11 +3088,11 @@ function _renderAcompTable() {
     }
 
     const statusBadge = (r) => {
-        if (!r.snooze_ate) return '<span class="px-1.5 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-500">–</span>';
+        if (!r.snooze_ate) return '<span class="px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-500">–</span>';
         const past = r.snooze_ate < new Date().toISOString().slice(0, 10);
         return past
-            ? `<span class="px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">Vencido ${r.snooze_ate}</span>`
-            : `<span class="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">Até ${r.snooze_ate}</span>`;
+            ? `<span class="px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700">Vencido ${r.snooze_ate}</span>`
+            : `<span class="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-700">Até ${r.snooze_ate}</span>`;
     };
 
     const esc = s => (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -3100,32 +3100,32 @@ function _renderAcompTable() {
     wrap.innerHTML = `
     <table class="w-full text-sm border-collapse">
       <thead>
-        <tr class="bg-gray-50 dark:bg-gray-800 text-left text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Contrato</th>
-          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Cliente</th>
-          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Cidade</th>
-          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Tipo Ação</th>
-          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Resultado</th>
-          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700 max-w-xs">Observação</th>
-          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Registrado em</th>
-          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Retorno</th>
-          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Snooze</th>
-          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Usuário</th>
+        <tr class="bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wide">
+          <th class="px-3 py-2 border-b border-gray-200">Contrato</th>
+          <th class="px-3 py-2 border-b border-gray-200">Cliente</th>
+          <th class="px-3 py-2 border-b border-gray-200">Cidade</th>
+          <th class="px-3 py-2 border-b border-gray-200">Tipo Ação</th>
+          <th class="px-3 py-2 border-b border-gray-200">Resultado</th>
+          <th class="px-3 py-2 border-b border-gray-200 max-w-xs">Observação</th>
+          <th class="px-3 py-2 border-b border-gray-200">Registrado em</th>
+          <th class="px-3 py-2 border-b border-gray-200">Retorno</th>
+          <th class="px-3 py-2 border-b border-gray-200">Snooze</th>
+          <th class="px-3 py-2 border-b border-gray-200">Usuário</th>
         </tr>
       </thead>
       <tbody>
         ${slice.map((r, i) => `
-        <tr class="${i % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'} hover:bg-blue-50 dark:hover:bg-blue-900/20">
-          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700 font-mono text-blue-700 dark:text-blue-400">${esc(r.contrato_id)}</td>
-          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${esc(r.cliente)}</td>
-          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${esc(r.cidade)}</td>
-          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${esc(r.tipo_acao)}</td>
-          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${esc(r.resultado)}</td>
-          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700 max-w-xs truncate" title="${esc(r.observacao)}">${esc(r.observacao)}</td>
-          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700 whitespace-nowrap">${esc((r.data_registro||'').slice(0,16))}</td>
-          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700 whitespace-nowrap">${esc(r.data_retorno||'–')}</td>
-          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${statusBadge(r)}</td>
-          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${esc(r.usuario)}</td>
+        <tr class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50">
+          <td class="px-3 py-2 border-b border-gray-100 font-mono text-blue-700">${esc(r.contrato_id)}</td>
+          <td class="px-3 py-2 border-b border-gray-100">${esc(r.cliente)}</td>
+          <td class="px-3 py-2 border-b border-gray-100">${esc(r.cidade)}</td>
+          <td class="px-3 py-2 border-b border-gray-100">${esc(r.tipo_acao)}</td>
+          <td class="px-3 py-2 border-b border-gray-100">${esc(r.resultado)}</td>
+          <td class="px-3 py-2 border-b border-gray-100 max-w-xs truncate" title="${esc(r.observacao)}">${esc(r.observacao)}</td>
+          <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">${esc((r.data_registro||'').slice(0,16))}</td>
+          <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">${esc(r.data_retorno||'–')}</td>
+          <td class="px-3 py-2 border-b border-gray-100">${statusBadge(r)}</td>
+          <td class="px-3 py-2 border-b border-gray-100">${esc(r.usuario)}</td>
         </tr>`).join('')}
       </tbody>
     </table>
