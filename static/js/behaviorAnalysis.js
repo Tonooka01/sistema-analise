@@ -3048,14 +3048,16 @@ async function _loadAcompanhamento() {
         if (status)  params.set('status',  status);
         if (usuario) params.set('usuario', usuario);
 
+        params.set('limit', '10000');
         const res = await fetch(`/api/behavior/acompanhamento/all?${params}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        _acompData = await res.json();
+        const data = await res.json();
+        _acompData = data.registros || [];
 
         // Populate usuario dropdown
         const selUsr = document.getElementById('acomp-filter-usuario');
         if (selUsr) {
-            const usuarios = [...new Set(_acompData.map(r => r.usuario).filter(Boolean))].sort();
+            const usuarios = (data.usuarios || []).filter(Boolean);
             const curVal = selUsr.value;
             selUsr.innerHTML = '<option value="">Todos</option>' +
                 usuarios.map(u => `<option value="${u}"${u===curVal?' selected':''}>${u}</option>`).join('');
