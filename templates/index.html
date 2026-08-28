@@ -169,6 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <a href="#" data-tab="lifecycle_risk" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Risco por Ciclo de Vida</a>
                 <a href="#" data-tab="risco_plano" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Análise por Plano</a>
                 <a href="#" data-tab="perfil_pagamento" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Perfil de Pagamento</a>
+                <a href="#" data-tab="acompanhamento" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Acompanhamento</a>
             </nav>
         </div>
         <div id="behavior-analysis-tab-content">
@@ -189,6 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div id="tab-content-lifecycle_risk" class="tab-pane"></div>
             <div id="tab-content-risco_plano" class="tab-pane"></div>
             <div id="tab-content-perfil_pagamento" class="tab-pane"></div>
+            <div id="tab-content-acompanhamento" class="tab-pane"></div>
         </div>
     </div>
 
@@ -526,6 +528,8 @@ document.addEventListener('DOMContentLoaded', () => {
             data-tab="financeiro" onclick="switchCdpTab('financeiro')">Financeiro</button>
     <button class="cdp-tab px-5 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700"
             data-tab="atendimentos" onclick="switchCdpTab('atendimentos')">Atendimentos</button>
+    <button class="cdp-tab px-5 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700"
+            data-tab="acomp" onclick="switchCdpTab('acomp')">📋 Acompanhamento</button>
   </div>
 
   <!-- Loading / Error -->
@@ -573,6 +577,59 @@ document.addEventListener('DOMContentLoaded', () => {
     <!-- Atendimentos tab -->
     <div id="cdp-tab-atendimentos" class="cdp-tab-pane p-5 hidden">
       <div id="cdp-atend-list" class="space-y-3"></div>
+    </div>
+
+    <!-- Acompanhamento tab -->
+    <div id="cdp-tab-acomp" class="cdp-tab-pane hidden" style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
+      <!-- Form nova ação -->
+      <div style="padding:16px;border-bottom:1px solid #e5e7eb;flex-shrink:0;">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Registrar Ação</p>
+        <div class="grid grid-cols-2 gap-2 mb-2">
+          <div>
+            <label class="text-xs text-gray-500 block mb-1">Tipo de Ação *</label>
+            <select id="cdp-acomp-tipo" class="w-full border rounded px-2 py-1 text-sm">
+              <option value="">Selecione…</option>
+              <option value="ligacao">📞 Ligação</option>
+              <option value="whatsapp">💬 WhatsApp</option>
+              <option value="visita">🏠 Visita</option>
+              <option value="email">✉️ E-mail</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 block mb-1">Resultado</label>
+            <select id="cdp-acomp-resultado" class="w-full border rounded px-2 py-1 text-sm">
+              <option value="">Selecione…</option>
+              <option value="retido">✅ Retido</option>
+              <option value="negociacao">🤝 Em negociação</option>
+              <option value="sem_resposta">📵 Sem resposta</option>
+              <option value="reagendou">📅 Reagendou</option>
+              <option value="cancelou">❌ Cancelou mesmo</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="text-xs text-gray-500 block mb-1">Observação</label>
+          <textarea id="cdp-acomp-obs" rows="2" class="w-full border rounded px-2 py-1 text-sm resize-none" placeholder="O que foi conversado…"></textarea>
+        </div>
+        <div class="flex gap-2 items-end">
+          <div class="flex-1">
+            <label class="text-xs text-gray-500 block mb-1">Retornar em</label>
+            <input type="date" id="cdp-acomp-retorno" class="w-full border rounded px-2 py-1 text-sm">
+          </div>
+          <button onclick="cdpAcompSalvar()"
+                  class="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex-shrink-0">
+            Salvar
+          </button>
+        </div>
+        <p id="cdp-acomp-msg" class="text-xs mt-1 hidden"></p>
+      </div>
+      <!-- Histórico -->
+      <div style="flex:1;overflow-y:auto;padding:12px 16px;">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Histórico</p>
+        <div id="cdp-acomp-hist" class="space-y-2 text-sm">
+          <p class="text-gray-400 text-xs">Selecione a aba para carregar…</p>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -740,6 +797,83 @@ function _renderClientDetail(d) {
   // Show content
   document.getElementById('cdp-loading').classList.add('hidden');
   document.getElementById('cdp-content').classList.remove('hidden');
+}
+
+// ---- Acompanhamento no modal ----
+let _cdpCurrentContrato = null;
+const _TIPO_LABEL = { ligacao:'📞 Ligação', whatsapp:'💬 WhatsApp', visita:'🏠 Visita', email:'✉️ E-mail' };
+const _RES_LABEL  = { retido:'✅ Retido', negociacao:'🤝 Em negociação', sem_resposta:'📵 Sem resposta', reagendou:'📅 Reagendou', cancelou:'❌ Cancelou' };
+
+const _origShowClientDetail = showClientDetail;
+window.showClientDetail = function(contratoId) {
+  _cdpCurrentContrato = contratoId;
+  _origShowClientDetail(contratoId);
+};
+
+const _origSwitchCdpTab = switchCdpTab;
+window.switchCdpTab = function(name) {
+  _origSwitchCdpTab(name);
+  if (name === 'acomp' && _cdpCurrentContrato) cdpAcompLoad(_cdpCurrentContrato);
+};
+
+function cdpAcompLoad(contratoId) {
+  const hist = document.getElementById('cdp-acomp-hist');
+  hist.innerHTML = '<p class="text-gray-400 text-xs">Carregando…</p>';
+  fetch(`/api/behavior/acompanhamento/${contratoId}`)
+    .then(r => r.json())
+    .then(rows => {
+      if (!rows.length) {
+        hist.innerHTML = '<p class="text-gray-400 text-xs">Nenhum registro ainda.</p>';
+        return;
+      }
+      hist.innerHTML = rows.map(r => {
+        const snoozeOk = r.snooze_ate && r.snooze_ate > new Date().toISOString().slice(0,10);
+        return `<div class="border rounded-lg p-2.5 ${snoozeOk ? 'bg-blue-50 border-blue-200' : 'bg-gray-50'}">
+          <div class="flex justify-between items-start gap-2 mb-1">
+            <span class="font-medium text-xs">${_TIPO_LABEL[r.tipo_acao] || r.tipo_acao}</span>
+            <span class="text-xs text-gray-400">${(r.data_registro||'').slice(0,16).replace('T',' ')}</span>
+          </div>
+          ${r.resultado ? `<span class="text-xs mr-2">${_RES_LABEL[r.resultado] || r.resultado}</span>` : ''}
+          ${r.observacao ? `<p class="text-xs text-gray-600 mt-1">${r.observacao}</p>` : ''}
+          <div class="flex gap-3 mt-1 text-xs text-gray-400">
+            ${r.data_retorno ? `<span>Retorno: ${r.data_retorno}</span>` : ''}
+            ${snoozeOk ? `<span class="text-blue-600">Snoozed até ${r.snooze_ate}</span>` : ''}
+            <span>por ${r.usuario}</span>
+          </div>
+        </div>`;
+      }).join('');
+    })
+    .catch(() => { hist.innerHTML = '<p class="text-red-400 text-xs">Erro ao carregar.</p>'; });
+}
+
+function cdpAcompSalvar() {
+  const tipo      = document.getElementById('cdp-acomp-tipo').value;
+  const resultado = document.getElementById('cdp-acomp-resultado').value;
+  const obs       = document.getElementById('cdp-acomp-obs').value.trim();
+  const retorno   = document.getElementById('cdp-acomp-retorno').value;
+  const msg       = document.getElementById('cdp-acomp-msg');
+
+  if (!tipo) { msg.textContent = 'Selecione o tipo de ação.'; msg.className = 'text-xs mt-1 text-red-600'; msg.classList.remove('hidden'); return; }
+
+  fetch('/api/behavior/acompanhamento', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ contrato_id: _cdpCurrentContrato, tipo_acao: tipo, resultado: resultado||null, observacao: obs||null, data_retorno: retorno||null })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) { msg.textContent = 'Erro: ' + data.error; msg.className = 'text-xs mt-1 text-red-600'; msg.classList.remove('hidden'); return; }
+    msg.textContent = `✅ Salvo! Cliente removido das listas até ${data.snooze_ate || '—'}.`;
+    msg.className = 'text-xs mt-1 text-green-600';
+    msg.classList.remove('hidden');
+    document.getElementById('cdp-acomp-tipo').value = '';
+    document.getElementById('cdp-acomp-resultado').value = '';
+    document.getElementById('cdp-acomp-obs').value = '';
+    document.getElementById('cdp-acomp-retorno').value = '';
+    cdpAcompLoad(_cdpCurrentContrato);
+    setTimeout(() => msg.classList.add('hidden'), 5000);
+  })
+  .catch(() => { msg.textContent = 'Erro de conexão.'; msg.className = 'text-xs mt-1 text-red-600'; msg.classList.remove('hidden'); });
 }
 
 // helpers

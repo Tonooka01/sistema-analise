@@ -101,6 +101,9 @@ export function handleBehaviorTabChange(tabName) {
             case 'perfil_pagamento':
                 renderPerfilPagamentoTab();
                 break;
+            case 'acompanhamento':
+                renderAcompanhamentoTab();
+                break;
             default:
                 console.warn(`Aba de comportamento desconhecida: ${tabName}`);
                 if (targetPane) targetPane.innerHTML = `<p class="text-red-500">Conteúdo para aba "${tabName}" não definido.</p>`;
@@ -2985,5 +2988,169 @@ async function fetchPerfilPagamentoData(queryString) {
     } catch (err) {
         console.error('Erro ao buscar payment_profile:', err);
         return null;
+    }
+}
+
+// ─── Acompanhamento de Clientes (aba visão geral) ─────────────────────────────
+
+let _acompPage = 1;
+const _ACOMP_PAGE_SIZE = 25;
+let _acompData = [];
+
+async function renderAcompanhamentoTab() {
+    const pane = document.getElementById('tab-content-acompanhamento');
+    if (!pane) return;
+
+    pane.innerHTML = `
+    <div class="p-4">
+      <h2 class="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-100">Acompanhamento de Clientes</h2>
+      <div class="flex flex-wrap gap-3 mb-4 items-end">
+        <div>
+          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Status Snooze</label>
+          <select id="acomp-filter-status" class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800 dark:text-gray-100">
+            <option value="">Todos</option>
+            <option value="ativos">Com retorno agendado</option>
+            <option value="vencidos">Sem snooze / vencido</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Usuário</label>
+          <select id="acomp-filter-usuario" class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800 dark:text-gray-100">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <button id="acomp-filter-btn" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded">Filtrar</button>
+      </div>
+      <div id="acomp-table-wrap" class="overflow-x-auto">
+        <div class="text-gray-400 text-sm py-8 text-center">Carregando...</div>
+      </div>
+      <div id="acomp-pagination" class="flex gap-2 justify-center mt-3"></div>
+    </div>`;
+
+    document.getElementById('acomp-filter-btn').addEventListener('click', () => {
+        _acompPage = 1;
+        _loadAcompanhamento();
+    });
+
+    await _loadAcompanhamento();
+}
+
+async function _loadAcompanhamento() {
+    const status  = document.getElementById('acomp-filter-status')?.value  || '';
+    const usuario = document.getElementById('acomp-filter-usuario')?.value || '';
+    const wrap    = document.getElementById('acomp-table-wrap');
+    if (!wrap) return;
+
+    wrap.innerHTML = '<div class="text-gray-400 text-sm py-8 text-center">Carregando...</div>';
+
+    try {
+        const params = new URLSearchParams();
+        if (status)  params.set('status',  status);
+        if (usuario) params.set('usuario', usuario);
+
+        const res = await fetch(`/api/behavior/acompanhamento/all?${params}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        _acompData = await res.json();
+
+        // Populate usuario dropdown
+        const selUsr = document.getElementById('acomp-filter-usuario');
+        if (selUsr) {
+            const usuarios = [...new Set(_acompData.map(r => r.usuario).filter(Boolean))].sort();
+            const curVal = selUsr.value;
+            selUsr.innerHTML = '<option value="">Todos</option>' +
+                usuarios.map(u => `<option value="${u}"${u===curVal?' selected':''}>${u}</option>`).join('');
+        }
+
+        _renderAcompTable();
+    } catch (err) {
+        wrap.innerHTML = `<div class="text-red-500 text-sm py-8 text-center">Erro ao carregar dados.</div>`;
+        console.error('Erro acompanhamento/all:', err);
+    }
+}
+
+function _renderAcompTable() {
+    const wrap  = document.getElementById('acomp-table-wrap');
+    const pgDiv = document.getElementById('acomp-pagination');
+    if (!wrap) return;
+
+    const total = _acompData.length;
+    const pages = Math.max(1, Math.ceil(total / _ACOMP_PAGE_SIZE));
+    if (_acompPage > pages) _acompPage = pages;
+
+    const slice = _acompData.slice((_acompPage - 1) * _ACOMP_PAGE_SIZE, _acompPage * _ACOMP_PAGE_SIZE);
+
+    if (!slice.length) {
+        wrap.innerHTML = '<div class="text-gray-400 text-sm py-8 text-center">Nenhum registro encontrado.</div>';
+        if (pgDiv) pgDiv.innerHTML = '';
+        return;
+    }
+
+    const statusBadge = (r) => {
+        if (!r.snooze_ate) return '<span class="px-1.5 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-500">–</span>';
+        const past = r.snooze_ate < new Date().toISOString().slice(0, 10);
+        return past
+            ? `<span class="px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">Vencido ${r.snooze_ate}</span>`
+            : `<span class="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">Até ${r.snooze_ate}</span>`;
+    };
+
+    const esc = s => (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+    wrap.innerHTML = `
+    <table class="w-full text-sm border-collapse">
+      <thead>
+        <tr class="bg-gray-50 dark:bg-gray-800 text-left text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Contrato</th>
+          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Cliente</th>
+          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Cidade</th>
+          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Tipo Ação</th>
+          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Resultado</th>
+          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700 max-w-xs">Observação</th>
+          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Registrado em</th>
+          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Retorno</th>
+          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Snooze</th>
+          <th class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">Usuário</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${slice.map((r, i) => `
+        <tr class="${i % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'} hover:bg-blue-50 dark:hover:bg-blue-900/20">
+          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700 font-mono text-blue-700 dark:text-blue-400">${esc(r.contrato_id)}</td>
+          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${esc(r.cliente)}</td>
+          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${esc(r.cidade)}</td>
+          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${esc(r.tipo_acao)}</td>
+          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${esc(r.resultado)}</td>
+          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700 max-w-xs truncate" title="${esc(r.observacao)}">${esc(r.observacao)}</td>
+          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700 whitespace-nowrap">${esc((r.data_registro||'').slice(0,16))}</td>
+          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700 whitespace-nowrap">${esc(r.data_retorno||'–')}</td>
+          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${statusBadge(r)}</td>
+          <td class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">${esc(r.usuario)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="text-xs text-gray-400 mt-2 px-1">${total} registro${total !== 1 ? 's' : ''}</div>`;
+
+    // Pagination
+    if (pgDiv) {
+        pgDiv.innerHTML = '';
+        if (pages > 1) {
+            const btn = (label, page, disabled) => {
+                const b = document.createElement('button');
+                b.textContent = label;
+                b.disabled = disabled;
+                b.className = `px-3 py-1 rounded text-sm border ${disabled
+                    ? 'border-gray-200 text-gray-300 dark:border-gray-700 dark:text-gray-600 cursor-default'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`;
+                if (!disabled) b.addEventListener('click', () => { _acompPage = page; _renderAcompTable(); });
+                return b;
+            };
+            pgDiv.appendChild(btn('«', 1, _acompPage === 1));
+            pgDiv.appendChild(btn('‹', _acompPage - 1, _acompPage === 1));
+            const info = document.createElement('span');
+            info.className = 'px-2 py-1 text-sm text-gray-500';
+            info.textContent = `${_acompPage} / ${pages}`;
+            pgDiv.appendChild(info);
+            pgDiv.appendChild(btn('›', _acompPage + 1, _acompPage === pages));
+            pgDiv.appendChild(btn('»', pages, _acompPage === pages));
+        }
     }
 }

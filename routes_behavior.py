@@ -36,6 +36,8 @@ _TAB_ROUTE_KEYS = {
     '/lifecycle_risk':            'lifecycle_risk',
     '/plan_risk':                 'risco_plano',
     '/payment_profile':           'perfil_pagamento',
+    '/acompanhamento':            'acompanhamento',
+    '/acompanhamento/all':        'acompanhamento',
     # /client_detail/<id> — sem restrição de aba, apenas módulo
 }
 
@@ -1714,6 +1716,12 @@ def api_behavior_contact_list():
                   AND Status_acesso != 'Desativado'
                   {city_cond}
                   AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM Acompanhamento_Clientes
+                      WHERE contrato_id = ID
+                        AND snooze_ate IS NOT NULL
+                        AND snooze_ate > date('now')
+                  )
             ),
             PaymentProfile AS (
                 SELECT
@@ -1882,6 +1890,12 @@ def api_behavior_action_alerts():
                   AND Status_acesso != 'Desativado'
                   {city_cond}
                   AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM Acompanhamento_Clientes
+                      WHERE contrato_id = ID
+                        AND snooze_ate IS NOT NULL
+                        AND snooze_ate > date('now')
+                  )
             ),
             PaymentProfile AS (
                 SELECT
@@ -2594,6 +2608,12 @@ def api_behavior_payment_profile():
                   AND Status_acesso != 'Desativado'
                   {city_cond}
                   AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM Acompanhamento_Clientes
+                      WHERE contrato_id = ID
+                        AND snooze_ate IS NOT NULL
+                        AND snooze_ate > date('now')
+                  )
             ),
             PaymentHistory AS (
                 SELECT
@@ -2913,6 +2933,155 @@ def api_behavior_client_detail(contrato_id):
 
     except Exception as e:
         logger.error(f"Erro em client_detail {contrato_id}: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Helpers — Acompanhamento de Clientes
+# ---------------------------------------------------------------------------
+def _ensure_acompanhamento_table(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS Acompanhamento_Clientes (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            contrato_id   INTEGER NOT NULL,
+            usuario       TEXT    NOT NULL,
+            data_registro TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+            tipo_acao     TEXT    NOT NULL,
+            resultado     TEXT,
+            observacao    TEXT,
+            data_retorno  TEXT,
+            snooze_ate    TEXT
+        )
+    """)
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Route: GET /api/behavior/acompanhamento/<contrato_id>
+# Histórico de acompanhamento de um contrato específico
+# ---------------------------------------------------------------------------
+@behavior_bp.route('/acompanhamento/<int:contrato_id>', methods=['GET'])
+def api_behavior_acompanhamento_get(contrato_id):
+    conn = get_db()
+    try:
+        _ensure_acompanhamento_table(conn)
+        rows = conn.execute("""
+            SELECT id, contrato_id, usuario, data_registro,
+                   tipo_acao, resultado, observacao, data_retorno, snooze_ate
+            FROM Acompanhamento_Clientes
+            WHERE contrato_id = ?
+            ORDER BY data_registro DESC
+        """, (contrato_id,)).fetchall()
+        return jsonify([dict(r) for r in rows])
+    except Exception as e:
+        logger.error(f"Erro em acompanhamento_get {contrato_id}: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Route: POST /api/behavior/acompanhamento
+# Registrar nova ação de acompanhamento
+# ---------------------------------------------------------------------------
+@behavior_bp.route('/acompanhamento', methods=['POST'])
+def api_behavior_acompanhamento_post():
+    from datetime import date, timedelta
+    conn = get_db()
+    try:
+        _ensure_acompanhamento_table(conn)
+        data = request.get_json(force=True) or {}
+
+        contrato_id  = data.get('contrato_id')
+        tipo_acao    = (data.get('tipo_acao') or '').strip()
+        resultado    = (data.get('resultado') or '').strip() or None
+        observacao   = (data.get('observacao') or '').strip() or None
+        data_retorno = (data.get('data_retorno') or '').strip() or None
+        usuario      = current_user.username if current_user.is_authenticated else 'sistema'
+
+        if not contrato_id or not tipo_acao:
+            return jsonify({"error": "contrato_id e tipo_acao são obrigatórios"}), 400
+
+        # Calcular snooze_ate
+        if resultado == 'cancelou':
+            snooze_ate = None          # cancelou → não snooze
+        elif data_retorno:
+            snooze_ate = data_retorno  # usar data de retorno fornecida
+        else:
+            snooze_ate = (date.today() + timedelta(days=30)).isoformat()
+
+        conn.execute("""
+            INSERT INTO Acompanhamento_Clientes
+                (contrato_id, usuario, data_registro, tipo_acao, resultado, observacao, data_retorno, snooze_ate)
+            VALUES (?, ?, datetime('now', 'localtime'), ?, ?, ?, ?, ?)
+        """, (contrato_id, usuario, tipo_acao, resultado, observacao, data_retorno, snooze_ate))
+        conn.commit()
+
+        return jsonify({"ok": True, "snooze_ate": snooze_ate})
+    except Exception as e:
+        logger.error(f"Erro em acompanhamento_post: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Route: GET /api/behavior/acompanhamento/all
+# Visão geral de todos os acompanhamentos (aba dedicada)
+# ---------------------------------------------------------------------------
+@behavior_bp.route('/acompanhamento/all')
+def api_behavior_acompanhamento_all():
+    conn = get_db()
+    try:
+        _ensure_acompanhamento_table(conn)
+        status  = request.args.get('status', '').strip()   # 'ativos' | 'vencidos' | ''
+        usuario = request.args.get('usuario', '').strip()
+        limit   = request.args.get('limit',  100, type=int)
+        offset  = request.args.get('offset', 0,   type=int)
+
+        conds = []
+        params = []
+        if status == 'ativos':
+            conds.append("A.snooze_ate IS NOT NULL AND A.snooze_ate > date('now')")
+        elif status == 'vencidos':
+            conds.append("(A.snooze_ate IS NULL OR A.snooze_ate <= date('now'))")
+        if usuario:
+            conds.append("A.usuario = ?")
+            params.append(usuario)
+
+        where = ("WHERE " + " AND ".join(conds)) if conds else ""
+
+        rows = conn.execute(f"""
+            SELECT A.id, A.contrato_id, A.usuario, A.data_registro,
+                   A.tipo_acao, A.resultado, A.observacao, A.data_retorno, A.snooze_ate,
+                   C.Cliente AS cliente, C.Cidade AS cidade,
+                   C.Status_contrato AS status_contrato, C.Status_acesso AS status_acesso
+            FROM Acompanhamento_Clientes A
+            LEFT JOIN Contratos C ON C.ID = A.contrato_id
+            {where}
+            ORDER BY A.data_registro DESC
+            LIMIT ? OFFSET ?
+        """, params + [limit, offset]).fetchall()
+
+        total_row = conn.execute(f"""
+            SELECT COUNT(*) AS cnt
+            FROM Acompanhamento_Clientes A
+            {where}
+        """, params).fetchone()
+
+        usuarios = [r[0] for r in conn.execute(
+            "SELECT DISTINCT usuario FROM Acompanhamento_Clientes ORDER BY usuario"
+        ).fetchall()]
+
+        return jsonify({
+            "registros": [dict(r) for r in rows],
+            "total":     total_row['cnt'] if total_row else 0,
+            "usuarios":  usuarios,
+        })
+    except Exception as e:
+        logger.error(f"Erro em acompanhamento_all: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
