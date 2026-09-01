@@ -776,23 +776,33 @@ function _renderClientDetail(d) {
   }).join('') || '<tr><td colspan="5" class="text-center text-gray-400 py-4">Nenhuma fatura encontrada.</td></tr>';
 
   // --- ABA ATENDIMENTOS ---
+  const _atStatusLabel = {S:'Solucionado', EP:'Em Progresso', P:'Pendente', C:'Cancelado', N:'Novo'};
+  const _atStatusClass = {S:'bg-green-100 text-green-700', EP:'bg-yellow-100 text-yellow-700',
+                          P:'bg-orange-100 text-orange-700', C:'bg-gray-100 text-gray-500', N:'bg-blue-50 text-blue-700'};
   const atList = document.getElementById('cdp-atend-list');
   const atds = d.atendimentos || [];
   atList.innerHTML = atds.length === 0
     ? '<p class="text-gray-400 text-sm">Nenhum atendimento recente encontrado.</p>'
-    : atds.map(a => `
+    : atds.map(a => {
+        const status = a.status || '';
+        const statusLabel = _atStatusLabel[status] || status;
+        const statusClass = _atStatusClass[status] || 'bg-gray-100 text-gray-600';
+        const descricao = (a.descricao || '').replace(/\r\n/g,'<br>').replace(/\n/g,'<br>');
+        const alterado = a.ultima_alteracao && a.ultima_alteracao !== a.Criado_em && a.ultima_alteracao !== a.criado_em
+          ? `<span class="text-xs text-gray-400">Atualizado: ${_fmtDate(a.ultima_alteracao)}</span>` : '';
+        return `
         <div class="border border-gray-200 rounded-lg p-3">
-          <div class="flex justify-between items-start gap-2">
-            <p class="font-medium text-sm text-gray-800">${a.Assunto || a.assunto || '—'}</p>
+          <div class="flex justify-between items-start gap-2 mb-1">
+            <p class="font-semibold text-sm text-gray-800">${a.Assunto || a.assunto || '—'}</p>
             <span class="text-xs text-gray-400 whitespace-nowrap">${_fmtDate(a.Criado_em||a.criado_em)}</span>
           </div>
-          ${a.descricao ? `<p class="text-xs text-gray-500 mt-1">${a.descricao}</p>` : ''}
-          <div class="flex gap-2 mt-2 flex-wrap">
-            ${a.status     ? `<span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">${a.status}</span>` : ''}
-            ${a.Prioridade ? `<span class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">${a.Prioridade}</span>` : ''}
-            ${a.Departamento ? `<span class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">${a.Departamento}</span>` : ''}
+          ${descricao ? `<p class="text-sm text-gray-700 mt-1 leading-relaxed">${descricao}</p>` : ''}
+          <div class="flex items-center gap-2 mt-2 flex-wrap">
+            ${status ? `<span class="px-2 py-0.5 rounded text-xs font-medium ${statusClass}">${statusLabel}</span>` : ''}
+            ${alterado}
           </div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
 
   // Show content
   document.getElementById('cdp-loading').classList.add('hidden');

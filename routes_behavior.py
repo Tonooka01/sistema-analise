@@ -2911,14 +2911,15 @@ def api_behavior_client_detail(contrato_id):
             LIMIT 24
         """, (contrato_id,)).fetchall()
 
-        # --- Last 5 atendimentos ---
+        # --- Last 10 atendimentos ---
         atendimentos = conn.execute("""
-            SELECT ID, Assunto, Descri_o_assunto AS descricao, Criado_em,
-                   Novo_status AS status, Prioridade, Departamento
+            SELECT ID, Assunto, Descri_o AS descricao, Criado_em,
+                   ltima_altera_o AS ultima_alteracao,
+                   Novo_status AS status
             FROM Atendimentos
             WHERE Cliente = ?
             ORDER BY Criado_em DESC
-            LIMIT 5
+            LIMIT 10
         """, (cliente_nome,)).fetchall()
 
         return jsonify({

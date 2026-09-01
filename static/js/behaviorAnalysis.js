@@ -7,10 +7,94 @@ import { populateContractStatusFilters } from './customAnalysisTables.js';
 
 // --- LÓGICA DA ANÁLISE DE COMPORTAMENTO (Abas) ---
 
+// ─── Ordenação de tabelas ─────────────────────────────────────────────────────
+function _makeSortable(table) {
+    if (!table || table.dataset.sortable) return;
+    table.dataset.sortable = '1';
+
+    const headers = table.querySelectorAll('thead th');
+    let _sortCol = -1;
+    let _sortDir = 1; // 1=asc, -1=desc
+
+    headers.forEach((th, colIdx) => {
+        th.style.cursor = 'pointer';
+        th.style.userSelect = 'none';
+        th.style.whiteSpace = 'nowrap';
+
+        const indicator = document.createElement('span');
+        indicator.style.cssText = 'margin-left:4px;opacity:0.35;font-size:.75em;';
+        indicator.textContent = '⇅';
+        th.appendChild(indicator);
+
+        th.addEventListener('click', () => {
+            if (_sortCol === colIdx) {
+                _sortDir = -_sortDir;
+            } else {
+                _sortCol = colIdx;
+                _sortDir = 1;
+            }
+
+            // Update indicators
+            headers.forEach((h, i) => {
+                const ind = h.querySelector('span');
+                if (!ind) return;
+                if (i === _sortCol) {
+                    ind.textContent = _sortDir === 1 ? ' ▲' : ' ▼';
+                    ind.style.opacity = '0.85';
+                } else {
+                    ind.textContent = '⇅';
+                    ind.style.opacity = '0.35';
+                }
+            });
+
+            // Sort rows
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            rows.sort((a, b) => {
+                const ca = a.children[colIdx];
+                const cb = b.children[colIdx];
+                if (!ca || !cb) return 0;
+                // Use data-sort attribute if present, else text
+                const va = (ca.dataset.sort ?? ca.textContent).trim();
+                const vb = (cb.dataset.sort ?? cb.textContent).trim();
+                // Numeric detection: remove non-numeric chars (d, %, R$, spaces) then parse
+                const na = parseFloat(va.replace(/[^\d.,-]/g, '').replace(',', '.'));
+                const nb = parseFloat(vb.replace(/[^\d.,-]/g, '').replace(',', '.'));
+                if (!isNaN(na) && !isNaN(nb)) return _sortDir * (na - nb);
+                return _sortDir * va.localeCompare(vb, 'pt-BR', { sensitivity: 'base' });
+            });
+            rows.forEach(r => tbody.appendChild(r));
+        });
+    });
+}
+
+// Aplica sorting automaticamente em qualquer <table> inserida na área behavior
+function _initBehaviorSortObserver() {
+    const area = document.getElementById('behavior-analysis-tab-content');
+    if (!area) return;
+
+    // Apply to any table already present
+    area.querySelectorAll('table').forEach(_makeSortable);
+
+    new MutationObserver(mutations => {
+        for (const m of mutations) {
+            for (const node of m.addedNodes) {
+                if (node.nodeType !== 1) continue;
+                const tables = node.tagName === 'TABLE'
+                    ? [node]
+                    : Array.from(node.querySelectorAll('table'));
+                tables.forEach(_makeSortable);
+            }
+        }
+    }).observe(area, { childList: true, subtree: true });
+}
+
 /**
  * Inicializa a primeira aba da Análise de Comportamento.
  */
 export function initializeBehaviorAnalysis() {
+    _initBehaviorSortObserver();
     const allTabs = dom.behaviorAnalysisTabs?.querySelectorAll('.tab-link') || [];
     const firstTab = Array.from(allTabs).find(t => t.style.display !== 'none');
     if (firstTab) {
