@@ -126,11 +126,11 @@ def _import_excel(conn, file_bytes):
              _f(row[11]), _f(row[12]), _f(row[13]))
         )
 
-    # --- DFC Mensal (v9: colunas ordenadas alfanumericamente pelo prefixo) ---
+    # --- DFC Mensal (GESTAO_v5_AUTOMATIZADA: 19 colunas) ---
     # idx: 3=ENTRADAS, 4=1.CMV, 5=10.DespFin, 6=11.Outros, 7=12.Atendimento,
     #      8=2.Pessoal, 9=3.EncargosTrabalh, 10=4.Marketing, 11=5.Infra,
-    #      12=6.Tecnologia, 13=7.Frota, 14=8.DespAdmin, 15=8.Impostos,
-    #      16=9.IRPJ, 17=TOTAL SAÍDAS, 18=SALDO PERÍODO, 19=SALDO ACUMULADO
+    #      12=6.Tecnologia, 13=7.Frota, 14=8.DespAdmin, 15=9.Impostos,
+    #      16=TOTAL SAÍDAS, 17=SALDO PERÍODO, 18=SALDO ACUMULADO
     ws = wb['💵 DFC Mensal']
     for row in ws.iter_rows(min_row=4, values_only=True):
         if not row[0] or not isinstance(row[0], int):
@@ -144,9 +144,8 @@ def _import_excel(conn, file_bytes):
         frota       = _f(row[13])
         desp_admin  = _f(row[14])
         impostos    = _f(row[15])
-        irpj        = _f(row[16])
         desp_op  = atendimento + pessoal + marketing + infra + tecnologia + frota + desp_admin
-        encargos = enc_trabal + impostos + irpj
+        encargos = enc_trabal + impostos
         conn.execute(
             """INSERT OR REPLACE INTO GC_DFC_Mensal
                (AnoMes, Ano, Mes, Entradas, CMV, DespOp, Encargos, DespFin, Outros,
@@ -156,9 +155,9 @@ def _import_excel(conn, file_bytes):
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (row[2], row[0], row[1],
              _f(row[3]), _f(row[4]), desp_op, encargos, _f(row[5]), _f(row[6]),
-             _f(row[17]), _f(row[18]), _f(row[19]),
+             _f(row[16]), _f(row[17]), _f(row[18]),
              pessoal, enc_trabal, marketing, infra, tecnologia,
-             frota, desp_admin, atendimento, impostos, irpj)
+             frota, desp_admin, atendimento, impostos, 0)
         )
 
     # --- CAC Mensal ---
@@ -330,8 +329,264 @@ def _import_excel(conn, file_bytes):
 
 
 # ---------------------------------------------------------------------------
+# Recalcular Gestão a partir dos dados brutos (DRE + Contas_a_Receber)
+# ---------------------------------------------------------------------------
+
+_MES_NOME = {1:'Jan',2:'Fev',3:'Mar',4:'Abr',5:'Mai',6:'Jun',
+             7:'Jul',8:'Ago',9:'Set',10:'Out',11:'Nov',12:'Dez'}
+
+def _rebuild_gc_from_raw(conn):
+    """Reconstrói todas as tabelas GC_* a partir da tabela DRE e Contas_a_Receber."""
+    _ensure_tables(conn)
+
+    # ── 1. GC_Lancamentos — espelho da tabela DRE ────────────────────────────
+    conn.execute("DELETE FROM GC_Lancamentos")
+    conn.execute("""
+        INSERT INTO GC_Lancamentos
+            (Ano, Mes, AnoMes, GrupoDRE, SubgrupoDRE, PlanoContas, CentroCusto,
+             Fornecedor, CNPJ, Situacao,
+             DataCompetencia, DataVencimento, DataConfirmacao,
+             Valor, NFe, CodLancamento, Loja, Descricao,
+             CategoriaEstruturada, CapexOpex)
+        SELECT
+            Ano,
+            CAST(Mes AS TEXT),
+            Ano_Mes,
+            Grupo_DRE, Subgrupo_DRE, Plano_de_Contas, Centro_de_Custo,
+            Fornecedor, CNPJ, Situacao,
+            Data_Competencia, Data_Vencimento, Data_Confirmacao,
+            Valor, NFe, Cod_Lancamento, Loja, Observacao,
+            NULL, NULL
+        FROM DRE
+        WHERE Ano IS NOT NULL AND Mes IS NOT NULL
+    """)
+
+    # ── 2. GC_DRE_Completo — receita (Contas_a_Receber) + despesas (DRE) ────
+    conn.execute("DELETE FROM GC_DRE_Completo")
+    conn.execute("""
+        INSERT INTO GC_DRE_Completo
+            (AnoMes, Ano, Mes,
+             ReceitaBruta, Recebido, AReceber,
+             CMV, DespOp, Encargos, DespFin, Outros,
+             TotalDespesas, Resultado, Margem)
+        WITH
+        receita AS (
+            SELECT
+                strftime('%Y-%m', Vencimento)                       AS ym,
+                CAST(strftime('%Y', Vencimento) AS INTEGER)         AS ano,
+                strftime('%m', Vencimento)                          AS mes_num,
+                ROUND(SUM(CASE WHEN (Valor_cancelado IS NULL OR Valor_cancelado = 0)
+                               THEN Valor ELSE 0 END), 2)           AS bruta,
+                ROUND(SUM(CASE WHEN Data_pagamento IS NOT NULL
+                                AND Data_pagamento != ''
+                                AND (Valor_cancelado IS NULL OR Valor_cancelado = 0)
+                               THEN COALESCE(Valor_recebido, Valor) ELSE 0 END), 2) AS recebido,
+                ROUND(SUM(CASE WHEN (Data_pagamento IS NULL OR Data_pagamento = '')
+                                AND Status = 'A receber'
+                                AND (Valor_cancelado IS NULL OR Valor_cancelado = 0)
+                               THEN Valor_aberto ELSE 0 END), 2)    AS a_receber
+            FROM Contas_a_Receber
+            WHERE Vencimento IS NOT NULL AND Vencimento != ''
+              AND strftime('%Y', Vencimento) >= '2021'
+            GROUP BY ym
+        ),
+        despesas AS (
+            SELECT
+                Ano_Mes                                             AS ym,
+                ROUND(SUM(CASE WHEN Grupo_DRE LIKE '3.%' THEN Valor ELSE 0 END), 2) AS cmv,
+                ROUND(SUM(CASE WHEN Grupo_DRE LIKE '4.%' THEN Valor ELSE 0 END), 2) AS desp_op,
+                ROUND(SUM(CASE WHEN Grupo_DRE LIKE '5.%' THEN Valor ELSE 0 END), 2) AS encargos,
+                ROUND(SUM(CASE WHEN Grupo_DRE LIKE '6.%' THEN Valor ELSE 0 END), 2) AS desp_fin,
+                ROUND(SUM(CASE WHEN Grupo_DRE LIKE '7.%' THEN Valor ELSE 0 END), 2) AS outros
+            FROM DRE
+            WHERE Ano_Mes IS NOT NULL AND Situacao = 'Confirmado'
+            GROUP BY Ano_Mes
+        )
+        SELECT
+            r.ym,
+            r.ano,
+            CASE CAST(r.mes_num AS INTEGER)
+                WHEN 1 THEN 'Jan' WHEN 2 THEN 'Fev' WHEN 3 THEN 'Mar'
+                WHEN 4 THEN 'Abr' WHEN 5 THEN 'Mai' WHEN 6 THEN 'Jun'
+                WHEN 7 THEN 'Jul' WHEN 8 THEN 'Ago' WHEN 9 THEN 'Set'
+                WHEN 10 THEN 'Out' WHEN 11 THEN 'Nov' WHEN 12 THEN 'Dez'
+            END,
+            r.bruta, r.recebido, r.a_receber,
+            COALESCE(d.cmv,0), COALESCE(d.desp_op,0), COALESCE(d.encargos,0),
+            COALESCE(d.desp_fin,0), COALESCE(d.outros,0),
+            ROUND(COALESCE(d.cmv,0)+COALESCE(d.desp_op,0)+COALESCE(d.encargos,0)
+                 +COALESCE(d.desp_fin,0)+COALESCE(d.outros,0), 2),
+            ROUND(r.bruta - (COALESCE(d.cmv,0)+COALESCE(d.desp_op,0)+COALESCE(d.encargos,0)
+                            +COALESCE(d.desp_fin,0)+COALESCE(d.outros,0)), 2),
+            CASE WHEN r.bruta > 0 THEN
+                ROUND((r.bruta - (COALESCE(d.cmv,0)+COALESCE(d.desp_op,0)+COALESCE(d.encargos,0)
+                                 +COALESCE(d.desp_fin,0)+COALESCE(d.outros,0))) / r.bruta, 4)
+            ELSE 0 END
+        FROM receita r
+        LEFT JOIN despesas d ON d.ym = r.ym
+        ORDER BY r.ym
+    """)
+
+    # ── 3. GC_DFC_Mensal — fluxo de caixa real (data de pagamento/confirmação) ─
+    conn.execute("DELETE FROM GC_DFC_Mensal")
+    conn.execute("""
+        INSERT INTO GC_DFC_Mensal
+            (AnoMes, Ano, Mes, Entradas,
+             CMV, DespOp, Encargos, DespFin, Outros,
+             TotalSaidas, SaldoPeriodo, SaldoAcumulado,
+             Pessoal, EncargosTrabalh, Marketing_DFC, Infraestrutura,
+             Tecnologia, Frota, DespAdmin, Atendimento, Impostos, IRPJCSLL)
+        WITH
+        entradas AS (
+            SELECT
+                strftime('%Y-%m', Data_pagamento)                   AS ym,
+                ROUND(SUM(COALESCE(Valor_recebido, Valor)), 2)      AS total
+            FROM Contas_a_Receber
+            WHERE Data_pagamento IS NOT NULL AND Data_pagamento != ''
+              AND strftime('%Y', Data_pagamento) >= '2021'
+            GROUP BY ym
+        ),
+        saidas AS (
+            SELECT
+                strftime('%Y-%m', Data_Confirmacao)                 AS ym,
+                ROUND(SUM(CASE WHEN Grupo_DRE LIKE '3.%' THEN Valor ELSE 0 END), 2) AS cmv,
+                ROUND(SUM(CASE WHEN Grupo_DRE LIKE '4.%' THEN Valor ELSE 0 END), 2) AS desp_op,
+                ROUND(SUM(CASE WHEN Grupo_DRE LIKE '5.%' THEN Valor ELSE 0 END), 2) AS encargos,
+                ROUND(SUM(CASE WHEN Grupo_DRE LIKE '6.%' THEN Valor ELSE 0 END), 2) AS desp_fin,
+                ROUND(SUM(CASE WHEN Grupo_DRE LIKE '7.%' THEN Valor ELSE 0 END), 2) AS outros,
+                ROUND(SUM(CASE WHEN Subgrupo_DRE LIKE '%Pessoal%' OR Plano_de_Contas IN
+                    ('Remuneração funcionários','SALÁRIOS','Folha de Pagamentos','folha de pagamento','DIRETORIA','Adiantamento - funcionários')
+                               THEN Valor ELSE 0 END), 2) AS pessoal,
+                ROUND(SUM(CASE WHEN Grupo_DRE LIKE '5.%' THEN Valor ELSE 0 END), 2) AS enc_trab,
+                ROUND(SUM(CASE WHEN Subgrupo_DRE LIKE '%Marketing%' THEN Valor ELSE 0 END), 2) AS marketing,
+                ROUND(SUM(CASE WHEN Subgrupo_DRE LIKE '%Infraestrutura%' OR Subgrupo_DRE LIKE '%Manut%'
+                               THEN Valor ELSE 0 END), 2) AS infra,
+                ROUND(SUM(CASE WHEN Subgrupo_DRE LIKE '%Tecnologia%' THEN Valor ELSE 0 END), 2) AS tecnologia,
+                ROUND(SUM(CASE WHEN Subgrupo_DRE LIKE '%Frota%' OR Subgrupo_DRE LIKE '%Combust%'
+                               THEN Valor ELSE 0 END), 2) AS frota,
+                ROUND(SUM(CASE WHEN Subgrupo_DRE LIKE '%Administr%' THEN Valor ELSE 0 END), 2) AS admin,
+                ROUND(SUM(CASE WHEN Subgrupo_DRE LIKE '%Prestação%' OR Subgrupo_DRE LIKE '%Serviço%'
+                               THEN Valor ELSE 0 END), 2) AS atendimento,
+                ROUND(SUM(CASE WHEN Subgrupo_DRE LIKE '%Imposto%' OR Subgrupo_DRE LIKE '%Tributo%'
+                               THEN Valor ELSE 0 END), 2) AS impostos
+            FROM DRE
+            WHERE Data_Confirmacao IS NOT NULL AND Data_Confirmacao != ''
+              AND Situacao = 'Confirmado'
+              AND strftime('%Y', Data_Confirmacao) >= '2021'
+            GROUP BY ym
+        )
+        SELECT
+            e.ym,
+            CAST(strftime('%Y', e.ym || '-01') AS INTEGER),
+            CAST(strftime('%m', e.ym || '-01') AS INTEGER),
+            e.total,
+            COALESCE(s.cmv,0), COALESCE(s.desp_op,0), COALESCE(s.encargos,0),
+            COALESCE(s.desp_fin,0), COALESCE(s.outros,0),
+            ROUND(COALESCE(s.cmv,0)+COALESCE(s.desp_op,0)+COALESCE(s.encargos,0)
+                 +COALESCE(s.desp_fin,0)+COALESCE(s.outros,0), 2),
+            ROUND(e.total - (COALESCE(s.cmv,0)+COALESCE(s.desp_op,0)+COALESCE(s.encargos,0)
+                            +COALESCE(s.desp_fin,0)+COALESCE(s.outros,0)), 2),
+            0,
+            COALESCE(s.pessoal,0), COALESCE(s.enc_trab,0), COALESCE(s.marketing,0),
+            COALESCE(s.infra,0), COALESCE(s.tecnologia,0), COALESCE(s.frota,0),
+            COALESCE(s.admin,0), COALESCE(s.atendimento,0), COALESCE(s.impostos,0), 0
+        FROM entradas e
+        LEFT JOIN saidas s ON s.ym = e.ym
+        ORDER BY e.ym
+    """)
+
+    # Atualiza SaldoAcumulado em Python (não tem window functions no SQLite antigo)
+    rows = conn.execute(
+        "SELECT AnoMes, SaldoPeriodo FROM GC_DFC_Mensal ORDER BY AnoMes"
+    ).fetchall()
+    acum = 0.0
+    for (ym, saldo) in rows:
+        acum += (saldo or 0)
+        conn.execute(
+            "UPDATE GC_DFC_Mensal SET SaldoAcumulado=? WHERE AnoMes=?",
+            (round(acum, 2), ym)
+        )
+
+    # ── 4. GC_CAC_Mensal — custo de aquisição de clientes ───────────────────
+    conn.execute("DELETE FROM GC_CAC_Mensal")
+    conn.execute("""
+        INSERT INTO GC_CAC_Mensal
+            (AnoMes, Ano, Mes,
+             Comissionamento, Marketing, MaterialCampo, ONTs,
+             TotalCAC, NInstalacoes, CACUnitario)
+        WITH
+        novos AS (
+            SELECT
+                strftime('%Y-%m', Data_ativa_o)                    AS ym,
+                COUNT(*)                                           AS qtd
+            FROM Contratos
+            WHERE Data_ativa_o IS NOT NULL AND Data_ativa_o != ''
+              AND strftime('%Y', Data_ativa_o) >= '2021'
+            GROUP BY ym
+        ),
+        gastos AS (
+            SELECT
+                Ano_Mes                                            AS ym,
+                ROUND(SUM(CASE WHEN Subgrupo_DRE LIKE '%Comiss%'   THEN Valor ELSE 0 END), 2) AS comissao,
+                ROUND(SUM(CASE WHEN Subgrupo_DRE LIKE '%Marketing%' THEN Valor ELSE 0 END), 2) AS marketing,
+                ROUND(SUM(CASE WHEN Subgrupo_DRE LIKE '%Material%'  THEN Valor ELSE 0 END), 2) AS material,
+                ROUND(SUM(CASE WHEN Plano_de_Contas LIKE '%ONU%' OR Plano_de_Contas LIKE '%Equip%'
+                               THEN Valor ELSE 0 END), 2) AS onts
+            FROM DRE
+            WHERE Ano_Mes IS NOT NULL AND Situacao = 'Confirmado'
+            GROUP BY Ano_Mes
+        )
+        SELECT
+            n.ym,
+            CAST(strftime('%Y', n.ym || '-01') AS INTEGER),
+            CAST(strftime('%m', n.ym || '-01') AS INTEGER),
+            COALESCE(g.comissao,  0),
+            COALESCE(g.marketing, 0),
+            COALESCE(g.material,  0),
+            COALESCE(g.onts,      0),
+            ROUND(COALESCE(g.comissao,0)+COALESCE(g.marketing,0)
+                 +COALESCE(g.material,0)+COALESCE(g.onts,0), 2),
+            n.qtd,
+            CASE WHEN n.qtd > 0
+                 THEN ROUND((COALESCE(g.comissao,0)+COALESCE(g.marketing,0)
+                             +COALESCE(g.material,0)+COALESCE(g.onts,0)) / n.qtd, 2)
+                 ELSE 0 END
+        FROM novos n
+        LEFT JOIN gastos g ON g.ym = n.ym
+        ORDER BY n.ym
+    """)
+
+    conn.commit()
+
+    return {
+        'lancamentos': conn.execute("SELECT COUNT(*) FROM GC_Lancamentos").fetchone()[0],
+        'dre':         conn.execute("SELECT COUNT(*) FROM GC_DRE_Completo").fetchone()[0],
+        'dfc':         conn.execute("SELECT COUNT(*) FROM GC_DFC_Mensal").fetchone()[0],
+        'cac':         conn.execute("SELECT COUNT(*) FROM GC_CAC_Mensal").fetchone()[0],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+@dre2_bp.route('/api/dre2/recalcular', methods=['POST'])
+@login_required
+def api_dre2_recalcular():
+    """Reconstrói as tabelas GC_* a partir dos dados brutos do banco."""
+    if current_user.username != 'admin':
+        return jsonify({'error': 'Acesso negado'}), 403
+    conn = get_db()
+    try:
+        counts = _rebuild_gc_from_raw(conn)
+        logger.info("GC_ recalculado a partir de dados brutos: %s", counts)
+        return jsonify({'ok': True, 'counts': counts})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
 
 @dre2_bp.route('/api/dre2/importar', methods=['POST'])
 @login_required

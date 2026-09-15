@@ -338,15 +338,31 @@
             <!-- Painel Gestão Financeira (DRE2) -->
             <div class="bg-teal-50 p-5 rounded-lg border border-teal-200 mt-6">
                 <h3 class="text-lg font-bold text-teal-800 mb-1">📊 Gestão Financeira</h3>
-                <p class="text-xs text-teal-600 mb-3">Selecione o arquivo <strong>.xlsx</strong> da gestão para importar (qualquer nome).</p>
-                <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
-                    <input type="file" id="gestaoImportFile" accept=".xlsx"
-                           class="text-sm text-teal-800 border border-teal-300 rounded px-2 py-1 bg-white w-full sm:w-auto">
-                    <button id="btnImportarGestao"
+
+                <!-- Opção 1: Recalcular a partir dos dados brutos -->
+                <div class="bg-white border border-teal-200 rounded-lg p-4 mb-3">
+                    <p class="text-sm font-semibold text-teal-800 mb-1">⚡ Recalcular a partir dos dados brutos</p>
+                    <p class="text-xs text-teal-600 mb-3">Calcula automaticamente a Gestão usando as despesas (tabela DRE) e a receita (Contas a Receber) já cadastradas no banco. Não precisa de nenhum arquivo.</p>
+                    <button id="btnRecalcularGestao"
                         class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded shadow transition text-sm whitespace-nowrap">
-                        ⬆ Importar / Reimportar
+                        ⚡ Recalcular Gestão
                     </button>
                 </div>
+
+                <!-- Opção 2: Importar Excel manual -->
+                <div class="bg-white border border-teal-200 rounded-lg p-4">
+                    <p class="text-sm font-semibold text-teal-800 mb-1">⬆ Importar Excel da Gestão (avançado)</p>
+                    <p class="text-xs text-teal-600 mb-3">Use apenas se tiver o arquivo Excel de Gestão com as abas formatadas.</p>
+                    <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                        <input type="file" id="gestaoImportFile" accept=".xlsx"
+                               class="text-sm text-teal-800 border border-teal-300 rounded px-2 py-1 bg-white w-full sm:w-auto">
+                        <button id="btnImportarGestao"
+                            class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded shadow transition text-sm whitespace-nowrap">
+                            ⬆ Importar / Reimportar
+                        </button>
+                    </div>
+                </div>
+
                 <div id="gestaoImportStatus" class="text-xs text-teal-700 mt-2 hidden"></div>
             </div>
 

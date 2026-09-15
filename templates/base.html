@@ -471,6 +471,33 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btnStartSync')?.addEventListener('click', () => _startSync('incremental'));
     document.getElementById('btnFullSync')?.addEventListener('click',  () => _startSync('full'));
 
+    // --- Gestão Financeira: Recalcular a partir dos dados brutos ---
+    document.getElementById('btnRecalcularGestao')?.addEventListener('click', async () => {
+        const btn    = document.getElementById('btnRecalcularGestao');
+        const status = document.getElementById('gestaoImportStatus');
+        btn.disabled = true; btn.textContent = '⏳ Calculando…';
+        status.classList.remove('hidden');
+        status.style.color = '#0f766e';
+        status.textContent = 'Recalculando Gestão a partir das despesas e receitas do banco, aguarde…';
+        try {
+            const res  = await fetch('/api/dre2/recalcular', { method: 'POST' });
+            const data = await res.json();
+            if (data.ok) {
+                const c = data.counts;
+                status.textContent = `✅ Gestão recalculada: ${c.dre} meses de DRE | ${c.dfc} meses de DFC | ${c.cac} meses de CAC | ${c.lancamentos} lançamentos`;
+                status.style.color = '#065f46';
+            } else {
+                status.textContent = '❌ Erro: ' + (data.error || 'Desconhecido');
+                status.style.color = '#991b1b';
+            }
+        } catch (e) {
+            status.textContent = '❌ Erro de conexão: ' + e;
+            status.style.color = '#991b1b';
+        } finally {
+            btn.disabled = false; btn.textContent = '⚡ Recalcular Gestão';
+        }
+    });
+
     // --- Gestão Financeira: Importar Excel ---
     document.getElementById('btnImportarGestao')?.addEventListener('click', async () => {
         const fileInput = document.getElementById('gestaoImportFile');
