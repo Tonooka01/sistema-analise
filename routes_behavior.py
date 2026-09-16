@@ -11,6 +11,7 @@ from flask_login import current_user
 _IXC_BASE = 'https://sistema.netvaletelecom.com/webservice/v1'
 
 def _ixc_fetch(endpoint, params, token):
+    """Form-encoded POST (usado pelo sync de OS, contratos etc.)"""
     encoded = base64.b64encode(token.encode()).decode()
     headers = {'Authorization': f'Basic {encoded}', 'ixcsoft': 'listar'}
     resp = requests.post(
@@ -19,6 +20,29 @@ def _ixc_fetch(endpoint, params, token):
         headers=headers, timeout=15, verify=False
     )
     resp.raise_for_status()
+    data = resp.json()
+    return data.get('registros', []) if isinstance(data, dict) else []
+
+
+def _ixc_listar(endpoint, params, token):
+    """JSON POST — igual ao automacao_ixc_api.py (Content-Type: application/json)"""
+    encoded = base64.b64encode(token.encode()).decode()
+    headers = {
+        'Authorization': f'Basic {encoded}',
+        'ixcsoft': 'listar',
+        'Content-Type': 'application/json',
+    }
+    payload = {**params, 'rp': '200', 'page': '1'}
+    resp = requests.post(
+        f'{_IXC_BASE}/{endpoint}',
+        json=payload,
+        headers=headers, timeout=15, verify=False
+    )
+    resp.raise_for_status()
+    txt = resp.text.strip()
+    if not txt:
+        logger.warning(f"_ixc_listar [{endpoint}]: resposta vazia")
+        return []
     data = resp.json()
     return data.get('registros', []) if isinstance(data, dict) else []
 
@@ -32,6 +56,9 @@ def _ixc_query(sql, token):
         headers=headers, timeout=15, verify=False
     )
     resp.raise_for_status()
+    txt = resp.text.strip()
+    if not txt:
+        return []
     data = resp.json()
     return data.get('registros', []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
 
@@ -3422,6 +3449,155 @@ def _ret_get_token():
         conn.close()
 
 
+def _ixc_raw(endpoint, params, token):
+    """Tenta form-encoded (padrão sync) e JSON; loga resposta bruta para debug."""
+    encoded = base64.b64encode(token.encode()).decode()
+    base_headers = {'Authorization': f'Basic {encoded}', 'ixcsoft': 'listar'}
+    payload = {**params, 'rp': '200', 'page': '1'}
+
+    for fmt in ('form', 'json'):
+        try:
+            if fmt == 'form':
+                resp = requests.post(f'{_IXC_BASE}/{endpoint}', data=payload,
+                                     headers=base_headers, timeout=15, verify=False)
+            else:
+                resp = requests.post(f'{_IXC_BASE}/{endpoint}', json=payload,
+                                     headers={**base_headers, 'Content-Type': 'application/json'},
+                                     timeout=15, verify=False)
+
+            txt = resp.text.strip()
+            logger.info(f"_ixc_raw [{endpoint}] {fmt.upper()} status={resp.status_code} body={txt[:400]!r}")
+
+            if resp.status_code >= 400:
+                continue  # tenta próximo formato
+
+            if not txt:
+                continue
+
+            data = resp.json()
+            return data.get('registros', []) if isinstance(data, dict) else []
+
+        except Exception as ex:
+            logger.warning(f"_ixc_raw [{endpoint}] {fmt} erro: {ex}")
+
+    return []
+
+
+def _ixc_post(endpoint, payload, token):
+    """POST com JSON body + ixcsoft:listar (padrão confirmado em automacao_ixc_api.py)."""
+    encoded = base64.b64encode(token.encode()).decode()
+    headers = {
+        'Authorization': f'Basic {encoded}',
+        'ixcsoft': 'listar',
+        'Content-Type': 'application/json',
+    }
+    try:
+        resp = requests.post(f'{_IXC_BASE}/{endpoint}', json=payload,
+                             headers=headers, timeout=15, verify=False)
+        txt = resp.text.strip()
+        if not txt or txt.startswith('<'):
+            return None
+        d = resp.json()
+        return d if isinstance(d, dict) else None
+    except Exception as ex:
+        logger.warning(f"_ixc_post [{endpoint}]: {ex}")
+        return None
+
+
+def _ixc_mensagens(os_id, token):
+    """Busca mensagens da OS. Tenta campos FK alternativos + descoberta automática."""
+
+    # passo 0: busca sem filtro (rp=1) para descobrir os campos reais do registro
+    try:
+        d = _ixc_post('su_oss_chamado_mensagem',
+                       {'rp': '1', 'page': '1', 'sortname': 'su_oss_chamado_mensagem.id',
+                        'sortorder': 'desc'}, token)
+        if d and d.get('registros'):
+            sample_keys = list(d['registros'][0].keys())
+            logger.info(f"mensagens campos descobertos: {sample_keys}")
+        elif d is not None:
+            logger.info(f"mensagens sem filtro retornou: total={d.get('total')} keys={list(d.keys())}")
+    except Exception as ex:
+        logger.warning(f"mensagens descoberta campos: {ex}")
+
+    # passo 1: tenta cada campo FK possível (JSON format)
+    for fk in ('id_os', 'id_oss_chamado', 'id_chamado', 'id_oss'):
+        try:
+            d = _ixc_post('su_oss_chamado_mensagem', {
+                'qtype': f'su_oss_chamado_mensagem.{fk}',
+                'query': str(os_id),
+                'oper': '=',
+                'sortname': 'su_oss_chamado_mensagem.id',
+                'sortorder': 'asc',
+                'rp': '200',
+                'page': '1',
+            }, token)
+            logger.info(f"mensagens fk={fk}: d={str(d)[:150]!r}")
+            if d is not None:
+                recs = d.get('registros', [])
+                if recs or int(d.get('total', 0)) == 0:
+                    return recs
+        except Exception as ex:
+            logger.warning(f"mensagens fk={fk}: {ex}")
+
+    # passo 2: grid_param (mesmo formato que automacao_ixc_api.py usa para comodato)
+    import json as _json
+    for fk in ('id_os', 'id_oss_chamado'):
+        try:
+            gp = _json.dumps([{"TB": f"su_oss_chamado_mensagem.{fk}", "OP": "=", "P": str(os_id)}])
+            d = _ixc_post('su_oss_chamado_mensagem', {
+                'grid_param': gp,
+                'sortname': 'su_oss_chamado_mensagem.id',
+                'sortorder': 'asc',
+                'rp': '200',
+                'page': '1',
+            }, token)
+            logger.info(f"mensagens grid_param fk={fk}: d={str(d)[:150]!r}")
+            if d is not None:
+                recs = d.get('registros', [])
+                if recs or int(d.get('total', 0)) == 0:
+                    return recs
+        except Exception as ex:
+            logger.warning(f"mensagens grid_param fk={fk}: {ex}")
+
+    return []
+
+
+def _ixc_arquivos(os_id, token):
+    """Busca arquivos da OS. Tenta campos FK alternativos + descoberta automática."""
+
+    try:
+        d = _ixc_post('su_oss_chamado_arquivos',
+                       {'rp': '1', 'page': '1', 'sortname': 'su_oss_chamado_arquivos.id',
+                        'sortorder': 'desc'}, token)
+        if d and d.get('registros'):
+            logger.info(f"arquivos campos descobertos: {list(d['registros'][0].keys())}")
+    except Exception as ex:
+        logger.warning(f"arquivos descoberta campos: {ex}")
+
+    import json as _json
+    for fk in ('id_os', 'id_oss_chamado', 'id_chamado', 'id_oss'):
+        try:
+            d = _ixc_post('su_oss_chamado_arquivos', {
+                'qtype': f'su_oss_chamado_arquivos.{fk}',
+                'query': str(os_id),
+                'oper': '=',
+                'sortname': 'su_oss_chamado_arquivos.id',
+                'sortorder': 'asc',
+                'rp': '200',
+                'page': '1',
+            }, token)
+            logger.info(f"arquivos fk={fk}: d={str(d)[:150]!r}")
+            if d is not None:
+                recs = d.get('registros', [])
+                if recs or int(d.get('total', 0)) == 0:
+                    return recs
+        except Exception as ex:
+            logger.warning(f"arquivos fk={fk}: {ex}")
+
+    return []
+
+
 @behavior_bp.route('/retiradas/<int:os_id>/mensagens')
 def api_ret_mensagens(os_id):
     if not current_user.is_authenticated:
@@ -3430,16 +3606,7 @@ def api_ret_mensagens(os_id):
         token = _ret_get_token()
         if not token:
             return jsonify({'error': 'Token IXC não configurado'}), 500
-        records = _ixc_query(
-            f"""SELECT m.id, m.status, m.data, m.mensagem, m.historico,
-                       m.finaliza_processo, m.id_operador,
-                       f.funcionario AS nome_colaborador
-                FROM su_oss_chamado_mensagem m
-                LEFT JOIN funcionarios f ON f.id = m.id_funcionario
-                WHERE m.id_os = {os_id}
-                ORDER BY m.id ASC""",
-            token
-        )
+        records = _ixc_mensagens(os_id, token)
         return jsonify({'mensagens': records})
     except Exception as e:
         logger.error(f"Erro mensagens OS {os_id}: {e}", exc_info=True)
@@ -3454,10 +3621,7 @@ def api_ret_arquivos(os_id):
         token = _ret_get_token()
         if not token:
             return jsonify({'error': 'Token IXC não configurado'}), 500
-        records = _ixc_query(
-            f"SELECT * FROM su_oss_chamado_arquivos WHERE id_os = {os_id} ORDER BY id ASC",
-            token
-        )
+        records = _ixc_arquivos(os_id, token)
         return jsonify({'arquivos': records})
     except Exception as e:
         logger.error(f"Erro arquivos OS {os_id}: {e}", exc_info=True)

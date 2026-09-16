@@ -3503,19 +3503,25 @@ window._retTab = async function(id, tab) {
               </thead>
               <tbody>
                 ${msgs.map(m => {
-                  const st  = m.status || '';
+                  // IXC pode retornar com ou sem prefixo de tabela
+                  const _f = (k1, k2) => m[k1] || m[k2] || '';
+                  const st  = _f('status','su_oss_chamado_mensagem.status');
                   const cls = _CLS_MSG[st] || 'bg-gray-100 text-gray-700';
-                  const dt  = (m.data || '').slice(0,16).replace('T',' ');
-                  const finaliza = String(m.finaliza_processo||'').toUpperCase();
+                  const dt  = _f('data','su_oss_chamado_mensagem.data').slice(0,16).replace('T',' ');
+                  const msg = _f('mensagem','su_oss_chamado_mensagem.mensagem');
+                  const his = _f('historico','su_oss_chamado_mensagem.historico');
+                  const col = _f('funcionario','nome_colaborador') || _f('colaborador','su_oss_chamado_mensagem.colaborador');
+                  const op  = _f('id_operador','su_oss_chamado_mensagem.id_operador');
+                  const fin = String(_f('finaliza_processo','su_oss_chamado_mensagem.finaliza_processo')).toUpperCase();
                   return `<tr class="border-b border-gray-100 align-top hover:bg-gray-50">
                     <td class="px-3 py-2 font-mono text-gray-400">#${m.id||'—'}</td>
                     <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full font-medium text-xs ${cls}">${st||'—'}</span></td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-600">${dt||'—'}</td>
-                    <td class="px-3 py-2 max-w-xs break-words text-gray-900 font-medium">${m.mensagem||'—'}</td>
-                    <td class="px-3 py-2 text-gray-600 max-w-[220px] break-words">${m.historico&&m.historico!=='-'?m.historico:'—'}</td>
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-700">${m.nome_colaborador||'—'}</td>
-                    <td class="px-3 py-2 text-center">${finaliza==='S'||finaliza==='SIM'?'✅':'Não'}</td>
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${m.id_operador||'—'}</td>
+                    <td class="px-3 py-2 max-w-xs break-words text-gray-900 font-medium">${msg||'—'}</td>
+                    <td class="px-3 py-2 text-gray-600 max-w-[220px] break-words">${his&&his!=='-'?his:'—'}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-700">${col||'—'}</td>
+                    <td class="px-3 py-2 text-center">${fin==='S'||fin==='SIM'?'✅':'Não'}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${op||'—'}</td>
                   </tr>`;
                 }).join('')}
               </tbody>
@@ -3542,6 +3548,7 @@ window._retTab = async function(id, tab) {
                 return;
             }
             const BASE_URL = 'https://sistema.netvaletelecom.com/';
+            const IMG_EXTS = new Set(['JPG','JPEG','PNG','GIF','WEBP','BMP','SVG']);
             panel.innerHTML = `
             <div class="overflow-x-auto">
             <table class="min-w-full text-xs border-collapse">
@@ -3551,23 +3558,33 @@ window._retTab = async function(id, tab) {
                   <th class="px-3 py-2">Descrição</th>
                   <th class="px-3 py-2">Extensão</th>
                   <th class="px-3 py-2">Data</th>
-                  <th class="px-3 py-2">Download</th>
+                  <th class="px-3 py-2">Arquivo</th>
                 </tr>
               </thead>
               <tbody>
                 ${arqs.map(a => {
                   const dt  = (a.data || a.data_envio || a.data_mensagem || '').slice(0,16).replace('T',' ');
                   const loc = a.local || a.arquivo || a.caminho || '';
-                  const ext = (a.extensao || a.extension || loc.split('.').pop() || '').toUpperCase();
+                  const ext = (a.extensao || a.extension || (loc.includes('.') ? loc.split('.').pop() : '') || '').toUpperCase();
                   const url = loc ? (loc.startsWith('http') ? loc : BASE_URL + loc) : '';
-                  return `<tr class="border-b border-gray-100 hover:bg-gray-50">
+                  const isImg = IMG_EXTS.has(ext);
+                  const preview = url
+                    ? isImg
+                      ? `<a href="${url}" target="_blank" rel="noopener" title="Abrir imagem completa">
+                           <img src="${url}" alt="${a.descricao||ext}"
+                             class="h-20 w-20 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity cursor-zoom-in"
+                             onerror="this.parentElement.innerHTML='<span class=\\'text-xs text-gray-400\\'>Sem preview</span><br><a href=\\'${url}\\' target=\\'_blank\\' class=\\'text-blue-600 hover:underline\\'>⬇ Abrir</a>'">
+                         </a>`
+                      : `<a href="${url}" target="_blank" rel="noopener"
+                           class="inline-flex items-center gap-1 text-blue-600 hover:underline font-medium">
+                           ⬇ Abrir</a>`
+                    : '—';
+                  return `<tr class="border-b border-gray-100 hover:bg-gray-50 align-middle">
                     <td class="px-3 py-2 font-mono text-gray-500">${a.id||'—'}</td>
                     <td class="px-3 py-2 text-gray-900">${a.descricao || a.nome || '—'}</td>
                     <td class="px-3 py-2"><span class="bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded text-xs font-mono">${ext||'—'}</span></td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-600">${dt||'—'}</td>
-                    <td class="px-3 py-2">${url ? `<a href="${url}" target="_blank" rel="noopener"
-                        class="inline-flex items-center gap-1 text-blue-600 hover:underline font-medium">
-                        ⬇ Abrir</a>` : '—'}</td>
+                    <td class="px-3 py-2">${preview}</td>
                   </tr>`;
                 }).join('')}
               </tbody>
