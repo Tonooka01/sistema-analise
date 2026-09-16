@@ -188,6 +188,9 @@ export function handleBehaviorTabChange(tabName) {
             case 'acompanhamento':
                 renderAcompanhamentoTab();
                 break;
+            case 'retirada':
+                renderRetiradaTab();
+                break;
             default:
                 console.warn(`Aba de comportamento desconhecida: ${tabName}`);
                 if (targetPane) targetPane.innerHTML = `<p class="text-red-500">Conteúdo para aba "${tabName}" não definido.</p>`;
@@ -3074,6 +3077,509 @@ async function fetchPerfilPagamentoData(queryString) {
         return null;
     }
 }
+
+// ─── Análise de Retirada ───────────────────────────────────────────────────────
+
+let _retData      = [];
+let _retPage      = 1;
+let _retPageSize  = 50;
+let _retTotal     = 0;
+let _retFilters   = {};
+let _retFiltros   = {};
+let _retExpanded  = new Set();
+const _retTabLoaded = {};
+
+const _RET_STATUS_CLS = {
+    'Aberta':       'bg-red-100 text-red-800',
+    'Encaminhada':  'bg-yellow-100 text-yellow-800',
+    'Agendada':     'bg-blue-100 text-blue-800',
+    'Finalizada':   'bg-green-100 text-green-700',
+};
+const _RET_ASSUNTO_SHORT = {
+    'RETIRADA DE EQUIPAMENTO':                  'Retirada Equip.',
+    'INADIMPLENCIA RETIRADA':                   'Inadim. Retirada',
+    'EQUIPAMENTO NÃO RETIRADO':                 'Equip. Não Ret.',
+    'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL':  'Ret. Pto Adicional',
+    'CANCELAMENTO RETIRADA':                    'Canc. Retirada',
+};
+const _RET_ASSUNTO_CLS = {
+    'RETIRADA DE EQUIPAMENTO':                  'bg-orange-100 text-orange-800',
+    'INADIMPLENCIA RETIRADA':                   'bg-red-100 text-red-800',
+    'EQUIPAMENTO NÃO RETIRADO':                 'bg-purple-100 text-purple-800',
+    'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL':  'bg-blue-100 text-blue-800',
+    'CANCELAMENTO RETIRADA':                    'bg-gray-100 text-gray-700',
+};
+
+async function renderRetiradaTab() {
+    const pane = document.getElementById('tab-content-retirada');
+    if (!pane) return;
+    pane.innerHTML = '<div class="p-8 text-center text-gray-500">Carregando...</div>';
+
+    try {
+        const [filtros] = await Promise.all([
+            fetch('/api/behavior/retiradas/filtros').then(r => r.json()),
+        ]);
+        _retFiltros = filtros;
+        _retFilters = { status: '', assunto: '', filial: '', cidade: '', bairro: '', colaborador: '', date_from: '', date_to: '', search: '' };
+        _retPage    = 1;
+        _retExpanded.clear();
+
+        pane.innerHTML = _retShell(filtros);
+        _retBindEvents(pane);
+        await _retLoad();
+    } catch(e) {
+        pane.innerHTML = `<div class="p-6 text-red-600">Erro: ${e.message}</div>`;
+    }
+}
+
+function _retShell(f) {
+    const sel = (id, opts, ph) => `<select id="${id}" class="ret-filter border border-gray-300 rounded px-2 py-1 text-sm">
+        <option value="">${ph}</option>${opts.map(o => `<option value="${o}">${o}</option>`).join('')}
+    </select>`;
+
+    const STATUS_LIST = ['Aberta','Encaminhada','Agendada','Finalizada'];
+    const STATUS_CLS  = { Aberta:'text-red-700', Encaminhada:'text-yellow-700', Agendada:'text-blue-700', Finalizada:'text-green-700' };
+    const multiStatus = `
+<div class="ret-ms-wrap relative" id="ret-ms-status">
+  <div class="ret-ms-trigger border border-gray-300 rounded px-2 py-1 text-sm cursor-pointer select-none flex justify-between items-center gap-2 min-w-[140px] bg-white" id="ret-ms-trigger">
+    <span id="ret-ms-label" class="truncate">Todos status</span>
+    <span class="text-gray-400 text-xs flex-shrink-0">▾</span>
+  </div>
+  <div class="ret-ms-dropdown hidden absolute z-50 bg-white border border-gray-300 rounded-lg shadow-lg mt-1 py-1 min-w-[160px]" id="ret-ms-dropdown">
+    ${STATUS_LIST.map(s => `
+    <label class="flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm hover:bg-gray-50 ${STATUS_CLS[s]||''}">
+      <input type="checkbox" value="${s}" class="ret-ms-cb accent-blue-600">
+      <span class="font-medium">${s}</span>
+    </label>`).join('')}
+    <div class="border-t border-gray-100 mt-1 pt-1 px-3 pb-1">
+      <button id="ret-ms-clear" class="text-xs text-gray-400 hover:text-gray-600">Limpar seleção</button>
+    </div>
+  </div>
+</div>`;
+
+    return `
+<div class="p-4">
+  <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+    <h2 class="text-xl font-bold text-gray-800">📦 Análise de Retirada de Equipamentos</h2>
+    <span class="text-sm text-gray-500">Ordens de Serviço · Pendentes e Histórico</span>
+  </div>
+
+  <!-- KPIs -->
+  <div id="ret-kpis" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5"></div>
+
+  <!-- Filtros -->
+  <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+    <div class="flex flex-wrap gap-2 items-end">
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-500 font-medium">Status</label>
+        ${multiStatus}
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-500 font-medium">Tipo</label>
+        ${sel('ret-f-assunto', (f.assuntos||[]).map(a => a), 'Todos tipos')}
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-500 font-medium">Filial</label>
+        ${sel('ret-f-filial', f.filiais || [], 'Todas filiais')}
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-500 font-medium">Cidade</label>
+        ${sel('ret-f-cidade', f.cidades || [], 'Todas cidades')}
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-500 font-medium">Bairro</label>
+        ${sel('ret-f-bairro', f.bairros || [], 'Todos bairros')}
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-500 font-medium">Colaborador</label>
+        ${sel('ret-f-colab', f.colaboradores || [], 'Todos colaboradores')}
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-500 font-medium">De</label>
+        <input type="date" id="ret-f-de" class="border border-gray-300 rounded px-2 py-1 text-sm">
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-500 font-medium">Até</label>
+        <input type="date" id="ret-f-ate" class="border border-gray-300 rounded px-2 py-1 text-sm">
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-500 font-medium">Busca</label>
+        <input type="text" id="ret-f-search" placeholder="Cliente, endereço, bairro..." class="border border-gray-300 rounded px-2 py-1 text-sm w-48">
+      </div>
+      <button id="ret-btn-filtrar" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700">Filtrar</button>
+      <button id="ret-btn-limpar" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-300">Limpar</button>
+    </div>
+  </div>
+
+  <!-- Tabela -->
+  <div id="ret-table-wrap" class="overflow-x-auto rounded-lg border border-gray-200"></div>
+
+  <!-- Paginação -->
+  <div id="ret-pagination" class="flex justify-between items-center mt-3 text-sm text-gray-600"></div>
+</div>`;
+}
+
+function _retGetSelectedStatus() {
+    return [...document.querySelectorAll('.ret-ms-cb:checked')].map(c => c.value).join(',');
+}
+
+function _retUpdateStatusLabel() {
+    const selected = [...document.querySelectorAll('.ret-ms-cb:checked')].map(c => c.value);
+    const lbl = document.getElementById('ret-ms-label');
+    if (lbl) lbl.textContent = selected.length ? selected.join(', ') : 'Todos status';
+}
+
+function _retBindEvents(pane) {
+    // Multi-select status dropdown toggle
+    const trigger  = pane.querySelector('#ret-ms-trigger');
+    const dropdown = pane.querySelector('#ret-ms-dropdown');
+    if (trigger && dropdown) {
+        trigger.addEventListener('click', e => {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+        });
+        document.addEventListener('click', () => dropdown.classList.add('hidden'));
+        dropdown.addEventListener('click', e => e.stopPropagation());
+        pane.querySelectorAll('.ret-ms-cb').forEach(cb => cb.addEventListener('change', _retUpdateStatusLabel));
+        pane.querySelector('#ret-ms-clear')?.addEventListener('click', () => {
+            pane.querySelectorAll('.ret-ms-cb').forEach(cb => cb.checked = false);
+            _retUpdateStatusLabel();
+        });
+    }
+
+    pane.querySelector('#ret-btn-filtrar')?.addEventListener('click', () => {
+        _retFilters.status      = _retGetSelectedStatus();
+        _retFilters.assunto     = pane.querySelector('#ret-f-assunto')?.value || '';
+        _retFilters.filial      = pane.querySelector('#ret-f-filial')?.value || '';
+        _retFilters.cidade      = pane.querySelector('#ret-f-cidade')?.value || '';
+        _retFilters.bairro      = pane.querySelector('#ret-f-bairro')?.value || '';
+        _retFilters.colaborador = pane.querySelector('#ret-f-colab')?.value || '';
+        _retFilters.date_from   = pane.querySelector('#ret-f-de')?.value || '';
+        _retFilters.date_to     = pane.querySelector('#ret-f-ate')?.value || '';
+        _retFilters.search      = pane.querySelector('#ret-f-search')?.value || '';
+        _retPage = 1;
+        _retExpanded.clear();
+        _retLoad();
+    });
+    pane.querySelector('#ret-btn-limpar')?.addEventListener('click', () => {
+        pane.querySelectorAll('.ret-ms-cb').forEach(cb => cb.checked = false);
+        _retUpdateStatusLabel();
+        ['#ret-f-assunto','#ret-f-filial','#ret-f-cidade','#ret-f-bairro','#ret-f-colab','#ret-f-de','#ret-f-ate','#ret-f-search']
+            .forEach(s => { const el = pane.querySelector(s); if (el) el.value = ''; });
+        _retFilters = { status:'',assunto:'',filial:'',cidade:'',bairro:'',colaborador:'',date_from:'',date_to:'',search:'' };
+        _retPage = 1;
+        _retExpanded.clear();
+        _retLoad();
+    });
+}
+
+async function _retLoad() {
+    const wrap = document.getElementById('ret-table-wrap');
+    const pgDiv = document.getElementById('ret-pagination');
+    if (wrap) wrap.innerHTML = '<div class="p-6 text-center text-gray-400">Carregando...</div>';
+
+    const q = new URLSearchParams({ ..._retFilters, page: _retPage, limit: _retPageSize });
+    const d = await fetch(`/api/behavior/retiradas?${q}`).then(r => r.json());
+    if (d.error) { if(wrap) wrap.innerHTML = `<div class="p-4 text-red-600">Erro: ${d.error}</div>`; return; }
+
+    _retData  = d.ordens || [];
+    _retTotal = d.total  || 0;
+
+    _retRenderKpis(d.kpis, d.por_assunto, d.por_cidade);
+    _retRenderTable(wrap);
+    _retRenderPagination(pgDiv, d.page, d.pages, d.total);
+}
+
+function _retRenderKpis(k, porAssunto, porCidade) {
+    const kpis = document.getElementById('ret-kpis');
+    if (!kpis) return;
+
+    const card = (val, lbl, cls) => `
+        <div class="rounded-lg border p-3 ${cls}">
+          <div class="text-2xl font-bold">${val}</div>
+          <div class="text-xs mt-1">${lbl}</div>
+        </div>`;
+
+    kpis.innerHTML = `
+        ${card(k.total, 'Total de Ordens', 'bg-gray-50 border-gray-200 text-gray-800')}
+        ${card(k.abertas, 'Abertas', 'bg-red-50 border-red-200 text-red-800')}
+        ${card(k.encaminhadas, 'Encaminhadas', 'bg-yellow-50 border-yellow-200 text-yellow-800')}
+        ${card(k.agendadas, 'Agendadas', 'bg-blue-50 border-blue-200 text-blue-800')}
+        ${card(k.finalizadas, 'Finalizadas', 'bg-green-50 border-green-200 text-green-800')}
+        ${card(k.sem_agendamento, 'Pendentes s/ Agend.', 'bg-orange-50 border-orange-200 text-orange-800')}`;
+}
+
+function _retRenderTable(wrap) {
+    if (!wrap) return;
+    if (!_retData.length) {
+        wrap.innerHTML = '<div class="p-8 text-center text-gray-400">Nenhuma ordem encontrada.</div>';
+        return;
+    }
+
+    const rows = _retData.map((o, i) => {
+        const statusCls  = _RET_STATUS_CLS[o.status] || 'bg-gray-100 text-gray-700';
+        const assuntoCls = _RET_ASSUNTO_CLS[o.assunto] || 'bg-gray-100 text-gray-700';
+        const assuntoShort = _RET_ASSUNTO_SHORT[o.assunto] || o.assunto;
+        const expanded   = _retExpanded.has(o.id);
+        const abertura   = o.abertura ? o.abertura.slice(0,10) : '—';
+        const agendTxt   = o.agendamento ? o.agendamento.slice(0,16).replace('T',' ') : '—';
+        const telDisplay = o.whatsapp || o.telefone_cel || o.telefone_res || '—';
+        const endDisplay = [o.endereco, o.bairro, o.cidade].filter(Boolean).join(' · ');
+
+        let detail = '';
+        if (expanded) {
+            const rows2 = [
+                ['🏠 Endereço', [o.endereco, o.complemento, o.referencia].filter(Boolean).join(' | ') || '—'],
+                ['📍 Bairro / Cidade', [o.bairro, o.cidade].filter(Boolean).join(' / ') || '—'],
+                ['📱 WhatsApp', o.whatsapp || '—'],
+                ['📞 Celular', o.telefone_cel || '—'],
+                ['☎️ Residencial', o.telefone_res || '—'],
+                ['📋 Mensagem / Motivo', o.mensagem || '—'],
+                ['💬 Desc. Atendimento', o.atend_descricao || '—'],
+                ['🔧 Colaborador', o.colaborador || '—'],
+                ['⏰ Melhor Horário', o.melhor_horario || '—'],
+                ['📅 Agendamento', agendTxt],
+                ['⏱️ Prazo Limite', o.prazo_limite ? o.prazo_limite.slice(0,16) : '—'],
+                ['✅ Início', o.inicio ? o.inicio.slice(0,16) : '—'],
+                ['🏁 Final', o.final ? o.final.slice(0,16) : '—'],
+                ['🔒 Fechamento', o.fechamento ? o.fechamento.slice(0,16) : '—'],
+                ['🔢 Protocolo', o.protocolo || '—'],
+                ['📝 Contrato', o.contrato || '—'],
+                ['🏢 Filial', o.filial || '—'],
+                ['🚨 Prioridade', o.prioridade || '—'],
+                ['📡 SLA', o.sla || '—'],
+            ];
+            detail = `<tr id="ret-detail-${o.id}">
+              <td colspan="8" class="bg-blue-50 border-b border-blue-200 p-0">
+                <div class="border-b border-blue-200 bg-blue-100 flex gap-0">
+                  <button onclick="window._retTab(${o.id},'detalhes')" id="ret-tab-${o.id}-detalhes"
+                    class="ret-dtab px-4 py-2 text-xs font-semibold border-b-2 border-blue-600 text-blue-700 bg-white">
+                    🗂 Detalhes
+                  </button>
+                  <button onclick="window._retTab(${o.id},'mensagens')" id="ret-tab-${o.id}-mensagens"
+                    class="ret-dtab px-4 py-2 text-xs font-semibold border-b-2 border-transparent text-gray-600 hover:text-blue-700 hover:bg-white">
+                    💬 Mensagens
+                  </button>
+                  <button onclick="window._retTab(${o.id},'arquivos')" id="ret-tab-${o.id}-arquivos"
+                    class="ret-dtab px-4 py-2 text-xs font-semibold border-b-2 border-transparent text-gray-600 hover:text-blue-700 hover:bg-white">
+                    📎 Arquivos
+                  </button>
+                </div>
+                <div id="ret-panel-${o.id}-detalhes" class="ret-dpanel px-6 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2">
+                  ${rows2.map(([lbl, val]) => `
+                    <div class="flex flex-col">
+                      <span class="text-xs text-gray-500 font-medium">${lbl}</span>
+                      <span class="text-sm text-gray-900 break-words">${val}</span>
+                    </div>`).join('')}
+                </div>
+                <div id="ret-panel-${o.id}-mensagens" class="ret-dpanel hidden px-6 py-4">
+                  <div class="text-xs text-gray-400 italic">Clique na aba para carregar mensagens...</div>
+                </div>
+                <div id="ret-panel-${o.id}-arquivos" class="ret-dpanel hidden px-6 py-4">
+                  <div class="text-xs text-gray-400 italic">Clique na aba para carregar arquivos...</div>
+                </div>
+              </td>
+            </tr>`;
+        }
+
+        return `<tr class="hover:bg-gray-50 cursor-pointer border-b border-gray-100 ${expanded ? 'bg-blue-50' : ''}"
+                    onclick="window._retToggle(${o.id})">
+          <td class="px-3 py-2 text-xs text-gray-500 font-mono">#${o.id}</td>
+          <td class="px-3 py-2">
+            <span class="inline-block text-xs px-2 py-0.5 rounded-full font-medium ${assuntoCls}">${assuntoShort}</span>
+          </td>
+          <td class="px-3 py-2">
+            <span class="inline-block text-xs px-2 py-0.5 rounded-full font-medium ${statusCls}">${o.status}</span>
+          </td>
+          <td class="px-3 py-2 text-sm text-gray-900 font-medium max-w-[180px] truncate" title="${o.cliente || ''}">${o.cliente || '—'}</td>
+          <td class="px-3 py-2 text-xs text-gray-600 max-w-[240px] truncate" title="${endDisplay}">${endDisplay || '—'}</td>
+          <td class="px-3 py-2 text-xs text-gray-600">${o.colaborador || '—'}</td>
+          <td class="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">${abertura}</td>
+          <td class="px-3 py-2 text-xs ${o.agendamento ? 'text-blue-700 font-medium' : 'text-gray-400'} whitespace-nowrap">${agendTxt}</td>
+        </tr>${detail}`;
+    }).join('');
+
+    wrap.innerHTML = `
+    <table class="min-w-full text-left">
+      <thead>
+        <tr class="bg-gray-800 text-white text-xs">
+          <th class="px-3 py-2 font-semibold">ID</th>
+          <th class="px-3 py-2 font-semibold">Tipo</th>
+          <th class="px-3 py-2 font-semibold">Status</th>
+          <th class="px-3 py-2 font-semibold">Cliente</th>
+          <th class="px-3 py-2 font-semibold">Endereço</th>
+          <th class="px-3 py-2 font-semibold">Colaborador</th>
+          <th class="px-3 py-2 font-semibold">Abertura</th>
+          <th class="px-3 py-2 font-semibold">Agendamento</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function _retRenderPagination(el, page, pages, total) {
+    if (!el) return;
+    if (pages <= 1) { el.innerHTML = `<span>${total} ordens encontradas</span>`; return; }
+    el.innerHTML = `
+        <span>${total} ordens · Página ${page} de ${pages}</span>
+        <div class="flex gap-1">
+          ${page > 1 ? `<button onclick="window._retGoPage(${page-1})" class="px-3 py-1 rounded border text-sm hover:bg-gray-100">← Anterior</button>` : ''}
+          ${page < pages ? `<button onclick="window._retGoPage(${page+1})" class="px-3 py-1 rounded border text-sm hover:bg-gray-100">Próxima →</button>` : ''}
+        </div>`;
+}
+
+window._retToggle = function(id) {
+    if (_retExpanded.has(id)) {
+        _retExpanded.delete(id);
+        // clean tab cache so fresh data loads next time
+        ['detalhes','mensagens','arquivos'].forEach(t => delete _retTabLoaded[`${id}-${t}`]);
+    } else {
+        _retExpanded.add(id);
+    }
+    _retRenderTable(document.getElementById('ret-table-wrap'));
+};
+
+window._retGoPage = function(p) {
+    _retPage = p;
+    _retExpanded.clear();
+    _retLoad();
+};
+
+window._retTab = async function(id, tab) {
+    // Update tab button styles
+    ['detalhes','mensagens','arquivos'].forEach(t => {
+        const btn = document.getElementById(`ret-tab-${id}-${t}`);
+        if (btn) {
+            if (t === tab) {
+                btn.classList.add('border-blue-600','text-blue-700','bg-white');
+                btn.classList.remove('border-transparent','text-gray-600');
+            } else {
+                btn.classList.remove('border-blue-600','text-blue-700','bg-white');
+                btn.classList.add('border-transparent','text-gray-600');
+            }
+        }
+        const panel = document.getElementById(`ret-panel-${id}-${t}`);
+        if (panel) panel.classList.toggle('hidden', t !== tab);
+    });
+
+    const key = `${id}-${tab}`;
+    if (_retTabLoaded[key]) return;
+    _retTabLoaded[key] = true;
+
+    if (tab === 'mensagens') {
+        const panel = document.getElementById(`ret-panel-${id}-mensagens`);
+        if (!panel) return;
+        panel.innerHTML = '<div class="text-xs text-gray-400 py-2">Carregando mensagens...</div>';
+        try {
+            const resp = await fetch(`/api/behavior/retiradas/${id}/mensagens`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status} – route not found or server error`);
+            const d = await resp.json();
+            const msgs = d.mensagens || [];
+            if (!msgs.length) {
+                panel.innerHTML = '<div class="text-xs text-gray-400 py-2">Nenhuma mensagem encontrada.</div>';
+                return;
+            }
+            // Status comes as full text from IXC: "Aberta", "Encaminhada", "Finalizada"
+            const _CLS_MSG = {
+                'Aberta':       'bg-orange-100 text-orange-700 border border-orange-200',
+                'Encaminhada':  'bg-yellow-100 text-yellow-700 border border-yellow-200',
+                'Agendada':     'bg-blue-100 text-blue-700 border border-blue-200',
+                'Finalizada':   'bg-green-100 text-green-700 border border-green-200',
+            };
+            panel.innerHTML = `
+            <div class="overflow-x-auto">
+            <table class="min-w-full text-xs border-collapse">
+              <thead>
+                <tr class="bg-gray-700 text-white text-left">
+                  <th class="px-3 py-2">ID</th>
+                  <th class="px-3 py-2">Status</th>
+                  <th class="px-3 py-2 whitespace-nowrap">Data</th>
+                  <th class="px-3 py-2">Mensagem</th>
+                  <th class="px-3 py-2">Histórico</th>
+                  <th class="px-3 py-2">Colaborador</th>
+                  <th class="px-3 py-2">Finaliza</th>
+                  <th class="px-3 py-2">Operador</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${msgs.map(m => {
+                  const st  = m.status || '';
+                  const cls = _CLS_MSG[st] || 'bg-gray-100 text-gray-700';
+                  const dt  = (m.data || '').slice(0,16).replace('T',' ');
+                  const finaliza = String(m.finaliza_processo||'').toUpperCase();
+                  return `<tr class="border-b border-gray-100 align-top hover:bg-gray-50">
+                    <td class="px-3 py-2 font-mono text-gray-400">#${m.id||'—'}</td>
+                    <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full font-medium text-xs ${cls}">${st||'—'}</span></td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${dt||'—'}</td>
+                    <td class="px-3 py-2 max-w-xs break-words text-gray-900 font-medium">${m.mensagem||'—'}</td>
+                    <td class="px-3 py-2 text-gray-600 max-w-[220px] break-words">${m.historico&&m.historico!=='-'?m.historico:'—'}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-700">${m.nome_colaborador||'—'}</td>
+                    <td class="px-3 py-2 text-center">${finaliza==='S'||finaliza==='SIM'?'✅':'Não'}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${m.id_operador||'—'}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+            </div>`;
+        } catch(e) {
+            const panel2 = document.getElementById(`ret-panel-${id}-mensagens`);
+            if (panel2) panel2.innerHTML = `<div class="text-xs text-red-500 py-2">Erro ao carregar: ${e.message}</div>`;
+            _retTabLoaded[key] = false;
+        }
+    }
+
+    if (tab === 'arquivos') {
+        const panel = document.getElementById(`ret-panel-${id}-arquivos`);
+        if (!panel) return;
+        panel.innerHTML = '<div class="text-xs text-gray-400 py-2">Carregando arquivos...</div>';
+        try {
+            const resp = await fetch(`/api/behavior/retiradas/${id}/arquivos`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status} – route not found or server error`);
+            const d = await resp.json();
+            const arqs = d.arquivos || [];
+            if (!arqs.length) {
+                panel.innerHTML = '<div class="text-xs text-gray-400 py-2">Nenhum arquivo encontrado.</div>';
+                return;
+            }
+            const BASE_URL = 'https://sistema.netvaletelecom.com/';
+            panel.innerHTML = `
+            <div class="overflow-x-auto">
+            <table class="min-w-full text-xs border-collapse">
+              <thead>
+                <tr class="bg-gray-700 text-white text-left">
+                  <th class="px-3 py-2">ID</th>
+                  <th class="px-3 py-2">Descrição</th>
+                  <th class="px-3 py-2">Extensão</th>
+                  <th class="px-3 py-2">Data</th>
+                  <th class="px-3 py-2">Download</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${arqs.map(a => {
+                  const dt  = (a.data || a.data_envio || a.data_mensagem || '').slice(0,16).replace('T',' ');
+                  const loc = a.local || a.arquivo || a.caminho || '';
+                  const ext = (a.extensao || a.extension || loc.split('.').pop() || '').toUpperCase();
+                  const url = loc ? (loc.startsWith('http') ? loc : BASE_URL + loc) : '';
+                  return `<tr class="border-b border-gray-100 hover:bg-gray-50">
+                    <td class="px-3 py-2 font-mono text-gray-500">${a.id||'—'}</td>
+                    <td class="px-3 py-2 text-gray-900">${a.descricao || a.nome || '—'}</td>
+                    <td class="px-3 py-2"><span class="bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded text-xs font-mono">${ext||'—'}</span></td>
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">${dt||'—'}</td>
+                    <td class="px-3 py-2">${url ? `<a href="${url}" target="_blank" rel="noopener"
+                        class="inline-flex items-center gap-1 text-blue-600 hover:underline font-medium">
+                        ⬇ Abrir</a>` : '—'}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+            </div>`;
+        } catch(e) {
+            const panel2 = document.getElementById(`ret-panel-${id}-arquivos`);
+            if (panel2) panel2.innerHTML = `<div class="text-xs text-red-500 py-2">Erro ao carregar: ${e.message}</div>`;
+            _retTabLoaded[key] = false;
+        }
+    }
+};
 
 // ─── Acompanhamento de Clientes (aba visão geral) ─────────────────────────────
 

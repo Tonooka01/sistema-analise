@@ -1,8 +1,39 @@
 import pandas as pd
 import sqlite3
 import json as _json
+import base64
+import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from flask import Blueprint, jsonify, request, abort, current_app
 from flask_login import current_user
+
+_IXC_BASE = 'https://sistema.netvaletelecom.com/webservice/v1'
+
+def _ixc_fetch(endpoint, params, token):
+    encoded = base64.b64encode(token.encode()).decode()
+    headers = {'Authorization': f'Basic {encoded}', 'ixcsoft': 'listar'}
+    resp = requests.post(
+        f'{_IXC_BASE}/{endpoint}',
+        data={**params, 'rp': '200', 'page': '1'},
+        headers=headers, timeout=15, verify=False
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get('registros', []) if isinstance(data, dict) else []
+
+
+def _ixc_query(sql, token):
+    encoded = base64.b64encode(token.encode()).decode()
+    headers = {'Authorization': f'Basic {encoded}', 'ixcsoft': 'listar'}
+    resp = requests.post(
+        f'{_IXC_BASE}/qb_query',
+        data={'query': sql},
+        headers=headers, timeout=15, verify=False
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get('registros', []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
 
 # Define o Blueprint para rotas de comportamento
 # O prefixo '/api/behavior' será definido no api_server.py
@@ -3154,3 +3185,280 @@ def api_behavior_acompanhamento_delete(record_id):
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ANÁLISE DE RETIRADA
+# ─────────────────────────────────────────────────────────────────────────────
+
+RETIRADA_ASSUNTOS = (
+    'RETIRADA DE EQUIPAMENTO',
+    'INADIMPLENCIA RETIRADA',
+    'EQUIPAMENTO NÃO RETIRADO',
+    'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
+    'CANCELAMENTO RETIRADA',
+)
+
+_MELHOR_HORARIO = {
+    'M': 'Manhã', 'T': 'Tarde', 'N': 'Noite', 'Q': 'Qualquer', '': '—'
+}
+
+
+@behavior_bp.route('/retiradas/filtros')
+def api_behavior_retiradas_filtros():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    conn = None
+    try:
+        conn = current_app.config['GET_DB_CONNECTION']()
+        ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
+        cidades = [r[0] for r in conn.execute(
+            f"SELECT DISTINCT Cidade FROM OS WHERE Assunto IN ({ph}) AND Cidade IS NOT NULL AND Cidade != '' ORDER BY Cidade",
+            RETIRADA_ASSUNTOS).fetchall()]
+        bairros = [r[0] for r in conn.execute(
+            f"SELECT DISTINCT Bairro FROM OS WHERE Assunto IN ({ph}) AND Bairro IS NOT NULL AND Bairro != '' ORDER BY Bairro",
+            RETIRADA_ASSUNTOS).fetchall()]
+        colaboradores = [r[0] for r in conn.execute(
+            f"SELECT DISTINCT Colaborador FROM OS WHERE Assunto IN ({ph}) AND Colaborador IS NOT NULL AND Colaborador != '' ORDER BY Colaborador",
+            RETIRADA_ASSUNTOS).fetchall()]
+        filiais = [r[0] for r in conn.execute(
+            f"SELECT DISTINCT Filial FROM OS WHERE Assunto IN ({ph}) AND Filial IS NOT NULL ORDER BY Filial",
+            RETIRADA_ASSUNTOS).fetchall()]
+        return jsonify({
+            'assuntos': list(RETIRADA_ASSUNTOS),
+            'status': ['Aberta', 'Encaminhada', 'Agendada', 'Finalizada'],
+            'cidades': cidades,
+            'bairros': bairros,
+            'colaboradores': colaboradores,
+            'filiais': filiais,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
+@behavior_bp.route('/retiradas')
+def api_behavior_retiradas():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    conn = None
+    try:
+        conn = current_app.config['GET_DB_CONNECTION']()
+
+        status_f  = request.args.get('status', '')
+        assunto_f = request.args.get('assunto', '')
+        filial_f  = request.args.get('filial', '')
+        cidade_f  = request.args.get('cidade', '')
+        bairro_f  = request.args.get('bairro', '')
+        colab_f   = request.args.get('colaborador', '')
+        date_from = request.args.get('date_from', '')
+        date_to   = request.args.get('date_to', '')
+        search    = request.args.get('search', '').strip()
+        page      = max(1, int(request.args.get('page', 1)))
+        limit     = min(200, int(request.args.get('limit', 50)))
+
+        ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
+        conds  = [f"o.Assunto IN ({ph})"]
+        params = list(RETIRADA_ASSUNTOS)
+
+        if status_f:
+            status_list = [s.strip() for s in status_f.split(',') if s.strip()]
+            if len(status_list) == 1:
+                conds.append("o.Status = ?"); params.append(status_list[0])
+            elif status_list:
+                sph = ','.join('?' * len(status_list))
+                conds.append(f"o.Status IN ({sph})"); params.extend(status_list)
+        if assunto_f:
+            conds.append("o.Assunto = ?"); params.append(assunto_f)
+        if filial_f:
+            conds.append("o.Filial = ?"); params.append(filial_f)
+        if cidade_f:
+            conds.append("o.Cidade = ?"); params.append(cidade_f)
+        if bairro_f:
+            conds.append("o.Bairro = ?"); params.append(bairro_f)
+        if colab_f:
+            conds.append("o.Colaborador = ?"); params.append(colab_f)
+        if date_from:
+            conds.append("o.Abertura >= ?"); params.append(date_from)
+        if date_to:
+            conds.append("o.Abertura <= ?"); params.append(date_to + ' 23:59:59')
+        if search:
+            conds.append("(o.Cliente LIKE ? OR o.Endere_o LIKE ? OR o.Bairro LIKE ? OR o.Mensagem LIKE ?)")
+            s = f'%{search}%'
+            params.extend([s, s, s, s])
+
+        where = 'WHERE ' + ' AND '.join(conds)
+
+        kpi_row = conn.execute(f"""
+            SELECT
+                COUNT(*) total,
+                COUNT(CASE WHEN o.Status = 'Aberta'      THEN 1 END) abertas,
+                COUNT(CASE WHEN o.Status = 'Encaminhada' THEN 1 END) encaminhadas,
+                COUNT(CASE WHEN o.Status = 'Agendada'    THEN 1 END) agendadas,
+                COUNT(CASE WHEN o.Status = 'Finalizada'  THEN 1 END) finalizadas,
+                COUNT(CASE WHEN (o.Agendamento IS NULL OR o.Agendamento IN ('','0000-00-00 00:00:00'))
+                                 AND o.Status != 'Finalizada' THEN 1 END) sem_agendamento
+            FROM OS o {where}
+        """, params).fetchone()
+
+        por_assunto = conn.execute(f"""
+            SELECT o.Assunto, COUNT(*) FROM OS o {where}
+            GROUP BY o.Assunto ORDER BY COUNT(*) DESC
+        """, params).fetchall()
+
+        por_cidade = conn.execute(f"""
+            SELECT o.Cidade, COUNT(*) FROM OS o {where}
+            GROUP BY o.Cidade ORDER BY COUNT(*) DESC LIMIT 10
+        """, params).fetchall()
+
+        tendencia = conn.execute(f"""
+            SELECT strftime('%Y-%m', o.Abertura) ym, COUNT(*),
+                   COUNT(CASE WHEN o.Status = 'Finalizada' THEN 1 END)
+            FROM OS o {where}
+            AND o.Abertura >= date('now','-12 months')
+            GROUP BY ym ORDER BY ym
+        """, params).fetchall()
+
+        total  = kpi_row[0] if kpi_row else 0
+        offset = (page - 1) * limit
+
+        rows = conn.execute(f"""
+            SELECT
+                o.ID, o.Assunto, o.Status, o.Cliente, o.Colaborador,
+                o.Abertura, o.Agendamento, o.Melhor_hor_rio,
+                o.Endere_o, o.Complemento, o.Bairro, o.Cidade, o.Refer_ncia,
+                o.Telefone_celular, o.Whatsapp, o.Telefone_residencial, o.Telefone_comercial,
+                o.Mensagem, o.Protocolo, o.SLA, o.Filial, o.Prioridade,
+                o.In_cio, o.Final, o.Fechamento, o.Prazo_limite,
+                o.Contrato, o.ID_Atendimento,
+                a.Descri_o AS atend_descricao,
+                a.Novo_status AS atend_status
+            FROM OS o
+            LEFT JOIN Atendimentos a ON a.ID = o.ID_Atendimento
+            {where}
+            ORDER BY
+                CASE o.Status
+                    WHEN 'Aberta'      THEN 1
+                    WHEN 'Encaminhada' THEN 2
+                    WHEN 'Agendada'    THEN 3
+                    ELSE 4
+                END,
+                o.Abertura DESC
+            LIMIT ? OFFSET ?
+        """, params + [limit, offset]).fetchall()
+
+        def _clean(v):
+            return None if v in (None, '', '0000-00-00 00:00:00', '0000-00-00') else v
+
+        def fmt(r):
+            tel = r[13] or r[14] or r[15] or r[16]
+            return {
+                'id':             r[0],
+                'assunto':        r[1],
+                'status':         r[2],
+                'cliente':        r[3],
+                'colaborador':    r[4],
+                'abertura':       r[5],
+                'agendamento':    _clean(r[6]),
+                'melhor_horario': _MELHOR_HORARIO.get(r[7] or '', r[7] or '—'),
+                'endereco':       r[8],
+                'complemento':    r[9],
+                'bairro':         r[10],
+                'cidade':         r[11],
+                'referencia':     r[12],
+                'telefone':       tel,
+                'telefone_cel':   r[13],
+                'whatsapp':       r[14],
+                'telefone_res':   r[15],
+                'telefone_com':   r[16],
+                'mensagem':       r[17],
+                'protocolo':      r[18],
+                'sla':            r[19],
+                'filial':         r[20],
+                'prioridade':     r[21],
+                'inicio':         _clean(r[22]),
+                'final':          _clean(r[23]),
+                'fechamento':     _clean(r[24]),
+                'prazo_limite':   _clean(r[25]),
+                'contrato':       r[26],
+                'id_atendimento': r[27],
+                'atend_descricao': r[28],
+                'atend_status':   r[29],
+            }
+
+        return jsonify({
+            'kpis': {
+                'total':           kpi_row[0],
+                'abertas':         kpi_row[1],
+                'encaminhadas':    kpi_row[2],
+                'agendadas':       kpi_row[3],
+                'finalizadas':     kpi_row[4],
+                'sem_agendamento': kpi_row[5],
+            },
+            'por_assunto': [{'assunto': r[0], 'total': r[1]} for r in por_assunto],
+            'por_cidade':  [{'cidade': r[0] or '—', 'total': r[1]} for r in por_cidade],
+            'tendencia':   [{'mes': r[0], 'total': r[1], 'finalizadas': r[2]} for r in tendencia],
+            'ordens':      [fmt(r) for r in rows],
+            'total':       total,
+            'page':        page,
+            'limit':       limit,
+            'pages':       max(1, -(-total // limit)),
+        })
+    except Exception as e:
+        import traceback
+        logger.error(f"Erro retiradas: {e}", exc_info=True)
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+    finally:
+        if conn: conn.close()
+
+
+def _ret_get_token():
+    conn = current_app.config['GET_DB_CONNECTION']()
+    try:
+        row = conn.execute("SELECT value FROM Settings WHERE key = 'ixc_token'").fetchone()
+        return row['value'] if row else None
+    finally:
+        conn.close()
+
+
+@behavior_bp.route('/retiradas/<int:os_id>/mensagens')
+def api_ret_mensagens(os_id):
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    try:
+        token = _ret_get_token()
+        if not token:
+            return jsonify({'error': 'Token IXC não configurado'}), 500
+        records = _ixc_query(
+            f"""SELECT m.id, m.status, m.data, m.mensagem, m.historico,
+                       m.finaliza_processo, m.id_operador,
+                       f.funcionario AS nome_colaborador
+                FROM su_oss_chamado_mensagem m
+                LEFT JOIN funcionarios f ON f.id = m.id_funcionario
+                WHERE m.id_os = {os_id}
+                ORDER BY m.id ASC""",
+            token
+        )
+        return jsonify({'mensagens': records})
+    except Exception as e:
+        logger.error(f"Erro mensagens OS {os_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@behavior_bp.route('/retiradas/<int:os_id>/arquivos')
+def api_ret_arquivos(os_id):
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    try:
+        token = _ret_get_token()
+        if not token:
+            return jsonify({'error': 'Token IXC não configurado'}), 500
+        records = _ixc_query(
+            f"SELECT * FROM su_oss_chamado_arquivos WHERE id_os = {os_id} ORDER BY id ASC",
+            token
+        )
+        return jsonify({'arquivos': records})
+    except Exception as e:
+        logger.error(f"Erro arquivos OS {os_id}: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
