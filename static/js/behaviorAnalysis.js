@@ -3547,6 +3547,7 @@ window._retTab = async function(id, tab) {
                 panel.innerHTML = '<div class="text-xs text-gray-400 py-2">Nenhum arquivo encontrado.</div>';
                 return;
             }
+            if (arqs[0]) console.log('[ARQUIVOS] campos do 1º registro:', JSON.stringify(arqs[0], null, 2));
             const BASE_URL = 'https://sistema.netvaletelecom.com/';
             const IMG_EXTS = new Set(['JPG','JPEG','PNG','GIF','WEBP','BMP','SVG']);
             panel.innerHTML = `
