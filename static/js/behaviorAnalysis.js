@@ -3547,7 +3547,21 @@ window._retTab = async function(id, tab) {
                 panel.innerHTML = '<div class="text-xs text-gray-400 py-2">Nenhum arquivo encontrado.</div>';
                 return;
             }
-            const BASE_URL = 'https://sistema.netvaletelecom.com/';
+            // Cria modal lightbox uma única vez no DOM
+            if (!document.getElementById('ret-img-modal')) {
+                const m = document.createElement('div');
+                m.id = 'ret-img-modal';
+                m.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);align-items:center;justify-content:center;cursor:zoom-out';
+                m.innerHTML = '<img id="ret-img-modal-img" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.6)" />';
+                m.addEventListener('click', () => { m.style.display = 'none'; });
+                document.body.appendChild(m);
+            }
+            window._retOpenImg = function(proxyUrl) {
+                const modal = document.getElementById('ret-img-modal');
+                document.getElementById('ret-img-modal-img').src = proxyUrl;
+                modal.style.display = 'flex';
+            };
+
             const IMG_EXTS = new Set(['JPG','JPEG','PNG','GIF','WEBP','BMP','SVG']);
             panel.innerHTML = `
             <div class="overflow-x-auto">
@@ -3563,20 +3577,19 @@ window._retTab = async function(id, tab) {
               </thead>
               <tbody>
                 ${arqs.map(a => {
-                  const dt   = (a.data_envio || a.data || '').slice(0,16);
-                  const loc  = a.local_arquivo || a.local || a.arquivo || a.caminho || '';
+                  const dt    = (a.data_envio || a.data || '').slice(0,16);
+                  const loc   = a.local_arquivo || a.local || a.arquivo || a.caminho || '';
                   const fname = a.nome_arquivo || a.nome || loc.split('/').pop() || '';
-                  const ext  = (fname.includes('.') ? fname.split('.').pop() : '').toUpperCase();
-                  const url  = loc ? (loc.startsWith('http') ? loc : BASE_URL + loc) : '';
+                  const ext   = (fname.includes('.') ? fname.split('.').pop() : '').toUpperCase();
+                  const proxy = loc ? `/api/behavior/ixc-file?path=${encodeURIComponent(loc)}` : '';
                   const isImg = IMG_EXTS.has(ext);
-                  const preview = url
+                  const preview = proxy
                     ? isImg
-                      ? `<a href="${url}" target="_blank" rel="noopener" title="${fname}">
-                           <img src="${url}" alt="${a.descricao||fname}"
-                             class="h-20 w-20 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity cursor-zoom-in"
-                             onerror="this.outerHTML='<a href=\\'${url}\\' target=\\'_blank\\' class=\\'text-blue-600 hover:underline\\'>⬇ Abrir</a>'">
-                         </a>`
-                      : `<a href="${url}" target="_blank" rel="noopener"
+                      ? `<img src="${proxy}" alt="${a.descricao||fname}"
+                           onclick="window._retOpenImg('${proxy}')"
+                           class="h-20 w-20 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity cursor-zoom-in"
+                           onerror="this.outerHTML='<a href=\\'${proxy}\\' target=\\'_blank\\' class=\\'text-blue-600 hover:underline\\'>⬇ Abrir</a>'">`
+                      : `<a href="${proxy}" target="_blank" rel="noopener"
                            class="inline-flex items-center gap-1 text-blue-600 hover:underline font-medium">
                            ⬇ Abrir</a>`
                     : '—';

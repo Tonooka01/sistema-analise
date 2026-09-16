@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify, request, abort, current_app
 from flask_login import current_user
 
 _IXC_BASE = 'https://sistema.netvaletelecom.com/webservice/v1'
+_IXC_HOST = 'https://sistema.netvaletelecom.com'
 
 def _ixc_fetch(endpoint, params, token):
     """Form-encoded POST (usado pelo sync de OS, contratos etc.)"""
@@ -3534,6 +3535,30 @@ def _ixc_arquivos(os_id, token):
     if d is not None:
         return d.get('registros', [])
     return []
+
+
+@behavior_bp.route('/ixc-file')
+def api_ixc_file():
+    if not current_user.is_authenticated:
+        return '', 401
+    fpath = request.args.get('path', '').lstrip('/')
+    if not fpath or '..' in fpath or fpath.startswith('http'):
+        return '', 400
+    try:
+        token = _ret_get_token()
+        if not token:
+            return '', 500
+        encoded = base64.b64encode(token.encode()).decode()
+        r = requests.get(f'{_IXC_HOST}/{fpath}',
+                         headers={'Authorization': f'Basic {encoded}'},
+                         timeout=20, verify=False, stream=True)
+        from flask import Response, stream_with_context
+        ct = r.headers.get('Content-Type', 'application/octet-stream')
+        return Response(stream_with_context(r.iter_content(8192)),
+                        status=r.status_code, content_type=ct)
+    except Exception as e:
+        logger.error(f"ixc-file {fpath}: {e}")
+        return '', 502
 
 
 @behavior_bp.route('/retiradas/<int:os_id>/mensagens')
