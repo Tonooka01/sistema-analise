@@ -3547,7 +3547,6 @@ window._retTab = async function(id, tab) {
                 panel.innerHTML = '<div class="text-xs text-gray-400 py-2">Nenhum arquivo encontrado.</div>';
                 return;
             }
-            if (arqs[0]) console.log('[ARQUIVOS] campos do 1º registro:', JSON.stringify(arqs[0], null, 2));
             const BASE_URL = 'https://sistema.netvaletelecom.com/';
             const IMG_EXTS = new Set(['JPG','JPEG','PNG','GIF','WEBP','BMP','SVG']);
             panel.innerHTML = `
@@ -3564,17 +3563,18 @@ window._retTab = async function(id, tab) {
               </thead>
               <tbody>
                 ${arqs.map(a => {
-                  const dt  = (a.data || a.data_envio || a.data_mensagem || '').slice(0,16).replace('T',' ');
-                  const loc = a.local || a.arquivo || a.caminho || '';
-                  const ext = (a.extensao || a.extension || (loc.includes('.') ? loc.split('.').pop() : '') || '').toUpperCase();
-                  const url = loc ? (loc.startsWith('http') ? loc : BASE_URL + loc) : '';
+                  const dt   = (a.data_envio || a.data || '').slice(0,16);
+                  const loc  = a.local_arquivo || a.local || a.arquivo || a.caminho || '';
+                  const fname = a.nome_arquivo || a.nome || loc.split('/').pop() || '';
+                  const ext  = (fname.includes('.') ? fname.split('.').pop() : '').toUpperCase();
+                  const url  = loc ? (loc.startsWith('http') ? loc : BASE_URL + loc) : '';
                   const isImg = IMG_EXTS.has(ext);
                   const preview = url
                     ? isImg
-                      ? `<a href="${url}" target="_blank" rel="noopener" title="Abrir imagem completa">
-                           <img src="${url}" alt="${a.descricao||ext}"
+                      ? `<a href="${url}" target="_blank" rel="noopener" title="${fname}">
+                           <img src="${url}" alt="${a.descricao||fname}"
                              class="h-20 w-20 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity cursor-zoom-in"
-                             onerror="this.parentElement.innerHTML='<span class=\\'text-xs text-gray-400\\'>Sem preview</span><br><a href=\\'${url}\\' target=\\'_blank\\' class=\\'text-blue-600 hover:underline\\'>⬇ Abrir</a>'">
+                             onerror="this.outerHTML='<a href=\\'${url}\\' target=\\'_blank\\' class=\\'text-blue-600 hover:underline\\'>⬇ Abrir</a>'">
                          </a>`
                       : `<a href="${url}" target="_blank" rel="noopener"
                            class="inline-flex items-center gap-1 text-blue-600 hover:underline font-medium">
@@ -3582,7 +3582,7 @@ window._retTab = async function(id, tab) {
                     : '—';
                   return `<tr class="border-b border-gray-100 hover:bg-gray-50 align-middle">
                     <td class="px-3 py-2 font-mono text-gray-500">${a.id||'—'}</td>
-                    <td class="px-3 py-2 text-gray-900">${a.descricao || a.nome || '—'}</td>
+                    <td class="px-3 py-2 text-gray-900">${a.descricao||fname||'—'}</td>
                     <td class="px-3 py-2"><span class="bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded text-xs font-mono">${ext||'—'}</span></td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-600">${dt||'—'}</td>
                     <td class="px-3 py-2">${preview}</td>

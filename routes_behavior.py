@@ -3505,96 +3505,34 @@ def _ixc_post(endpoint, payload, token):
 
 
 def _ixc_mensagens(os_id, token):
-    """Busca mensagens da OS. Tenta campos FK alternativos + descoberta automática."""
-
-    # passo 0: busca sem filtro (rp=1) para descobrir os campos reais do registro
-    try:
-        d = _ixc_post('su_oss_chamado_mensagem',
-                       {'rp': '1', 'page': '1', 'sortname': 'su_oss_chamado_mensagem.id',
-                        'sortorder': 'desc'}, token)
-        if d and d.get('registros'):
-            sample_keys = list(d['registros'][0].keys())
-            logger.info(f"mensagens campos descobertos: {sample_keys}")
-        elif d is not None:
-            logger.info(f"mensagens sem filtro retornou: total={d.get('total')} keys={list(d.keys())}")
-    except Exception as ex:
-        logger.warning(f"mensagens descoberta campos: {ex}")
-
-    # passo 1: tenta cada campo FK possível (JSON format)
-    for fk in ('id_os', 'id_oss_chamado', 'id_chamado', 'id_oss'):
-        try:
-            d = _ixc_post('su_oss_chamado_mensagem', {
-                'qtype': f'su_oss_chamado_mensagem.{fk}',
-                'query': str(os_id),
-                'oper': '=',
-                'sortname': 'su_oss_chamado_mensagem.id',
-                'sortorder': 'asc',
-                'rp': '200',
-                'page': '1',
-            }, token)
-            logger.info(f"mensagens fk={fk}: d={str(d)[:150]!r}")
-            if d is not None:
-                recs = d.get('registros', [])
-                if recs or int(d.get('total', 0)) == 0:
-                    return recs
-        except Exception as ex:
-            logger.warning(f"mensagens fk={fk}: {ex}")
-
-    # passo 2: grid_param (mesmo formato que automacao_ixc_api.py usa para comodato)
-    import json as _json
-    for fk in ('id_os', 'id_oss_chamado'):
-        try:
-            gp = _json.dumps([{"TB": f"su_oss_chamado_mensagem.{fk}", "OP": "=", "P": str(os_id)}])
-            d = _ixc_post('su_oss_chamado_mensagem', {
-                'grid_param': gp,
-                'sortname': 'su_oss_chamado_mensagem.id',
-                'sortorder': 'asc',
-                'rp': '200',
-                'page': '1',
-            }, token)
-            logger.info(f"mensagens grid_param fk={fk}: d={str(d)[:150]!r}")
-            if d is not None:
-                recs = d.get('registros', [])
-                if recs or int(d.get('total', 0)) == 0:
-                    return recs
-        except Exception as ex:
-            logger.warning(f"mensagens grid_param fk={fk}: {ex}")
-
+    """Busca mensagens da OS. FK confirmado: id_oss_chamado."""
+    d = _ixc_post('su_oss_chamado_mensagem', {
+        'qtype':     'su_oss_chamado_mensagem.id_oss_chamado',
+        'query':     str(os_id),
+        'oper':      '=',
+        'sortname':  'su_oss_chamado_mensagem.id',
+        'sortorder': 'asc',
+        'rp':        '200',
+        'page':      '1',
+    }, token)
+    if d is not None:
+        return d.get('registros', [])
     return []
 
 
 def _ixc_arquivos(os_id, token):
-    """Busca arquivos da OS. Tenta campos FK alternativos + descoberta automática."""
-
-    try:
-        d = _ixc_post('su_oss_chamado_arquivos',
-                       {'rp': '1', 'page': '1', 'sortname': 'su_oss_chamado_arquivos.id',
-                        'sortorder': 'desc'}, token)
-        if d and d.get('registros'):
-            logger.info(f"arquivos campos descobertos: {list(d['registros'][0].keys())}")
-    except Exception as ex:
-        logger.warning(f"arquivos descoberta campos: {ex}")
-
-    import json as _json
-    for fk in ('id_os', 'id_oss_chamado', 'id_chamado', 'id_oss'):
-        try:
-            d = _ixc_post('su_oss_chamado_arquivos', {
-                'qtype': f'su_oss_chamado_arquivos.{fk}',
-                'query': str(os_id),
-                'oper': '=',
-                'sortname': 'su_oss_chamado_arquivos.id',
-                'sortorder': 'asc',
-                'rp': '200',
-                'page': '1',
-            }, token)
-            logger.info(f"arquivos fk={fk}: d={str(d)[:150]!r}")
-            if d is not None:
-                recs = d.get('registros', [])
-                if recs or int(d.get('total', 0)) == 0:
-                    return recs
-        except Exception as ex:
-            logger.warning(f"arquivos fk={fk}: {ex}")
-
+    """Busca arquivos da OS. FK confirmado: id_oss_chamado."""
+    d = _ixc_post('su_oss_chamado_arquivos', {
+        'qtype':     'su_oss_chamado_arquivos.id_oss_chamado',
+        'query':     str(os_id),
+        'oper':      '=',
+        'sortname':  'su_oss_chamado_arquivos.id',
+        'sortorder': 'asc',
+        'rp':        '200',
+        'page':      '1',
+    }, token)
+    if d is not None:
+        return d.get('registros', [])
     return []
 
 
