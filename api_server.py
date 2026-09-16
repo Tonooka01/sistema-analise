@@ -162,6 +162,9 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(summary_bp,          url_prefix='/api')
 app.register_blueprint(filters_bp,          url_prefix='/api/filters')
 app.register_blueprint(behavior_bp,         url_prefix='/api/behavior')
+# alias para compatibilidade com JS cacheado
+from routes_behavior import api_ixc_file as _ixc_file_fn
+app.add_url_rule('/api/ixc-file', 'api_ixc_file_alias', _ixc_file_fn)
 app.register_blueprint(comparison_bp,       url_prefix='/api/comparison')
 
 app.register_blueprint(finance_bp,          url_prefix='/api/custom_analysis')

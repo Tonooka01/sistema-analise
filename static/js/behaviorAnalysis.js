@@ -3547,22 +3547,50 @@ window._retTab = async function(id, tab) {
                 panel.innerHTML = '<div class="text-xs text-gray-400 py-2">Nenhum arquivo encontrado.</div>';
                 return;
             }
-            // Cria modal lightbox uma única vez no DOM
-            if (!document.getElementById('ret-img-modal')) {
+            // Modal lightbox (cria uma única vez)
+            if (!document.getElementById('ret-file-modal')) {
                 const m = document.createElement('div');
-                m.id = 'ret-img-modal';
-                m.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);align-items:center;justify-content:center;cursor:zoom-out';
-                m.innerHTML = '<img id="ret-img-modal-img" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.6)" />';
-                m.addEventListener('click', () => { m.style.display = 'none'; });
+                m.id = 'ret-file-modal';
+                m.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);flex-direction:column;align-items:center;justify-content:center;gap:12px';
+                m.innerHTML = `
+                  <button id="ret-file-modal-close"
+                    style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:22px;width:36px;height:36px;border-radius:50%;cursor:pointer;line-height:1">✕</button>
+                  <div id="ret-file-modal-body" style="max-width:92vw;max-height:88vh;display:flex;align-items:center;justify-content:center"></div>
+                  <div id="ret-file-modal-label" style="color:rgba(255,255,255,.7);font-size:12px;max-width:80vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>`;
+                m.addEventListener('click', e => { if (e.target === m) m.style.display = 'none'; });
+                m.querySelector('#ret-file-modal-close').addEventListener('click', () => { m.style.display = 'none'; });
                 document.body.appendChild(m);
             }
-            window._retOpenImg = function(proxyUrl) {
-                const modal = document.getElementById('ret-img-modal');
-                document.getElementById('ret-img-modal-img').src = proxyUrl;
+            const IMG_EXTS = new Set(['JPG','JPEG','PNG','GIF','WEBP','BMP','SVG']);
+            window._retVerArquivo = async function(proxyUrl, ext, label) {
+                const modal = document.getElementById('ret-file-modal');
+                const body  = document.getElementById('ret-file-modal-body');
+                const lbl   = document.getElementById('ret-file-modal-label');
+                body.innerHTML = '<div style="color:#fff;font-size:13px">Carregando...</div>';
+                lbl.textContent = label;
                 modal.style.display = 'flex';
+                try {
+                    const resp = await fetch(proxyUrl);
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    const blob = await resp.blob();
+                    const url  = URL.createObjectURL(blob);
+                    if (IMG_EXTS.has(ext)) {
+                        body.innerHTML = '';
+                        const img = document.createElement('img');
+                        img.src = url;
+                        img.style.cssText = 'max-width:90vw;max-height:82vh;border-radius:6px;box-shadow:0 4px 32px rgba(0,0,0,.6);object-fit:contain';
+                        img.onclick = e => e.stopPropagation();
+                        body.appendChild(img);
+                    } else if (ext === 'PDF') {
+                        body.innerHTML = `<iframe src="${url}" style="width:88vw;height:80vh;border-radius:6px;border:none"></iframe>`;
+                    } else {
+                        body.innerHTML = `<a href="${url}" download="${label}" style="color:#60a5fa;font-size:14px;text-decoration:underline">⬇ Baixar ${label}</a>`;
+                    }
+                } catch(e) {
+                    body.innerHTML = `<div style="color:#f87171;font-size:13px">Erro: ${e.message}</div>`;
+                }
             };
 
-            const IMG_EXTS = new Set(['JPG','JPEG','PNG','GIF','WEBP','BMP','SVG']);
             panel.innerHTML = `
             <div class="overflow-x-auto">
             <table class="min-w-full text-xs border-collapse">
@@ -3582,23 +3610,18 @@ window._retTab = async function(id, tab) {
                   const fname = a.nome_arquivo || a.nome || loc.split('/').pop() || '';
                   const ext   = (fname.includes('.') ? fname.split('.').pop() : '').toUpperCase();
                   const proxy = loc ? `/api/behavior/ixc-file?path=${encodeURIComponent(loc)}` : '';
-                  const isImg = IMG_EXTS.has(ext);
-                  const preview = proxy
-                    ? isImg
-                      ? `<img src="${proxy}" alt="${a.descricao||fname}"
-                           onclick="window._retOpenImg('${proxy}')"
-                           class="h-20 w-20 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity cursor-zoom-in"
-                           onerror="this.outerHTML='<a href=\\'${proxy}\\' target=\\'_blank\\' class=\\'text-blue-600 hover:underline\\'>⬇ Abrir</a>'">`
-                      : `<a href="${proxy}" target="_blank" rel="noopener"
-                           class="inline-flex items-center gap-1 text-blue-600 hover:underline font-medium">
-                           ⬇ Abrir</a>`
+                  const lbl   = (a.descricao||fname||'arquivo').replace(/'/g, "\\'");
+                  const btn   = proxy
+                    ? `<button onclick="window._retVerArquivo('${proxy}','${ext}','${lbl}')"
+                         class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+                         👁 Ver</button>`
                     : '—';
                   return `<tr class="border-b border-gray-100 hover:bg-gray-50 align-middle">
                     <td class="px-3 py-2 font-mono text-gray-500">${a.id||'—'}</td>
                     <td class="px-3 py-2 text-gray-900">${a.descricao||fname||'—'}</td>
                     <td class="px-3 py-2"><span class="bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded text-xs font-mono">${ext||'—'}</span></td>
                     <td class="px-3 py-2 whitespace-nowrap text-gray-600">${dt||'—'}</td>
-                    <td class="px-3 py-2">${preview}</td>
+                    <td class="px-3 py-2">${btn}</td>
                   </tr>`;
                 }).join('')}
               </tbody>
