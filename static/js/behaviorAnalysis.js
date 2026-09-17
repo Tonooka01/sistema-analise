@@ -3562,32 +3562,35 @@ window._retTab = async function(id, tab) {
                 document.body.appendChild(m);
             }
             const IMG_EXTS = new Set(['JPG','JPEG','PNG','GIF','WEBP','BMP','SVG']);
-            window._retVerArquivo = async function(proxyUrl, ext, label) {
+            // Usa URL direta do IXC — o browser envia os cookies da sessão IXC automaticamente
+            const IXC_HOST = 'https://sistema.netvaletelecom.com';
+            window._retVerArquivo = function(loc, ext, label) {
                 const modal = document.getElementById('ret-file-modal');
                 const body  = document.getElementById('ret-file-modal-body');
                 const lbl   = document.getElementById('ret-file-modal-label');
-                body.innerHTML = '<div style="color:#fff;font-size:13px">Carregando...</div>';
                 lbl.textContent = label;
                 modal.style.display = 'flex';
-                try {
-                    const resp = await fetch(proxyUrl);
-                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                    const blob = await resp.blob();
-                    const url  = URL.createObjectURL(blob);
-                    if (IMG_EXTS.has(ext)) {
-                        body.innerHTML = '';
-                        const img = document.createElement('img');
-                        img.src = url;
-                        img.style.cssText = 'max-width:90vw;max-height:82vh;border-radius:6px;box-shadow:0 4px 32px rgba(0,0,0,.6);object-fit:contain';
-                        img.onclick = e => e.stopPropagation();
-                        body.appendChild(img);
-                    } else if (ext === 'PDF') {
-                        body.innerHTML = `<iframe src="${url}" style="width:88vw;height:80vh;border-radius:6px;border:none"></iframe>`;
-                    } else {
-                        body.innerHTML = `<a href="${url}" download="${label}" style="color:#60a5fa;font-size:14px;text-decoration:underline">⬇ Baixar ${label}</a>`;
-                    }
-                } catch(e) {
-                    body.innerHTML = `<div style="color:#f87171;font-size:13px">Erro: ${e.message}</div>`;
+                const directUrl = `${IXC_HOST}/${loc}`;
+                if (IMG_EXTS.has(ext)) {
+                    body.innerHTML = '';
+                    const img = document.createElement('img');
+                    img.style.cssText = 'max-width:90vw;max-height:82vh;border-radius:6px;box-shadow:0 4px 32px rgba(0,0,0,.6);object-fit:contain';
+                    img.onclick = e => e.stopPropagation();
+                    img.onerror = () => {
+                        body.innerHTML = `<div style="color:#fbbf24;font-size:13px;text-align:center">
+                          Não foi possível carregar a imagem diretamente.<br>
+                          <a href="${directUrl}" target="_blank" style="color:#60a5fa;text-decoration:underline;margin-top:8px;display:inline-block">
+                          ↗ Abrir no IXC</a></div>`;
+                    };
+                    img.src = directUrl;
+                    body.appendChild(img);
+                } else if (ext === 'PDF') {
+                    body.innerHTML = `<iframe src="${directUrl}" style="width:88vw;height:80vh;border-radius:6px;border:none"
+                      onerror="this.outerHTML='<a href=\\'${directUrl}\\' target=\\'_blank\\' style=\\'color:#60a5fa;font-size:14px\\'>↗ Abrir PDF no IXC</a>'">
+                    </iframe>`;
+                } else {
+                    body.innerHTML = `<a href="${directUrl}" target="_blank"
+                      style="color:#60a5fa;font-size:14px;text-decoration:underline">↗ Abrir no IXC</a>`;
                 }
             };
 
@@ -3609,10 +3612,9 @@ window._retTab = async function(id, tab) {
                   const loc   = a.local_arquivo || a.local || a.arquivo || a.caminho || '';
                   const fname = a.nome_arquivo || a.nome || loc.split('/').pop() || '';
                   const ext   = (fname.includes('.') ? fname.split('.').pop() : '').toUpperCase();
-                  const proxy = loc ? `/api/behavior/ixc-file?path=${encodeURIComponent(loc)}` : '';
-                  const lbl   = (a.descricao||fname||'arquivo').replace(/'/g, "\\'");
-                  const btn   = proxy
-                    ? `<button onclick="window._retVerArquivo('${proxy}','${ext}','${lbl}')"
+                  const lbl = (a.descricao||fname||'arquivo').replace(/'/g, "\\'");
+                  const btn = loc
+                    ? `<button onclick="window._retVerArquivo('${loc.replace(/'/g,"\\'")}','${ext}','${lbl}')"
                          class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors">
                          👁 Ver</button>`
                     : '—';

@@ -3506,18 +3506,23 @@ def _ixc_post(endpoint, payload, token):
 
 
 def _ixc_mensagens(os_id, token):
-    """Busca mensagens da OS. FK confirmado: id_oss_chamado."""
-    d = _ixc_post('su_oss_chamado_mensagem', {
-        'qtype':     'su_oss_chamado_mensagem.id_oss_chamado',
-        'query':     str(os_id),
-        'oper':      '=',
-        'sortname':  'su_oss_chamado_mensagem.id',
-        'sortorder': 'asc',
-        'rp':        '200',
-        'page':      '1',
-    }, token)
-    if d is not None:
-        return d.get('registros', [])
+    """Busca mensagens da OS. Tenta FKs alternativos pois o campo varia."""
+    for fk in ('id_os', 'id_oss_chamado', 'id_chamado'):
+        d = _ixc_post('su_oss_chamado_mensagem', {
+            'qtype':     f'su_oss_chamado_mensagem.{fk}',
+            'query':     str(os_id),
+            'oper':      '=',
+            'sortname':  'su_oss_chamado_mensagem.id',
+            'sortorder': 'asc',
+            'rp':        '200',
+            'page':      '1',
+        }, token)
+        if d is not None:
+            recs = d.get('registros', [])
+            # IXCsoft retorna HTML de erro quando o campo não existe → d seria None
+            # Se chegou aqui, o campo existe e total pode ser 0 (OS sem mensagens)
+            logger.info(f"mensagens fk={fk} total={d.get('total')} recs={len(recs)}")
+            return recs
     return []
 
 
@@ -3549,13 +3554,26 @@ def api_ixc_file():
         if not token:
             return '', 500
         encoded = base64.b64encode(token.encode()).decode()
-        r = requests.get(f'{_IXC_HOST}/{fpath}',
-                         headers={'Authorization': f'Basic {encoded}'},
-                         timeout=20, verify=False, stream=True)
+        auth_headers = {'Authorization': f'Basic {encoded}'}
+        # IXCsoft pode servir arquivos em caminhos diferentes dependendo da versão
+        candidates = [
+            f'{_IXC_HOST}/{fpath}',
+            f'{_IXC_HOST}/upload/{fpath}',
+            f'{_IXC_HOST}/webservice/v1/{fpath}',
+            f'{_IXC_HOST}/ixcsoft/{fpath}',
+        ]
         from flask import Response, stream_with_context
-        ct = r.headers.get('Content-Type', 'application/octet-stream')
-        return Response(stream_with_context(r.iter_content(8192)),
-                        status=r.status_code, content_type=ct)
+        for url in candidates:
+            try:
+                r = requests.get(url, headers=auth_headers, timeout=15, verify=False, stream=True)
+                logger.info(f"ixc-file {url} → {r.status_code}")
+                if r.status_code == 200:
+                    ct = r.headers.get('Content-Type', 'application/octet-stream')
+                    return Response(stream_with_context(r.iter_content(8192)),
+                                    status=200, content_type=ct)
+            except Exception as ex:
+                logger.warning(f"ixc-file {url}: {ex}")
+        return '', 404
     except Exception as e:
         logger.error(f"ixc-file {fpath}: {e}")
         return '', 502
