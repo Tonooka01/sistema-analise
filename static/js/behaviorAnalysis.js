@@ -282,46 +282,22 @@ async function fetchBehaviorData_Complaints(city = '') {
 
         const filterText = city ? `em ${city}` : '';
 
-        // --- INICIALIZAÇÃO DO GRIDSTACK ---
-        // Inicializa uma NOVA instância GridStack especificamente para esta div
-        const grid = GridStack.init({
-            cellHeight: 70,
-            minRow: 1,
-            margin: 10,
-            float: true,
-            column: 12,
-            disableOneColumnMode: false
-        }, chartsArea);
-
-        // Renderiza Gráficos no GridStack Local
-        if (grid) {
-            // Gráfico 1: Top Assuntos
-            if (hasSubjectData) {
-                const chartId = 'complaintChart';
-                // Conteúdo do Widget
-                const content = `
-                    <div class="grid-stack-item-content">
-                        <div class="chart-container-header">
-                            <h3 id="${chartId}Title" class="chart-title">Top Assuntos de Reclamação ${filterText}</h3>
-                        </div>
-                        <div class="chart-canvas-container"><canvas id="${chartId}"></canvas></div>
-                    </div>`;
-                
-                // --- ALTERAÇÃO AQUI: Aumentado para largura total (12) e altura maior (14) ---
-                grid.addWidget({w: 12, h: 14, x: 0, y: 0, content: content, id: 'topSubjectsWidget'});
-                
-                // Renderiza o gráfico usando a função global, que busca o canvas pelo ID
-                // Pequeno delay para garantir que o DOM do widget foi inserido
-                setTimeout(() => {
-                    renderChart(chartId, 'bar_vertical', data.top_subjects.map(d => d.Assunto), [{ label: 'Contagem', data: data.top_subjects.map(d => d.Count) }], `Top Assuntos de Reclamação ${filterText}`, { formatterType: 'number' });
-                    _addChartClickHandler(chartId, label => {
-                        const url = `${state.API_BASE_URL}/api/behavior/complaint_clients?subject=${encodeURIComponent(label)}&city=${encodeURIComponent(city)}`;
-                        _openBehaviorDetailModal(`Reclamações: "${label}"`, url, true);
-                    });
-                }, 50);
-            }
-        } else {
-             chartsArea.innerHTML = '<p class="text-red-500">Erro: Falha ao inicializar a grade de gráficos.</p>';
+        // Gráfico 1: Top Assuntos — renderizado direto sem GridStack
+        if (hasSubjectData) {
+            const chartId = 'complaintChart';
+            chartsArea.innerHTML = `
+                <div style="padding:10px">
+                    <h3 class="chart-title" style="margin-bottom:8px">Top Assuntos de Reclamação ${filterText}</h3>
+                    <div class="chart-canvas-container"><canvas id="${chartId}"></canvas></div>
+                </div>`;
+            setTimeout(() => {
+                if (!document.getElementById(chartId)) return; // aba mudou, canvas removido
+                renderChart(chartId, 'bar_vertical', data.top_subjects.map(d => d.Assunto), [{ label: 'Contagem', data: data.top_subjects.map(d => d.Count) }], `Top Assuntos de Reclamação ${filterText}`, { formatterType: 'number' });
+                _addChartClickHandler(chartId, label => {
+                    const url = `${state.API_BASE_URL}/api/behavior/complaint_clients?subject=${encodeURIComponent(label)}&city=${encodeURIComponent(city)}`;
+                    _openBehaviorDetailModal(`Reclamações: "${label}"`, url, true);
+                });
+            }, 50);
         }
 
     } catch (error) {
@@ -2251,7 +2227,7 @@ async function renderAlertasAcaoTab() {
     if (!tabContent) return;
 
     let _alertaCurrentPage = 1;
-    let _alertaFilters = { city: '', tier: '' };
+    let _alertaFilters = { city: '', tier: '', cliente: '' };
 
     const TIER_STYLE = {
         'Crítico': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
@@ -2263,6 +2239,11 @@ async function renderAlertasAcaoTab() {
     tabContent.innerHTML = `
         <div id="alerta-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
         <div class="flex flex-wrap justify-center gap-4 mb-4 items-end">
+            <div>
+                <label class="text-sm font-medium text-gray-700 mr-1">Cliente:</label>
+                <input type="text" id="alertaClienteFilter" placeholder="Nome do cliente..."
+                    class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm min-w-[200px]">
+            </div>
             <div>
                 <label class="text-sm font-medium text-gray-700 mr-1">Cidade:</label>
                 <select id="alertaCityFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm min-w-[160px]">
@@ -2293,9 +2274,10 @@ async function renderAlertasAcaoTab() {
         const rowsPerPage = 50;
         const offset = (page - 1) * rowsPerPage;
         const p = new URLSearchParams({
-            city: _alertaFilters.city,
-            tier: _alertaFilters.tier,
-            limit: rowsPerPage,
+            city:    _alertaFilters.city,
+            tier:    _alertaFilters.tier,
+            cliente: _alertaFilters.cliente,
+            limit:   rowsPerPage,
             offset
         });
 
@@ -2410,9 +2392,15 @@ async function renderAlertasAcaoTab() {
     }
 
     tabContent.querySelector('#btnFilterAlerta').addEventListener('click', () => {
-        _alertaFilters.city = document.getElementById('alertaCityFilter')?.value || '';
-        _alertaFilters.tier = document.getElementById('alertaTierFilter')?.value || '';
+        _alertaFilters.city     = document.getElementById('alertaCityFilter')?.value || '';
+        _alertaFilters.tier     = document.getElementById('alertaTierFilter')?.value || '';
+        _alertaFilters.cliente  = document.getElementById('alertaClienteFilter')?.value.trim() || '';
         fetchAndRenderAlertaTable(1);
+    });
+
+    // Enter no campo cliente também filtra
+    tabContent.querySelector('#alertaClienteFilter').addEventListener('keydown', e => {
+        if (e.key === 'Enter') tabContent.querySelector('#btnFilterAlerta').click();
     });
 
     tabContent.addEventListener('click', (e) => {
@@ -3087,7 +3075,8 @@ let _retTotal     = 0;
 let _retFilters   = {};
 let _retFiltros   = {};
 let _retExpanded  = new Set();
-const _retTabLoaded = {};
+const _retTabLoaded   = {};
+const _retVisitasCache = {}; // { osId: count } — persiste entre re-renders
 
 const _RET_STATUS_CLS = {
     'Aberta':       'bg-red-100 text-red-800',
@@ -3288,6 +3277,7 @@ async function _retLoad() {
     _retRenderKpis(d.kpis, d.por_assunto, d.por_cidade);
     _retRenderTable(wrap);
     _retRenderPagination(pgDiv, d.page, d.pages, d.total);
+    _retLoadVisitas(); // batch count de arquivos (assíncrono, não bloqueia)
 }
 
 function _retRenderKpis(k, porAssunto, porCidade) {
@@ -3309,6 +3299,22 @@ function _retRenderKpis(k, porAssunto, porCidade) {
         ${card(k.sem_agendamento, 'Pendentes s/ Agend.', 'bg-orange-50 border-orange-200 text-orange-800')}`;
 }
 
+function _retDiasAberto(o) {
+    const inicio = o.abertura ? new Date(o.abertura) : null;
+    if (!inicio) return { txt: '—', cls: 'text-gray-400' };
+    const fim = (o.status === 'Finalizada' && (o.final || o.fechamento))
+        ? new Date(o.final || o.fechamento)
+        : new Date();
+    const dias = Math.floor((fim - inicio) / 86400000);
+    const txt  = dias === 0 ? 'hoje' : dias === 1 ? '1 dia' : `${dias} dias`;
+    const cls  = o.status === 'Finalizada'
+        ? 'text-gray-500'
+        : dias >= 30 ? 'text-red-700 font-semibold'
+        : dias >= 7  ? 'text-orange-600 font-medium'
+        : 'text-green-700';
+    return { txt, cls };
+}
+
 function _retRenderTable(wrap) {
     if (!wrap) return;
     if (!_retData.length) {
@@ -3325,6 +3331,8 @@ function _retRenderTable(wrap) {
         const agendTxt   = o.agendamento ? o.agendamento.slice(0,16).replace('T',' ') : '—';
         const telDisplay = o.whatsapp || o.telefone_cel || o.telefone_res || '—';
         const endDisplay = [o.endereco, o.bairro, o.cidade].filter(Boolean).join(' · ');
+        const diasInfo   = _retDiasAberto(o);
+        const equipTxt   = o.equipamentos_comodato || '—';
 
         let detail = '';
         if (expanded) {
@@ -3350,7 +3358,7 @@ function _retRenderTable(wrap) {
                 ['📡 SLA', o.sla || '—'],
             ];
             detail = `<tr id="ret-detail-${o.id}">
-              <td colspan="8" class="bg-blue-50 border-b border-blue-200 p-0">
+              <td colspan="11" class="bg-blue-50 border-b border-blue-200 p-0">
                 <div class="border-b border-blue-200 bg-blue-100 flex gap-0">
                   <button onclick="window._retTab(${o.id},'detalhes')" id="ret-tab-${o.id}-detalhes"
                     class="ret-dtab px-4 py-2 text-xs font-semibold border-b-2 border-blue-600 text-blue-700 bg-white">
@@ -3396,6 +3404,13 @@ function _retRenderTable(wrap) {
           <td class="px-3 py-2 text-xs text-gray-600">${o.colaborador || '—'}</td>
           <td class="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">${abertura}</td>
           <td class="px-3 py-2 text-xs ${o.agendamento ? 'text-blue-700 font-medium' : 'text-gray-400'} whitespace-nowrap">${agendTxt}</td>
+          <td class="px-3 py-2 text-xs whitespace-nowrap ${diasInfo.cls}">${diasInfo.txt}</td>
+          <td class="px-3 py-2 text-xs text-gray-700 max-w-[200px] truncate" title="${equipTxt}">${equipTxt}</td>
+          <td class="px-3 py-2 text-xs whitespace-nowrap ret-visitas-cell" data-osid="${o.id}">${
+            _retVisitasCache[o.id] !== undefined
+              ? (_retVisitasCache[o.id] > 0 ? `<span class="text-blue-700 font-semibold">${_retVisitasCache[o.id]}</span>` : '<span class="text-gray-400">0</span>')
+              : '<span class="text-gray-300">...</span>'
+          }</td>
         </tr>${detail}`;
     }).join('');
 
@@ -3411,10 +3426,44 @@ function _retRenderTable(wrap) {
           <th class="px-3 py-2 font-semibold">Colaborador</th>
           <th class="px-3 py-2 font-semibold">Abertura</th>
           <th class="px-3 py-2 font-semibold">Agendamento</th>
+          <th class="px-3 py-2 font-semibold whitespace-nowrap">Tempo Aberto</th>
+          <th class="px-3 py-2 font-semibold whitespace-nowrap">Equipamentos</th>
+          <th class="px-3 py-2 font-semibold whitespace-nowrap">Visitas</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>`;
+}
+
+function _retVisitasApply() {
+    document.querySelectorAll('.ret-visitas-cell').forEach(cell => {
+        const n = _retVisitasCache[cell.dataset.osid];
+        if (n === undefined) return;
+        cell.innerHTML = n > 0
+            ? `<span class="text-blue-700 font-semibold">${n}</span>`
+            : '<span class="text-gray-400">0</span>';
+    });
+}
+
+async function _retLoadVisitas() {
+    const cells = [...document.querySelectorAll('.ret-visitas-cell')];
+    if (!cells.length) return;
+    // só busca os IDs ainda não no cache
+    const osIds = cells
+        .map(c => parseInt(c.dataset.osid))
+        .filter(id => id && _retVisitasCache[id] === undefined);
+    if (!osIds.length) { _retVisitasApply(); return; }
+    try {
+        const d = await fetch('/api/behavior/retiradas/arquivos-counts', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({os_ids: osIds}),
+        }).then(r => r.json());
+        Object.assign(_retVisitasCache, d.counts || {});
+        _retVisitasApply();
+    } catch(e) {
+        document.querySelectorAll('.ret-visitas-cell').forEach(c => { c.innerHTML = '<span class="text-gray-300">—</span>'; });
+    }
 }
 
 function _retRenderPagination(el, page, pages, total) {
@@ -3431,12 +3480,12 @@ function _retRenderPagination(el, page, pages, total) {
 window._retToggle = function(id) {
     if (_retExpanded.has(id)) {
         _retExpanded.delete(id);
-        // clean tab cache so fresh data loads next time
         ['detalhes','mensagens','arquivos'].forEach(t => delete _retTabLoaded[`${id}-${t}`]);
     } else {
         _retExpanded.add(id);
     }
     _retRenderTable(document.getElementById('ret-table-wrap'));
+    _retLoadVisitas(); // restaura counts após re-render
 };
 
 window._retGoPage = function(p) {

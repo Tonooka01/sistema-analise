@@ -378,6 +378,267 @@ def api_behavior_churn_pattern():
         if conn: conn.close()
 
 
+_ACOMP_CONFIG_DEFAULT = {
+    "tipos_acao": [
+        {"value": "ligacao",  "label": "Ligação",   "emoji": "📞", "ativo": True},
+        {"value": "whatsapp", "label": "WhatsApp",  "emoji": "💬", "ativo": True},
+        {"value": "visita",   "label": "Visita",    "emoji": "🏠", "ativo": True},
+        {"value": "email",    "label": "E-mail",    "emoji": "✉️", "ativo": True},
+    ],
+    "assuntos_os": [
+        {"label": "Sem sinal",               "abre_os": False},
+        {"label": "Lentidão",                "abre_os": False},
+        {"label": "Retirada de equipamento", "abre_os": False},
+        {"label": "Instalação",              "abre_os": False},
+        {"label": "Suporte técnico",         "abre_os": False},
+        {"label": "Mudança de endereço",     "abre_os": False},
+        {"label": "Outros",                  "abre_os": False},
+    ],
+}
+
+# IXC city name → ID (inverted from routes_ixc_sync.CIDADE_NOMES)
+_CIDADE_IDS = {
+    'Dom Pedro': '515',
+    'Presidente Dutra': '599',
+    'São Domingos do Maranhão': '624',
+    'Tuntum': '656',
+}
+
+
+def _migrate_assuntos_os(assuntos):
+    """Converte lista de strings para lista de {label, id_assunto} se necessário."""
+    if not assuntos:
+        return []
+    if isinstance(assuntos[0], str):
+        return [{"label": s, "id_assunto": ""} for s in assuntos]
+    return assuntos
+
+
+@behavior_bp.route('/acomp-config')
+def api_behavior_acomp_config():
+    """Retorna configuração de tipos de ação e assuntos de OS."""
+    import copy
+    try:
+        conn = current_app.config['GET_DB_CONNECTION']()
+        try:
+            row = conn.execute("SELECT value FROM Settings WHERE key = 'acomp_config'").fetchone()
+        finally:
+            conn.close()
+        cfg = _json.loads(row['value']) if (row and row['value']) else copy.deepcopy(_ACOMP_CONFIG_DEFAULT)
+        cfg['tipos_acao'] = [t for t in cfg.get('tipos_acao', []) if t.get('ativo', True)]
+        # Normaliza assuntos para {label, abre_os}
+        raw = cfg.get('assuntos_os', [])
+        cfg['assuntos_os'] = [
+            s if isinstance(s, dict) else {"label": s, "abre_os": False}
+            for s in raw
+        ]
+        return jsonify(cfg)
+    except Exception as e:
+        logger.warning(f"acomp-config: {e}")
+        return jsonify(copy.deepcopy(_ACOMP_CONFIG_DEFAULT))
+
+
+@behavior_bp.route('/ixc-assuntos')
+def api_behavior_ixc_assuntos():
+    """Lista assuntos de OS disponíveis no IXC para configuração admin."""
+    try:
+        token = _ret_get_token()
+        if not token:
+            return jsonify({"error": "Token IXC não configurado"}), 503
+
+        debug = request.args.get('debug') == '1'
+        debug_info = {}
+
+        def _pick_label(r):
+            for k in ('assunto', 'nome', 'descricao', 'titulo', 'title', 'name'):
+                if r.get(k):
+                    return r[k]
+            return str(r.get('id', ''))
+
+        # 1. Tenta SQL direto com diferentes nomes de tabela (su_ticket e su_oss_chamado)
+        for tbl in ('su_ticket_assunto', 'su_oss_assunto', 'su_assunto', 'oss_assunto', 'su_oss_chamado_assunto'):
+            try:
+                recs = _ixc_query(f"SELECT * FROM {tbl} ORDER BY id LIMIT 100", token)
+                if debug:
+                    debug_info[f'sql_{tbl}'] = recs[:3] if recs else 'empty'
+                if recs:
+                    return jsonify([{"id": str(r.get('id')), "label": _pick_label(r)} for r in recs if r.get('id')])
+            except Exception as ex:
+                if debug:
+                    debug_info[f'sql_{tbl}_err'] = str(ex)
+
+        # 2. Tenta REST com diferentes nomes
+        for ep in ('su_ticket_assunto', 'su_oss_assunto', 'su_assunto', 'oss_assunto', 'su_oss_chamado_assunto'):
+            try:
+                recs = _ixc_fetch(ep, {'sortname': 'id', 'sortorder': 'asc'}, token)
+                if debug:
+                    debug_info[f'rest_{ep}'] = recs[:3] if recs else 'empty'
+                if recs:
+                    return jsonify([{"id": str(r.get('id')), "label": _pick_label(r)} for r in recs if r.get('id')])
+            except Exception as ex:
+                if debug:
+                    debug_info[f'rest_{ep}_err'] = str(ex)
+
+        # 3. Extrai assuntos únicos de tickets/OS existentes como fallback
+        for tbl2, id_col, lbl_col in [
+            ('su_ticket',      'id_assunto', 'assunto'),
+            ('su_oss_chamado', 'id_assunto', 'assunto'),
+        ]:
+            try:
+                recs = _ixc_query(
+                    f"SELECT DISTINCT {id_col}, {lbl_col} FROM {tbl2} WHERE {id_col} IS NOT NULL AND {id_col} != '' ORDER BY {id_col} LIMIT 50",
+                    token
+                )
+                if debug:
+                    debug_info[f'fallback_{tbl2}'] = recs[:5] if recs else 'empty'
+                if recs:
+                    seen = {}
+                    for r in recs:
+                        aid = str(r.get(id_col, '') or '')
+                        if aid and aid not in seen:
+                            seen[aid] = r.get(lbl_col) or aid
+                    return jsonify([{"id": k, "label": v} for k, v in seen.items()])
+            except Exception as ex:
+                if debug:
+                    debug_info[f'fallback_{tbl2}_err'] = str(ex)
+
+        if debug:
+            return jsonify({"debug": debug_info, "error": "Nenhuma tabela de assuntos encontrada"})
+        return jsonify({"error": "Não foi possível listar assuntos do IXC. Acesse /api/behavior/ixc-assuntos?debug=1 para diagnóstico."})
+    except Exception as e:
+        logger.warning(f"ixc-assuntos: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@behavior_bp.route('/ixc-setores')
+def api_behavior_ixc_setores():
+    """Lista setores (departamentos) de ticket disponíveis no IXC."""
+    try:
+        token = _ret_get_token()
+        if not token:
+            return jsonify({"error": "Token IXC não configurado"}), 503
+        encoded = base64.b64encode(token.encode()).decode()
+        headers = {'Authorization': f'Basic {encoded}', 'ixcsoft': 'listar'}
+        resp = requests.post(
+            f'{_IXC_BASE}/su_ticket_setor',
+            data={'qtype': 'su_ticket_setor.id', 'query': '', 'oper': 'like',
+                  'sortname': 'su_ticket_setor.id', 'sortorder': 'asc',
+                  'page': '1', 'rp': '100'},
+            headers=headers, timeout=15, verify=False
+        )
+        txt = resp.text.strip()
+        logger.info(f"ixc-setores: status={resp.status_code} body={txt[:300]!r}")
+        if not txt or txt.startswith('<'):
+            return jsonify({"setores": [], "raw": txt[:200]})
+        d = resp.json()
+        records = d if isinstance(d, list) else d.get('registros', d.get('records', []))
+        setores = [{'id': str(r.get('id', '')), 'label': r.get('setor', r.get('nome', r.get('descricao', str(r.get('id', '')))))} for r in records]
+        return jsonify({"setores": setores})
+    except Exception as e:
+        logger.warning(f"ixc-setores: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@behavior_bp.route('/fechar-ticket-ixc', methods=['POST'])
+def api_fechar_ticket_ixc():
+    """Finaliza manualmente um ticket IXC aberto."""
+    data      = request.get_json(force=True) or {}
+    ixc_os_id = str(data.get('ixc_os_id') or '').strip()
+    acomp_id  = data.get('acomp_id')
+    if not ixc_os_id:
+        return jsonify({"error": "ixc_os_id obrigatório"}), 400
+    try:
+        token = _ret_get_token()
+        if not token:
+            return jsonify({"error": "Token IXC não configurado"}), 503
+
+        # Busca configurações e dados do acompanhamento para montar payload completo
+        id_resposta = id_ticket_setor = id_atendente = ''
+        id_cliente_ixc = id_contrato = ''
+        titulo = mensagem = ''
+        try:
+            _c = current_app.config['GET_DB_CONNECTION']()
+            try:
+                rows_s = _c.execute(
+                    "SELECT key, value FROM Settings WHERE key IN ('ixc_id_resposta','ixc_setor_id','ixc_id_atendente')"
+                ).fetchall()
+                cm = {r['key']: (r['value'] or '').strip() for r in rows_s}
+                id_resposta     = cm.get('ixc_id_resposta', '')
+                id_ticket_setor = cm.get('ixc_setor_id', '')
+                id_atendente    = cm.get('ixc_id_atendente', '')
+            finally:
+                _c.close()
+        except Exception:
+            pass
+
+        if acomp_id:
+            try:
+                _db = get_db()
+                try:
+                    ac = _db.execute(
+                        "SELECT contrato_id, observacao, tipo_acao FROM Acompanhamento_Clientes WHERE id = ?",
+                        (acomp_id,)
+                    ).fetchone()
+                    if ac:
+                        id_contrato = str(ac['contrato_id'] or '')
+                        titulo      = ac['tipo_acao'] or 'Atendimento'
+                        mensagem    = ac['observacao'] or titulo
+                        # busca id_cliente_ixc pelo contrato
+                        cr_row = _db.execute(
+                            "SELECT Cliente FROM Contratos WHERE ID = ?", (id_contrato,)
+                        ).fetchone()
+                        if cr_row:
+                            cl_row = _db.execute(
+                                "SELECT ID FROM Clientes WHERE Raz_o_social = ? LIMIT 1",
+                                (cr_row['Cliente'],)
+                            ).fetchone()
+                            if cl_row:
+                                id_cliente_ixc = str(cl_row['ID'])
+                finally:
+                    _db.close()
+            except Exception:
+                pass
+
+        encoded = base64.b64encode(token.encode()).decode()
+        headers = {'Authorization': f'Basic {encoded}', 'Content-Type': 'application/json'}
+
+        # Finaliza via su_mensagens com su_status=S (Solucionado)
+        msg_body = {
+            'id_ticket':   ixc_os_id,
+            'id_cliente':  id_cliente_ixc or '',
+            'su_status':   'S',
+            'id_resposta': id_resposta or '',
+            'mensagem':    mensagem or titulo or 'Atendimento resolvido',
+        }
+        cr = requests.post(f'{_IXC_BASE}/su_mensagens',
+                           json=msg_body, headers=headers, timeout=15, verify=False)
+        txt = cr.text.strip()
+        logger.info(f"fechar-ticket-ixc #{ixc_os_id} su_mensagens status={cr.status_code} body={txt[:300]!r}")
+        d = {}
+        try:
+            d = cr.json() if txt else {}
+        except Exception:
+            pass
+        if isinstance(d, dict) and d.get('type') == 'error':
+            return jsonify({"error": d.get('message', 'Erro IXC')}), 400
+        ixc_ok = True
+
+        # Só limpa local se IXC confirmou
+        if acomp_id:
+            try:
+                conn = get_db()
+                conn.execute("UPDATE Acompanhamento_Clientes SET ixc_os_id = NULL WHERE id = ?", (acomp_id,))
+                conn.commit()
+                conn.close()
+            except Exception:
+                pass
+
+        return jsonify({"ok": True})
+    except Exception as ex:
+        logger.error(f"fechar-ticket-ixc: {ex}")
+        return jsonify({"error": str(ex)}), 500
+
+
 @behavior_bp.route('/predictive_churn')
 def api_behavior_predictive_churn():
     conn = get_db()
@@ -680,14 +941,21 @@ def api_behavior_predictive_churn_export():
             )
             SELECT
                 S.*,
-                CASE WHEN S.Risk_Score >= 60 THEN 'Alto'
+                CASE WHEN S.Risk_Score > 160 THEN 'Altíssimo'
+                     WHEN S.Risk_Score >= 60 THEN 'Alto'
                      WHEN S.Risk_Score >= 25 THEN 'Médio'
                      WHEN S.Risk_Score >= 10 THEN 'Baixo'
                      ELSE 'Saudável' END AS Nivel_Risco,
                 COALESCE(CLI.Telefone, '') AS Telefone,
                 COALESCE(CLI.WhatsApp, '') AS WhatsApp
             FROM Scored S
-            LEFT JOIN Clientes CLI ON CLI.Raz_o_social = S.Cliente
+            LEFT JOIN (
+                SELECT Raz_o_social,
+                       MAX(Telefone) AS Telefone,
+                       MAX(WhatsApp) AS WhatsApp
+                FROM Clientes
+                GROUP BY Raz_o_social
+            ) CLI ON CLI.Raz_o_social = S.Cliente
             WHERE S.Risk_Score >= 10 {risk_sql}
             ORDER BY S.Risk_Score DESC
             LIMIT ? OFFSET ?
@@ -1929,16 +2197,21 @@ def api_behavior_contact_list():
 def api_behavior_action_alerts():
     conn = get_db()
     try:
-        city   = request.args.get('city',   '').strip()
-        tier   = request.args.get('tier',   '').strip()
-        limit  = request.args.get('limit',  50,  type=int)
-        offset = request.args.get('offset', 0,   type=int)
+        _ensure_acompanhamento_table(conn)
+        city    = request.args.get('city',    '').strip()
+        tier    = request.args.get('tier',    '').strip()
+        cliente = request.args.get('cliente', '').strip()
+        limit   = request.args.get('limit',  50,  type=int)
+        offset  = request.args.get('offset', 0,   type=int)
 
-        city_cond = "AND Cidade = ?" if city else ""
-        city_p    = [city] if city else []
+        city_cond    = "AND Cidade = ?" if city else ""
+        city_p       = [city] if city else []
 
-        tier_cond = "AND tier = ?" if tier else ""
-        tier_p    = [tier] if tier else []
+        tier_cond    = "AND tier = ?" if tier else ""
+        tier_p       = [tier] if tier else []
+
+        cliente_cond = "AND A.cliente LIKE ?" if cliente else ""
+        cliente_p    = [f"%{cliente}%"] if cliente else []
 
         # Identical base CTE to /contact_list, extended with the Alerted tier CTE
         base_cte = f"""
@@ -2055,7 +2328,7 @@ def api_behavior_action_alerts():
         """
 
         count_sql = base_cte + f"""
-            SELECT COUNT(*) AS cnt FROM Alerted WHERE 1=1 {tier_cond}
+            SELECT COUNT(*) AS cnt FROM Alerted A WHERE 1=1 {tier_cond} {cliente_cond}
         """
 
         data_sql = base_cte + f"""
@@ -2065,7 +2338,7 @@ def api_behavior_action_alerts():
                    COALESCE(CLI.WhatsApp, '') AS whatsapp
             FROM Alerted A
             LEFT JOIN Clientes CLI ON CLI.Raz_o_social = A.cliente
-            WHERE 1=1 {tier_cond}
+            WHERE 1=1 {tier_cond} {cliente_cond}
             ORDER BY A.score DESC
             LIMIT ? OFFSET ?
         """
@@ -2079,8 +2352,8 @@ def api_behavior_action_alerts():
         """
 
         summary_row = conn.execute(summary_sql, tuple(city_p)).fetchone()
-        total_rows  = conn.execute(count_sql,   tuple(city_p) + tuple(tier_p)).fetchone()[0]
-        data_rows   = conn.execute(data_sql,    tuple(city_p) + tuple(tier_p) + (limit, offset)).fetchall()
+        total_rows  = conn.execute(count_sql,   tuple(city_p) + tuple(tier_p) + tuple(cliente_p)).fetchone()[0]
+        data_rows   = conn.execute(data_sql,    tuple(city_p) + tuple(tier_p) + tuple(cliente_p) + (limit, offset)).fetchall()
         cities      = [r[0] for r in conn.execute(cities_sql).fetchall() if r[0]]
 
         summary = dict(summary_row) if summary_row else {
@@ -2909,6 +3182,7 @@ def api_behavior_client_detail(contrato_id):
         # --- Client contact ---
         cliente_row = conn.execute("""
             SELECT
+                ID AS id_cliente_ixc,
                 Raz_o_social AS razao_social,
                 CNPJ_CPF AS cpf_cnpj,
                 Telefone, Telefone_celular AS cel, Telefone_comercial AS comercial,
@@ -2920,7 +3194,15 @@ def api_behavior_client_detail(contrato_id):
             LIMIT 1
         """, (cliente_nome,)).fetchone()
 
-        cliente = dict(cliente_row) if cliente_row else {}
+        if not cliente_row:
+            # Tenta em clientes negativados (menos colunas disponíveis)
+            neg_row = conn.execute(
+                "SELECT ID AS id_cliente_ixc FROM Clientes_Negativacao WHERE Raz_o_social = ? LIMIT 1",
+                (cliente_nome,)
+            ).fetchone()
+            cliente = {'id_cliente_ixc': neg_row['id_cliente_ixc']} if neg_row else {}
+        else:
+            cliente = dict(cliente_row)
 
         # --- Financial summary ---
         fin_summary = conn.execute("""
@@ -3012,9 +3294,14 @@ def _ensure_acompanhamento_table(conn):
             resultado     TEXT,
             observacao    TEXT,
             data_retorno  TEXT,
-            snooze_ate    TEXT
+            snooze_ate    TEXT,
+            ixc_os_id     TEXT
         )
     """)
+    try:
+        conn.execute("ALTER TABLE Acompanhamento_Clientes ADD COLUMN ixc_os_id TEXT")
+    except Exception:
+        pass
     conn.commit()
 
 
@@ -3029,7 +3316,7 @@ def api_behavior_acompanhamento_get(contrato_id):
         _ensure_acompanhamento_table(conn)
         rows = conn.execute("""
             SELECT id, contrato_id, usuario, data_registro,
-                   tipo_acao, resultado, observacao, data_retorno, snooze_ate
+                   tipo_acao, resultado, observacao, data_retorno, snooze_ate, ixc_os_id
             FROM Acompanhamento_Clientes
             WHERE contrato_id = ?
             ORDER BY data_registro DESC
@@ -3054,32 +3341,93 @@ def api_behavior_acompanhamento_post():
         _ensure_acompanhamento_table(conn)
         data = request.get_json(force=True) or {}
 
-        contrato_id  = data.get('contrato_id')
-        tipo_acao    = (data.get('tipo_acao') or '').strip()
-        resultado    = (data.get('resultado') or '').strip() or None
-        observacao   = (data.get('observacao') or '').strip() or None
-        data_retorno = (data.get('data_retorno') or '').strip() or None
-        usuario      = current_user.username if current_user.is_authenticated else 'sistema'
+        contrato_id     = data.get('contrato_id')
+        tipo_acao       = (data.get('tipo_acao') or '').strip()
+        resultado       = (data.get('resultado') or '').strip() or None
+        observacao      = (data.get('observacao') or '').strip() or None
+        data_retorno    = (data.get('data_retorno') or '').strip() or None
+        os_assunto      = (data.get('os_assunto') or '').strip()
+        abre_os         = bool(data.get('abre_os') or data.get('abrir_os_ixc', False))
+        id_cliente_ixc  = data.get('id_cliente_ixc')
+        usuario         = current_user.username if current_user.is_authenticated else 'sistema'
 
         if not contrato_id or not tipo_acao:
             return jsonify({"error": "contrato_id e tipo_acao são obrigatórios"}), 400
 
         # Calcular snooze_ate
         if resultado == 'cancelou':
-            snooze_ate = None          # cancelou → não snooze
+            snooze_ate = None
         elif data_retorno:
-            snooze_ate = data_retorno  # usar data de retorno fornecida
+            snooze_ate = data_retorno
         else:
             snooze_ate = (date.today() + timedelta(days=30)).isoformat()
 
+        # Busca id_ixc do assunto selecionado no config
+        # Labels podem ter o ID embutido como "[18] INFORMAÇÃO"
+        import re as _re
+        id_assunto_ixc = ''
+        os_assunto_texto = os_assunto  # texto limpo para usar como título
+        if os_assunto:
+            # Tenta extrair ID do prefixo [N] no próprio label
+            _m = _re.match(r'^\[(\d+)\]\s*(.*)', os_assunto)
+            if _m:
+                id_assunto_ixc  = _m.group(1)
+                os_assunto_texto = _m.group(2).strip()
+            else:
+                # Busca no config pelo campo id_ixc
+                try:
+                    _cfg_conn2 = current_app.config['GET_DB_CONNECTION']()
+                    try:
+                        row_cfg = _cfg_conn2.execute(
+                            "SELECT value FROM Settings WHERE key = 'acomp_config'"
+                        ).fetchone()
+                        if row_cfg and row_cfg['value']:
+                            cfg_data = _json.loads(row_cfg['value'])
+                            for s in cfg_data.get('assuntos_os', []):
+                                if isinstance(s, dict) and s.get('label') == os_assunto:
+                                    id_assunto_ixc = str(s.get('id_ixc') or '').strip()
+                                    break
+                    finally:
+                        _cfg_conn2.close()
+                except Exception:
+                    pass
+
+        # Sempre criar atendimento no IXC se houver cliente IXC
+        ixc_os_id = None
+        ixc_erro  = None
+        titulo_ticket = os_assunto_texto or observacao or tipo_acao or 'Atendimento'
+        logger.info(f"acompanhamento_post: id_cliente_ixc={id_cliente_ixc!r} contrato_id={contrato_id!r} abre_os={abre_os} id_assunto_ixc={id_assunto_ixc!r}")
+        if id_cliente_ixc:
+            try:
+                token = _ret_get_token()
+                logger.info(f"acompanhamento_post: token={'ok' if token else 'NONE'}")
+                if token:
+                    ixc_os_id = _ixc_criar_os(
+                        id_cliente_ixc, contrato_id,
+                        None,
+                        observacao or '',
+                        token,
+                        titulo=titulo_ticket,
+                        fechar=not abre_os,
+                        id_assunto_ixc=id_assunto_ixc,
+                    )
+                    logger.info(f"acompanhamento_post: ixc_os_id={ixc_os_id!r}")
+                else:
+                    ixc_erro = 'Token IXC não configurado'
+            except Exception as ex:
+                ixc_erro = str(ex)
+                logger.warning(f"Falha ao criar atendimento no IXC: {ex}")
+        else:
+            logger.warning("acompanhamento_post: id_cliente_ixc ausente — ticket IXC não criado")
+
         conn.execute("""
             INSERT INTO Acompanhamento_Clientes
-                (contrato_id, usuario, data_registro, tipo_acao, resultado, observacao, data_retorno, snooze_ate)
-            VALUES (?, ?, datetime('now', 'localtime'), ?, ?, ?, ?, ?)
-        """, (contrato_id, usuario, tipo_acao, resultado, observacao, data_retorno, snooze_ate))
+                (contrato_id, usuario, data_registro, tipo_acao, resultado, observacao, data_retorno, snooze_ate, ixc_os_id)
+            VALUES (?, ?, datetime('now', 'localtime'), ?, ?, ?, ?, ?, ?)
+        """, (contrato_id, usuario, tipo_acao, resultado, observacao, data_retorno, snooze_ate, ixc_os_id))
         conn.commit()
 
-        return jsonify({"ok": True, "snooze_ate": snooze_ate})
+        return jsonify({"ok": True, "snooze_ate": snooze_ate, "ixc_os_id": ixc_os_id, "ixc_erro": ixc_erro})
     except Exception as e:
         logger.error(f"Erro em acompanhamento_post: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
@@ -3376,6 +3724,21 @@ def api_behavior_retiradas():
             LIMIT ? OFFSET ?
         """, params + [limit, offset]).fetchall()
 
+        # Busca equipamentos em comodato para os contratos desta página (separado para não quebrar a query principal)
+        contratos_pagina = [str(r[26]) for r in rows if r[26]]
+        equip_map = {}
+        if contratos_pagina:
+            try:
+                ph2 = ','.join('?' * len(contratos_pagina))
+                eq_rows = conn.execute(
+                    f"SELECT CAST(ID_contrato AS TEXT), GROUP_CONCAT(Descricao_produto, ' / ') "
+                    f"FROM Equipamento WHERE CAST(ID_contrato AS TEXT) IN ({ph2}) GROUP BY CAST(ID_contrato AS TEXT)",
+                    contratos_pagina
+                ).fetchall()
+                equip_map = {str(r2[0]): r2[1] or '' for r2 in eq_rows}
+            except Exception:
+                pass  # tabela Equipamento não existe ainda
+
         def _clean(v):
             return None if v in (None, '', '0000-00-00 00:00:00', '0000-00-00') else v
 
@@ -3411,8 +3774,9 @@ def api_behavior_retiradas():
                 'prazo_limite':   _clean(r[25]),
                 'contrato':       r[26],
                 'id_atendimento': r[27],
-                'atend_descricao': r[28],
-                'atend_status':   r[29],
+                'atend_descricao':       r[28],
+                'atend_status':          r[29],
+                'equipamentos_comodato': equip_map.get(str(r[26] or ''), ''),
             }
 
         return jsonify({
@@ -3502,6 +3866,116 @@ def _ixc_post(endpoint, payload, token):
         return d if isinstance(d, dict) else None
     except Exception as ex:
         logger.warning(f"_ixc_post [{endpoint}]: {ex}")
+        return None
+
+
+def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titulo='', fechar=False, id_assunto_ixc=''):
+    """Cria um ticket de suporte no IXC (su_ticket). Retorna ID ou None."""
+    # Busca endereço do contrato no banco local
+    endereco = bairro = complemento = id_cidade = ''
+    try:
+        _conn = get_db()
+        try:
+            row = _conn.execute(
+                "SELECT Endere_o, N_mero, Bairro, Complemento, Cidade FROM Contratos WHERE ID = ?",
+                (id_contrato,)
+            ).fetchone()
+        finally:
+            _conn.close()
+        if row:
+            num = (row['N_mero'] or '').strip()
+            end = (row['Endere_o'] or '').strip()
+            endereco    = f"{end}, {num}" if num else end
+            bairro      = (row['Bairro'] or '').strip()
+            complemento = (row['Complemento'] or '').strip()
+            id_cidade   = _CIDADE_IDS.get(row['Cidade'] or '', '')
+    except Exception as ex:
+        logger.warning(f"_ixc_criar_os: erro ao buscar endereço: {ex}")
+
+    # Busca configurações IXC salvas pelo admin
+    id_ticket_setor = ''
+    id_atendente    = ''
+    id_resposta     = ''
+    try:
+        _cfg_conn = current_app.config['GET_DB_CONNECTION']()
+        try:
+            rows_cfg = _cfg_conn.execute(
+                "SELECT key, value FROM Settings WHERE key IN ('ixc_setor_id','ixc_id_atendente','ixc_id_resposta')"
+            ).fetchall()
+            cfg_map = {r['key']: (r['value'] or '').strip() for r in rows_cfg}
+            id_ticket_setor = cfg_map.get('ixc_setor_id', '')
+            id_atendente    = cfg_map.get('ixc_id_atendente', '')
+            id_resposta     = cfg_map.get('ixc_id_resposta', '')
+        finally:
+            _cfg_conn.close()
+    except Exception:
+        pass
+
+    if not id_ticket_setor:
+        logger.warning("_ixc_criar_os: ixc_setor_id não configurado")
+
+    encoded = base64.b64encode(token.encode()).decode()
+    headers = {
+        'Authorization': f'Basic {encoded}',
+        'Content-Type': 'application/json',
+    }
+    payload = {
+        'tipo':             'C',
+        'titulo':           titulo or mensagem or '',
+        'id_cliente':       str(id_cliente_ixc),
+        'id_filial':        '2',
+        'id_contrato':      str(id_contrato),
+        'id_ticket_setor':  id_ticket_setor,
+        'origem_endereco':  'M',
+        'prioridade':       'M',
+        'menssagem':        mensagem or titulo or '',
+        'status':           'A',
+        'su_status':        'N',
+        'atualizar_cliente':'N',
+        'atualizar_login':  'N',
+    }
+    if id_assunto_ixc:
+        payload['id_assunto'] = str(id_assunto_ixc)
+    if id_atendente:
+        payload['id_atendente']   = str(id_atendente)
+        payload['id_colaborador'] = str(id_atendente)
+    try:
+        resp = requests.post(f'{_IXC_BASE}/su_ticket', json=payload,
+                             headers=headers, timeout=15, verify=False)
+        txt = resp.text.strip()
+        logger.info(f"_ixc_criar_os status={resp.status_code} body={txt[:400]!r}")
+        if not txt or txt.startswith('<'):
+            return None
+        d = resp.json()
+        if d.get('type') == 'error':
+            logger.warning(f"_ixc_criar_os IXC error: {d.get('message')}")
+            return None
+        os_id = d.get('id') or d.get('id_ticket') or d.get('id_chamado')
+        if not os_id:
+            return None
+        os_id = str(os_id)
+
+        # Se deve fechar, envia mensagem de resolução via su_mensagens
+        if fechar:
+            try:
+                cr = requests.post(
+                    f'{_IXC_BASE}/su_mensagens',
+                    json={
+                        'id_ticket':   os_id,
+                        'id_cliente':  str(id_cliente_ixc),
+                        'su_status':   'S',
+                        'id_resposta': id_resposta or '',
+                        'mensagem':    mensagem or titulo or 'Atendimento resolvido',
+                    },
+                    headers=headers, timeout=15, verify=False
+                )
+                logger.info(f"_ixc_criar_os fechar su_mensagens status={cr.status_code} body={cr.text[:300]!r}")
+            except Exception as ex:
+                logger.warning(f"_ixc_criar_os: falha ao fechar ticket {os_id}: {ex}")
+
+        return os_id
+    except Exception as ex:
+        logger.error(f"_ixc_criar_os: {ex}")
         return None
 
 
@@ -3605,3 +4079,38 @@ def api_ret_arquivos(os_id):
     except Exception as e:
         logger.error(f"Erro arquivos OS {os_id}: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+@behavior_bp.route('/retiradas/arquivos-counts', methods=['POST'])
+def api_ret_arquivos_counts():
+    """Retorna contagem de arquivos para múltiplas OS (requests paralelos ao IXC)."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    try:
+        os_ids = request.get_json(force=True).get('os_ids', [])
+        if not os_ids:
+            return jsonify({'counts': {}})
+        token = _ret_get_token()
+        if not token:
+            return jsonify({'counts': {}})
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def _count_one(os_id):
+            try:
+                recs = _ixc_arquivos(os_id, token)
+                return str(os_id), len(recs)
+            except Exception:
+                return str(os_id), 0
+
+        counts = {str(i): 0 for i in os_ids}
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            futures = {ex.submit(_count_one, oid): oid for oid in os_ids}
+            for fut in as_completed(futures):
+                k, n = fut.result()
+                counts[k] = n
+
+        return jsonify({'counts': counts})
+    except Exception as e:
+        logger.error(f"Erro arquivos-counts: {e}", exc_info=True)
+        return jsonify({'counts': {}})

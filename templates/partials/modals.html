@@ -456,11 +456,234 @@
 
                 <p class="text-xs text-blue-500 mt-3">⏰ Sincronização automática todo domingo às 23:59</p>
             </div>
+
+            <!-- Configuração de Atendimentos -->
+            <div class="bg-orange-50 p-5 rounded-lg border border-orange-200 mt-6">
+                <h3 class="text-base font-bold text-orange-800 mb-1">🏷️ Atendimentos — Tipos e Assuntos de OS</h3>
+                <p class="text-xs text-orange-600 mb-4">Defina quais tipos de ação e assuntos de OS aparecem para os atendentes.</p>
+
+                <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <!-- Tipos de Ação -->
+                    <div>
+                        <p class="text-sm font-semibold text-gray-700 mb-2">Tipos de Ação</p>
+                        <div id="adminTiposAcaoList" class="space-y-1 mb-3"></div>
+                        <div class="flex gap-2">
+                            <input type="text" id="adminNewTipoEmoji" placeholder="📋" maxlength="2"
+                                   class="w-12 border rounded px-2 py-1 text-sm text-center">
+                            <input type="text" id="adminNewTipoLabel" placeholder="Nome do tipo…"
+                                   class="flex-1 border rounded px-2 py-1 text-sm">
+                            <button onclick="adminAddTipoAcao()"
+                                    class="px-3 py-1 bg-orange-500 text-white rounded text-sm font-medium hover:bg-orange-600">+</button>
+                        </div>
+                    </div>
+
+                    <!-- Configurações IXC -->
+                    <div class="mb-4 space-y-3">
+                        <p class="text-sm font-semibold text-gray-700">Configurações IXC</p>
+
+                        <div class="flex gap-2 items-center">
+                            <label class="text-xs text-gray-500 w-36 shrink-0">Departamento (Setor):</label>
+                            <select id="adminIxcSetorSelect" class="flex-1 border rounded px-2 py-1 text-sm">
+                                <option value="">Carregando…</option>
+                            </select>
+                            <button onclick="adminLoadIxcSetores()" class="px-2 py-1 text-xs border rounded hover:bg-gray-100">🔄</button>
+                        </div>
+
+                        <div class="flex gap-2 items-center">
+                            <label class="text-xs text-gray-500 w-36 shrink-0">ID Colaborador IXC:</label>
+                            <input type="text" id="adminIxcAtendente" placeholder="Ex: 171"
+                                   class="flex-1 border rounded px-2 py-1 text-sm"
+                                   onchange="adminSaveIxcField('ixc_id_atendente', this.value)">
+                            <span class="text-xs text-gray-400">ID do atendente no IXC</span>
+                        </div>
+
+                        <div class="flex gap-2 items-center">
+                            <label class="text-xs text-gray-500 w-36 shrink-0">ID Resposta p/ Fechar:</label>
+                            <input type="text" id="adminIxcResposta" placeholder="Ex: 2"
+                                   class="flex-1 border rounded px-2 py-1 text-sm"
+                                   onchange="adminSaveIxcField('ixc_id_resposta', this.value)">
+                            <span class="text-xs text-gray-400">Resposta padrão ao finalizar</span>
+                        </div>
+                    </div>
+
+                    <!-- Assuntos do Atendimento IXC -->
+                    <div>
+                        <p class="text-sm font-semibold text-gray-700 mb-2">Assuntos do Atendimento</p>
+                        <p class="text-xs text-gray-400 mb-2">Todo atendimento abre ticket no IXC. Os marcados com 🔓 ficam em aberto (precisam de campo). Os demais são fechados como resolvido.</p>
+                        <div id="adminAssuntosOsList" class="space-y-1 mb-3 max-h-48 overflow-y-auto"></div>
+                        <div class="flex gap-2">
+                            <input type="text" id="adminNewAssunto" placeholder="Ex: Sem sinal, Lentidão…"
+                                   class="flex-1 border rounded px-2 py-1 text-sm"
+                                   onkeydown="if(event.key==='Enter')adminAddAssunto()">
+                            <button onclick="adminAddAssunto()"
+                                    class="px-3 py-1 bg-orange-500 text-white rounded text-sm font-medium hover:bg-orange-600">+</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 mt-4">
+                    <button onclick="adminSaveAcompConfig()"
+                            class="px-4 py-2 bg-orange-600 text-white rounded font-semibold text-sm hover:bg-orange-700">
+                        💾 Salvar Configuração
+                    </button>
+                    <span id="adminAcompConfigMsg" class="text-xs hidden"></span>
+                </div>
+            </div>
             {% endif %}
 
         </div>
     </div>
 </div>
+
+<script>
+// ---- Admin: Configuração de Atendimentos ----
+let _adminAcompCfg = { tipos_acao: [], assuntos_os: [] };
+
+function adminLoadAcompConfig() {
+    fetch('/api/admin/acomp-config')
+        .then(r => r.json())
+        .then(cfg => { _adminAcompCfg = cfg; adminRenderAcompConfig(); })
+        .catch(() => {});
+    adminLoadIxcSetores();
+    // Carrega campos IXC salvos
+    fetch('/api/admin/settings/ixc-extra').then(r => r.json()).then(d => {
+        const at = document.getElementById('adminIxcAtendente');
+        const rp = document.getElementById('adminIxcResposta');
+        if (at) at.value = d.ixc_id_atendente || '';
+        if (rp) rp.value = d.ixc_id_resposta || '';
+    }).catch(() => {});
+}
+
+function adminSaveIxcField(key, value) {
+    fetch('/api/admin/settings/ixc-extra', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({key, value: value.trim()})
+    }).catch(() => {});
+}
+
+function adminLoadIxcSetores() {
+    const sel = document.getElementById('adminIxcSetorSelect');
+    const atualEl = document.getElementById('adminIxcSetorAtual');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Carregando…</option>';
+    // Busca setor atual salvo
+    fetch('/api/admin/settings/ixc-setor').then(r => r.json()).then(d => {
+        const atual = d.ixc_setor_id || '';
+        if (atualEl) atualEl.textContent = atual || '(não configurado)';
+        // Busca setores do IXC
+        fetch('/api/behavior/ixc-setores').then(r => r.json()).then(data => {
+            const setores = data.setores || [];
+            if (!setores.length) {
+                sel.innerHTML = '<option value="">Nenhum setor encontrado</option>';
+                return;
+            }
+            sel.innerHTML = '<option value="">Selecione…</option>' +
+                setores.map(s => `<option value="${s.id}" ${s.id === atual ? 'selected' : ''}>${s.id} — ${s.label}</option>`).join('');
+            sel.onchange = function() {
+                if (!this.value) return;
+                fetch('/api/admin/settings/ixc-setor', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ixc_setor_id: this.value})
+                }).then(r => r.json()).then(d => {
+                    if (atualEl) atualEl.textContent = this.value;
+                });
+            };
+        }).catch(() => { sel.innerHTML = '<option value="">Erro ao buscar setores</option>'; });
+    }).catch(() => {});
+}
+
+function adminRenderAcompConfig() {
+    // Tipos de Ação
+    const tList = document.getElementById('adminTiposAcaoList');
+    if (tList) {
+        tList.innerHTML = (_adminAcompCfg.tipos_acao || []).map((t, i) => `
+            <div class="flex items-center gap-2 bg-white border rounded px-2 py-1">
+                <span class="text-base w-6 text-center">${t.emoji || '📋'}</span>
+                <span class="flex-1 text-sm">${t.label}</span>
+                <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <input type="checkbox" ${t.ativo ? 'checked' : ''} onchange="_adminAcompCfg.tipos_acao[${i}].ativo=this.checked">
+                    Ativo
+                </label>
+                <button onclick="_adminAcompCfg.tipos_acao.splice(${i},1);adminRenderAcompConfig()"
+                        class="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
+            </div>`).join('');
+    }
+
+    // Assuntos do atendimento
+    const aList = document.getElementById('adminAssuntosOsList');
+    if (aList) {
+        aList.innerHTML = (_adminAcompCfg.assuntos_os || []).map((s, i) => {
+            const lbl    = typeof s === 'string' ? s : (s.label || '');
+            const abreOS = typeof s === 'object' && s.abre_os;
+            const idIxc  = typeof s === 'object' ? (s.id_ixc || '') : '';
+            return `<div class="flex items-center gap-1 bg-white border rounded px-2 py-1">
+                <span class="flex-1 text-sm min-w-0 truncate">${lbl}</span>
+                <input type="text" value="${idIxc}" placeholder="ID IXC"
+                       class="border rounded px-1 py-0.5 text-xs w-14 text-center"
+                       title="ID do assunto no IXC"
+                       onchange="_adminAcompCfg.assuntos_os[${i}].id_ixc=this.value.trim()">
+                <label class="flex items-center gap-1 text-xs cursor-pointer text-orange-700 whitespace-nowrap" title="Ticket ficará em aberto (precisa de campo)">
+                    <input type="checkbox" ${abreOS ? 'checked' : ''} onchange="_adminAcompCfg.assuntos_os[${i}].abre_os=this.checked">
+                    🔓
+                </label>
+                <button onclick="_adminAcompCfg.assuntos_os.splice(${i},1);adminRenderAcompConfig()"
+                        class="text-red-400 hover:text-red-600 text-xs px-1">✕</button>
+            </div>`;
+        }).join('');
+    }
+}
+
+function adminAddTipoAcao() {
+    const emoji = document.getElementById('adminNewTipoEmoji')?.value.trim() || '📋';
+    const label = document.getElementById('adminNewTipoLabel')?.value.trim();
+    if (!label) return;
+    const value = label.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    _adminAcompCfg.tipos_acao.push({ value, label, emoji, ativo: true, abre_os_ixc: false });
+    document.getElementById('adminNewTipoEmoji').value = '';
+    document.getElementById('adminNewTipoLabel').value = '';
+    adminRenderAcompConfig();
+}
+
+function adminAddAssunto() {
+    const v = document.getElementById('adminNewAssunto')?.value.trim();
+    if (!v) return;
+    _adminAcompCfg.assuntos_os.push({ label: v, abre_os: false });
+    adminRenderAcompConfig();
+    document.getElementById('adminNewAssunto').value = '';
+}
+
+function adminSaveAcompConfig() {
+    const msg = document.getElementById('adminAcompConfigMsg');
+    fetch('/api/admin/acomp-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(_adminAcompCfg)
+    })
+    .then(r => r.json())
+    .then(d => {
+        msg.textContent = d.success ? '✅ Salvo!' : '❌ ' + (d.error || 'Erro');
+        msg.className = 'text-xs ' + (d.success ? 'text-green-600' : 'text-red-500');
+        msg.classList.remove('hidden');
+        setTimeout(() => msg.classList.add('hidden'), 4000);
+    })
+    .catch(() => { msg.textContent = '❌ Erro de conexão'; msg.classList.remove('hidden'); });
+}
+
+// Carrega config ao abrir o modal de settings
+document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('adminSettingsModal');
+    if (modal) {
+        new MutationObserver(() => {
+            if (modal.classList.contains('show')) adminLoadAcompConfig();
+        }).observe(modal, { attributes: true, attributeFilter: ['class'] });
+    }
+    // Fallback: botão de abrir
+    const openBtn = document.getElementById('openAdminSettingsModalBtn');
+    if (openBtn) openBtn.addEventListener('click', () => setTimeout(adminLoadAcompConfig, 100));
+});
+</script>
 
 <!-- Modal: Editar Usuário -->
 <div id="editUserModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;align-items:center;justify-content:center;">

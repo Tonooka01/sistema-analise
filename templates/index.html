@@ -589,12 +589,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="grid grid-cols-2 gap-2 mb-2">
           <div>
             <label class="text-xs text-gray-500 block mb-1">Tipo de Ação *</label>
-            <select id="cdp-acomp-tipo" class="w-full border rounded px-2 py-1 text-sm">
+            <select id="cdp-acomp-tipo" class="w-full border rounded px-2 py-1 text-sm" onchange="cdpAcompTipoChanged(this.value)">
               <option value="">Selecione…</option>
-              <option value="ligacao">📞 Ligação</option>
-              <option value="whatsapp">💬 WhatsApp</option>
-              <option value="visita">🏠 Visita</option>
-              <option value="email">✉️ E-mail</option>
             </select>
           </div>
           <div>
@@ -610,8 +606,20 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </div>
         <div class="mb-2">
-          <label class="text-xs text-gray-500 block mb-1">Observação</label>
+          <label class="text-xs text-gray-500 block mb-1">Observação / Descrição</label>
           <textarea id="cdp-acomp-obs" rows="2" class="w-full border rounded px-2 py-1 text-sm resize-none" placeholder="O que foi conversado…"></textarea>
+        </div>
+        <!-- Assunto do atendimento — sempre visível -->
+        <div class="mb-2">
+          <label class="text-xs text-gray-500 block mb-1">Assunto</label>
+          <select id="cdp-acomp-os-assunto" class="w-full border rounded px-2 py-1 text-sm" onchange="cdpAcompAssuntoChanged(this)">
+            <option value="">Selecione o assunto…</option>
+          </select>
+        </div>
+        <!-- Indicador de status do atendimento IXC (automático pelo assunto) -->
+        <div id="cdp-acomp-os-wrap" class="hidden mb-2 px-2 py-1.5 rounded flex items-center gap-2">
+          <input type="checkbox" id="cdp-acomp-abrir-os" class="hidden">
+          <span id="cdp-acomp-os-label" class="text-sm"></span>
         </div>
         <div class="flex gap-2 items-end">
           <div class="flex-1">
@@ -686,6 +694,8 @@ function _renderClientDetail(d) {
   const cl  = d.cliente   || {};
   const fin = d.financeiro || {};
   const s   = fin.summary || {};
+  _cdpCurrentClienteIxcId = cl.id_cliente_ixc || null;
+  cdpLoadAcompConfig();
 
   // Header
   document.getElementById('cdp-id').textContent    = c.ID || '—';
@@ -812,20 +822,117 @@ function _renderClientDetail(d) {
 }
 
 // ---- Acompanhamento no modal ----
-let _cdpCurrentContrato = null;
+let _cdpCurrentContrato    = null;
+let _cdpCurrentClienteIxcId = null;
 const _TIPO_LABEL = { ligacao:'📞 Ligação', whatsapp:'💬 WhatsApp', visita:'🏠 Visita', email:'✉️ E-mail' };
+function _tipoLabel(v) {
+  if (_cdpAcompCfg) {
+    const t = (_cdpAcompCfg.tipos_acao || []).find(x => x.value === v);
+    if (t) return (t.emoji ? t.emoji + ' ' : '') + t.label;
+  }
+  return _TIPO_LABEL[v] || v;
+}
 const _RES_LABEL  = { retido:'✅ Retido', negociacao:'🤝 Em negociação', sem_resposta:'📵 Sem resposta', reagendou:'📅 Reagendou', cancelou:'❌ Cancelou' };
+
+let _cdpAcompCfg = null;
+
+async function cdpLoadAcompConfig() {
+  const _fallback = {
+    tipos_acao: [
+      {value:'ligacao', label:'Ligação',  emoji:'📞'},
+      {value:'whatsapp',label:'WhatsApp', emoji:'💬'},
+      {value:'visita',  label:'Visita',   emoji:'🏠'},
+      {value:'email',   label:'E-mail',   emoji:'✉️'},
+    ],
+    assuntos_os: [
+      {label:'Sem sinal',id_assunto:''},{label:'Lentidão',id_assunto:''},{label:'Suporte técnico',id_assunto:''}
+    ]
+  };
+
+  if (!_cdpAcompCfg) {
+    try {
+      const r = await fetch('/api/behavior/acomp-config');
+      const d = await r.json();
+      _cdpAcompCfg = (d && Array.isArray(d.tipos_acao)) ? d : _fallback;
+    } catch(e) {
+      _cdpAcompCfg = _fallback;
+    }
+  }
+
+  // Popula Tipo de Ação (limpa e repopula)
+  const tipoSel = document.getElementById('cdp-acomp-tipo');
+  if (tipoSel) {
+    while (tipoSel.options.length > 1) tipoSel.remove(1);
+    (_cdpAcompCfg.tipos_acao || []).forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.value;
+      opt.textContent = (t.emoji ? t.emoji + ' ' : '') + t.label;
+      tipoSel.appendChild(opt);
+    });
+  }
+
+  // Popula Assuntos do atendimento — formato {label, abre_os}
+  const assSel = document.getElementById('cdp-acomp-os-assunto');
+  if (assSel) {
+    while (assSel.options.length > 1) assSel.remove(1);
+    (_cdpAcompCfg.assuntos_os || []).forEach(s => {
+      const label  = typeof s === 'string' ? s : (s.label || '');
+      const abreOS = typeof s === 'object' ? !!s.abre_os : false;
+      const opt = document.createElement('option');
+      opt.value = label;
+      opt.dataset.abreOs = abreOS ? '1' : '0';
+      opt.textContent = abreOS ? `🔓 ${label}` : label;
+      assSel.appendChild(opt);
+    });
+  }
+
+  return _cdpAcompCfg;
+}
+
+function cdpAcompToggleOS(checked) {
+  // mantido por compatibilidade
+}
+
+function cdpAcompAssuntoChanged(sel) {
+  const opt    = sel.options[sel.selectedIndex];
+  const hasVal = !!opt?.value;
+  const abreOS = opt?.dataset?.abreOs === '1';
+  const wrap   = document.getElementById('cdp-acomp-os-wrap');
+  const cb     = document.getElementById('cdp-acomp-abrir-os');
+  const lbl    = document.getElementById('cdp-acomp-os-label');
+  if (cb) cb.checked = abreOS;
+  if (!wrap || !lbl) return;
+  if (!hasVal) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  if (abreOS) {
+    wrap.className = 'mb-2 px-2 py-1.5 bg-orange-50 border border-orange-200 rounded flex items-center gap-2';
+    lbl.className  = 'text-sm text-orange-700';
+    lbl.textContent = '🔓 Atendimento IXC será aberto e ficará em aberto';
+  } else {
+    wrap.className = 'mb-2 px-2 py-1.5 bg-green-50 border border-green-200 rounded flex items-center gap-2';
+    lbl.className  = 'text-sm text-green-700';
+    lbl.textContent = '✅ Atendimento IXC será criado e fechado como resolvido';
+  }
+}
+
+function cdpAcompTipoChanged(value) {
+  // tipos de ação não controlam mais a lógica de OS
+}
 
 const _origShowClientDetail = showClientDetail;
 window.showClientDetail = function(contratoId) {
-  _cdpCurrentContrato = contratoId;
+  _cdpCurrentContrato     = contratoId;
+  _cdpCurrentClienteIxcId = null;
   _origShowClientDetail(contratoId);
 };
 
 const _origSwitchCdpTab = switchCdpTab;
 window.switchCdpTab = function(name) {
   _origSwitchCdpTab(name);
-  if (name === 'acomp' && _cdpCurrentContrato) cdpAcompLoad(_cdpCurrentContrato);
+  if (name === 'acomp' && _cdpCurrentContrato) {
+    cdpLoadAcompConfig();
+    cdpAcompLoad(_cdpCurrentContrato);
+  }
 };
 
 function cdpAcompLoad(contratoId) {
@@ -840,14 +947,26 @@ function cdpAcompLoad(contratoId) {
       }
       hist.innerHTML = rows.map(r => {
         const snoozeOk = r.snooze_ate && r.snooze_ate > new Date().toISOString().slice(0,10);
-        return `<div class="border rounded-lg p-2.5 ${snoozeOk ? 'bg-blue-50 border-blue-200' : 'bg-gray-50'}">
+        const btnFechar = r.ixc_os_id
+          ? `<button onclick="cdpFecharTicketIXC(${r.id}, '${r.ixc_os_id}', this)"
+                     class="ml-auto px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700 hover:bg-red-200 border border-red-300 whitespace-nowrap">
+               ✅ Finalizar
+             </button>`
+          : '';
+        return `<div class="border rounded-lg p-2.5 ${r.ixc_os_id ? 'bg-yellow-50 border-yellow-300' : snoozeOk ? 'bg-blue-50 border-blue-200' : 'bg-gray-50'}">
           <div class="flex justify-between items-start gap-2 mb-1">
-            <span class="font-medium text-xs">${_TIPO_LABEL[r.tipo_acao] || r.tipo_acao}</span>
-            <span class="text-xs text-gray-400">${(r.data_registro||'').slice(0,16).replace('T',' ')}</span>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-medium text-xs">${_tipoLabel(r.tipo_acao)}</span>
+              ${r.ixc_os_id ? `<span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-yellow-200 text-yellow-800">🎫 OS #${r.ixc_os_id}</span>` : ''}
+            </div>
+            <div class="flex items-center gap-2">
+              ${btnFechar}
+              <span class="text-xs text-gray-400 whitespace-nowrap">${(r.data_registro||'').slice(0,16).replace('T',' ')}</span>
+            </div>
           </div>
           ${r.resultado ? `<span class="text-xs mr-2">${_RES_LABEL[r.resultado] || r.resultado}</span>` : ''}
           ${r.observacao ? `<p class="text-xs text-gray-600 mt-1">${r.observacao}</p>` : ''}
-          <div class="flex gap-3 mt-1 text-xs text-gray-400">
+          <div class="flex gap-3 mt-1 text-xs text-gray-400 flex-wrap">
             ${r.data_retorno ? `<span>Retorno: ${r.data_retorno}</span>` : ''}
             ${snoozeOk ? `<span class="text-blue-600">Snoozed até ${r.snooze_ate}</span>` : ''}
             <span>por ${r.usuario}</span>
@@ -858,34 +977,92 @@ function cdpAcompLoad(contratoId) {
     .catch(() => { hist.innerHTML = '<p class="text-red-400 text-xs">Erro ao carregar.</p>'; });
 }
 
+function cdpFecharTicketIXC(acompId, ixcOsId, btn) {
+  if (!confirm(`Finalizar atendimento IXC #${ixcOsId}?`)) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  fetch('/api/behavior/fechar-ticket-ixc', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({acomp_id: acompId, ixc_os_id: ixcOsId})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      btn.closest('.border').classList.remove('bg-yellow-50','border-yellow-300');
+      btn.closest('.border').classList.add('bg-gray-50');
+      btn.remove();
+      const badge = btn.closest('.border')?.querySelector('.bg-yellow-200');
+      if (badge) badge.textContent = `✅ OS #${ixcOsId} finalizada`;
+      cdpAcompLoad(_cdpCurrentContrato);
+    } else {
+      btn.disabled = false;
+      btn.textContent = '✅ Finalizar';
+      alert('Erro: ' + (d.error || 'Falha ao finalizar no IXC'));
+    }
+  })
+  .catch(() => { btn.disabled = false; btn.textContent = '✅ Finalizar'; alert('Erro de conexão'); });
+}
+
 function cdpAcompSalvar() {
-  const tipo      = document.getElementById('cdp-acomp-tipo').value;
-  const resultado = document.getElementById('cdp-acomp-resultado').value;
-  const obs       = document.getElementById('cdp-acomp-obs').value.trim();
-  const retorno   = document.getElementById('cdp-acomp-retorno').value;
-  const msg       = document.getElementById('cdp-acomp-msg');
+  const tipo       = document.getElementById('cdp-acomp-tipo').value;
+  const resultado  = document.getElementById('cdp-acomp-resultado').value;
+  const obs        = document.getElementById('cdp-acomp-obs').value.trim();
+  const retorno    = document.getElementById('cdp-acomp-retorno').value;
+  const abrirOS    = document.getElementById('cdp-acomp-abrir-os')?.checked || false;
+  const osAssunto  = document.getElementById('cdp-acomp-os-assunto')?.value || '';
+  const msg        = document.getElementById('cdp-acomp-msg');
 
   if (!tipo) { msg.textContent = 'Selecione o tipo de ação.'; msg.className = 'text-xs mt-1 text-red-600'; msg.classList.remove('hidden'); return; }
+  if (abrirOS && !osAssunto) { msg.textContent = 'Selecione o assunto do atendimento.'; msg.className = 'text-xs mt-1 text-red-600'; msg.classList.remove('hidden'); return; }
+
+  const btn = document.querySelector('[onclick="cdpAcompSalvar()"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando…'; }
 
   fetch('/api/behavior/acompanhamento', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ contrato_id: _cdpCurrentContrato, tipo_acao: tipo, resultado: resultado||null, observacao: obs||null, data_retorno: retorno||null })
+    body: JSON.stringify({
+      contrato_id:    _cdpCurrentContrato,
+      tipo_acao:      tipo,
+      resultado:      resultado || null,
+      observacao:     obs || null,
+      data_retorno:   retorno || null,
+      abre_os:        abrirOS,
+      os_assunto:     osAssunto || null,
+      id_cliente_ixc: _cdpCurrentClienteIxcId,
+    })
   })
   .then(r => r.json())
   .then(data => {
     if (data.error) { msg.textContent = 'Erro: ' + data.error; msg.className = 'text-xs mt-1 text-red-600'; msg.classList.remove('hidden'); return; }
-    msg.textContent = `✅ Salvo! Cliente removido das listas até ${data.snooze_ate || '—'}.`;
-    msg.className = 'text-xs mt-1 text-green-600';
+    if (data.ixc_os_id) {
+      msg.textContent = `✅ Atendimento #${data.ixc_os_id} criado no IXC! Registro salvo.`;
+      msg.className = 'text-xs mt-1 text-green-600';
+    } else if (_cdpCurrentClienteIxcId) {
+      const detalhe = data.ixc_erro ? ` (${data.ixc_erro})` : '';
+      msg.textContent = `⚠️ Salvo localmente. Falha ao criar atendimento no IXC${detalhe}.`;
+      msg.className = 'text-xs mt-1 text-orange-500';
+    } else {
+      msg.textContent = `✅ Salvo! Cliente removido das listas até ${data.snooze_ate || '—'}.`;
+      msg.className = 'text-xs mt-1 text-green-600';
+    }
     msg.classList.remove('hidden');
     document.getElementById('cdp-acomp-tipo').value = '';
     document.getElementById('cdp-acomp-resultado').value = '';
     document.getElementById('cdp-acomp-obs').value = '';
     document.getElementById('cdp-acomp-retorno').value = '';
+    const osCb = document.getElementById('cdp-acomp-abrir-os');
+    if (osCb) osCb.checked = false;
+    const assSel2 = document.getElementById('cdp-acomp-os-assunto');
+    if (assSel2) assSel2.selectedIndex = 0;
+    document.getElementById('cdp-acomp-os-fields')?.classList.add('hidden');
+    document.getElementById('cdp-acomp-os-wrap')?.classList.add('hidden');
     cdpAcompLoad(_cdpCurrentContrato);
-    setTimeout(() => msg.classList.add('hidden'), 5000);
+    setTimeout(() => msg.classList.add('hidden'), 6000);
   })
-  .catch(() => { msg.textContent = 'Erro de conexão.'; msg.className = 'text-xs mt-1 text-red-600'; msg.classList.remove('hidden'); });
+  .catch(() => { msg.textContent = 'Erro de conexão.'; msg.className = 'text-xs mt-1 text-red-600'; msg.classList.remove('hidden'); })
+  .finally(() => { if (btn) { btn.disabled = false; btn.textContent = 'Salvar'; } });
 }
 
 // helpers
