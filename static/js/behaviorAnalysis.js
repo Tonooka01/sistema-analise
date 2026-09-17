@@ -3563,7 +3563,7 @@ window._retTab = async function(id, tab) {
             }
             const IMG_EXTS = new Set(['JPG','JPEG','PNG','GIF','WEBP','BMP','SVG']);
             // Busca binário via endpoint visualizar_arquivo_os (mesmo padrão do app-netvale-acs)
-            window._retVerArquivo = async function(arquivoId, ext, label) {
+            window._retVerArquivo = async function(arquivoId, extHint, label) {
                 const modal = document.getElementById('ret-file-modal');
                 const body  = document.getElementById('ret-file-modal-body');
                 const lbl   = document.getElementById('ret-file-modal-label');
@@ -3575,18 +3575,29 @@ window._retTab = async function(id, tab) {
                     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                     const blob = await resp.blob();
                     const url  = URL.createObjectURL(blob);
-                    if (IMG_EXTS.has(ext)) {
-                        body.innerHTML = '';
+                    const ct   = blob.type || '';  // Content-Type real da resposta
+                    const isImg = ct.startsWith('image/') || IMG_EXTS.has(extHint);
+                    const isPdf = ct === 'application/pdf' || extHint === 'PDF';
+                    body.innerHTML = '';
+                    if (isImg) {
                         const img = document.createElement('img');
                         img.src = url;
                         img.style.cssText = 'max-width:90vw;max-height:82vh;border-radius:6px;box-shadow:0 4px 32px rgba(0,0,0,.6);object-fit:contain';
                         img.onclick = e => e.stopPropagation();
                         body.appendChild(img);
-                    } else if (ext === 'PDF') {
+                    } else if (isPdf) {
                         body.innerHTML = `<iframe src="${url}" style="width:88vw;height:80vh;border-radius:6px;border:none"></iframe>`;
                     } else {
-                        body.innerHTML = `<a href="${url}" download="${label}"
-                          style="color:#60a5fa;font-size:14px;text-decoration:underline">⬇ Baixar ${label}</a>`;
+                        // Tenta mostrar como imagem mesmo assim (IXC às vezes não define content-type)
+                        const img = document.createElement('img');
+                        img.src = url;
+                        img.style.cssText = 'max-width:90vw;max-height:82vh;border-radius:6px;box-shadow:0 4px 32px rgba(0,0,0,.6);object-fit:contain';
+                        img.onclick = e => e.stopPropagation();
+                        img.onerror = () => {
+                            body.innerHTML = `<a href="${url}" download="${label}"
+                              style="color:#60a5fa;font-size:14px;text-decoration:underline">⬇ Baixar ${label}</a>`;
+                        };
+                        body.appendChild(img);
                     }
                 } catch(e) {
                     body.innerHTML = `<div style="color:#f87171;font-size:13px">Erro: ${e.message}</div>`;
