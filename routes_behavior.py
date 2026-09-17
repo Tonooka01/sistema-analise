@@ -3544,38 +3544,36 @@ def _ixc_arquivos(os_id, token):
 
 @behavior_bp.route('/ixc-file')
 def api_ixc_file():
+    """Proxy autenticado para arquivos do IXC via endpoint visualizar_arquivo_os."""
     if not current_user.is_authenticated:
         return '', 401
-    fpath = request.args.get('path', '').lstrip('/')
-    if not fpath or '..' in fpath or fpath.startswith('http'):
+    arquivo_id = request.args.get('id', '').strip()
+    if not arquivo_id or not arquivo_id.isdigit():
         return '', 400
     try:
         token = _ret_get_token()
         if not token:
             return '', 500
         encoded = base64.b64encode(token.encode()).decode()
-        auth_headers = {'Authorization': f'Basic {encoded}'}
-        # IXCsoft pode servir arquivos em caminhos diferentes dependendo da versão
-        candidates = [
-            f'{_IXC_HOST}/{fpath}',
-            f'{_IXC_HOST}/upload/{fpath}',
-            f'{_IXC_HOST}/webservice/v1/{fpath}',
-            f'{_IXC_HOST}/ixcsoft/{fpath}',
-        ]
+        headers = {
+            'Authorization': f'Basic {encoded}',
+            'Content-Type': 'application/json',
+            'ixcsoft': 'listar',
+        }
+        # GET com JSON body — padrão IXC confirmado em app-netvale-acs
+        r = requests.get(f'{_IXC_BASE}/visualizar_arquivo_os',
+                         json={'id': arquivo_id},
+                         headers=headers,
+                         timeout=30, verify=False, stream=True)
+        logger.info(f"ixc-file id={arquivo_id} status={r.status_code} ct={r.headers.get('Content-Type')}")
+        if r.status_code != 200:
+            return '', r.status_code
         from flask import Response, stream_with_context
-        for url in candidates:
-            try:
-                r = requests.get(url, headers=auth_headers, timeout=15, verify=False, stream=True)
-                logger.info(f"ixc-file {url} → {r.status_code}")
-                if r.status_code == 200:
-                    ct = r.headers.get('Content-Type', 'application/octet-stream')
-                    return Response(stream_with_context(r.iter_content(8192)),
-                                    status=200, content_type=ct)
-            except Exception as ex:
-                logger.warning(f"ixc-file {url}: {ex}")
-        return '', 404
+        ct = r.headers.get('Content-Type', 'application/octet-stream')
+        return Response(stream_with_context(r.iter_content(8192)),
+                        status=200, content_type=ct)
     except Exception as e:
-        logger.error(f"ixc-file {fpath}: {e}")
+        logger.error(f"ixc-file id={arquivo_id}: {e}")
         return '', 502
 
 
