@@ -90,6 +90,7 @@ export function hideAllCustomFilters() {
         dom.customSearchFilterDiv, dom.financialHealthFiltersDiv, dom.sellerAnalysisFiltersDiv,
         dom.financialFiltersDiv, dom.cityCancellationFiltersDiv, dom.neighborhoodAnalysisFiltersDiv,
         dom.equipmentAnalysisFiltersDiv, dom.dailyEvolutionFiltersDiv, dom.behaviorAnalysisContainer,
+        dom.retiradaAnalysisContainer,
         dom.faturamentoCidadeFiltersDiv, dom.activationSellerFiltersDiv, dom.cohortAnalysisFiltersDiv,
         dom.latePaymentFiltersDiv,
     ];

@@ -77,6 +77,9 @@ export let behaviorAnalysisContainer;
 export let behaviorAnalysisTabs;
 export let behaviorAnalysisTabContent;
 
+// Container standalone: Retirada
+export let retiradaAnalysisContainer;
+
 // Filtros Faturamento por Cidade/Período
 export let faturamentoCidadeFiltersDiv;
 export let faturamentoStartDate;
@@ -167,6 +170,7 @@ export function initFiltersDom() {
     behaviorAnalysisContainer  = document.getElementById('behavior-analysis-container');
     behaviorAnalysisTabs       = document.getElementById('behavior-analysis-tabs');
     behaviorAnalysisTabContent = document.getElementById('behavior-analysis-tab-content');
+    retiradaAnalysisContainer  = document.getElementById('retirada-analysis-container');
 
     faturamentoCidadeFiltersDiv = document.getElementById('faturamento-cidade-filters');
     faturamentoStartDate        = document.getElementById('faturamentoStartDate');

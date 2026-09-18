@@ -100,6 +100,13 @@ export function handleCustomAnalysisChange(page = 1, triggerFetch = true) {
             if (shouldFetch) behaviorAnalysis.initializeBehaviorAnalysis();
             break;
 
+        case 'retirada':
+            if (dom.dashboardContentDiv) dom.dashboardContentDiv.classList.add('hidden');
+            if (dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
+            if (dom.retiradaAnalysisContainer) dom.retiradaAnalysisContainer.classList.remove('hidden');
+            if (shouldFetch) behaviorAnalysis.renderRetiradaTab();
+            break;
+
         case 'atrasos_e_nao_pagos':
             if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
             if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.add('hidden');

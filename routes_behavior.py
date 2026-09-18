@@ -3498,6 +3498,64 @@ def api_behavior_acompanhamento_all():
 # ---------------------------------------------------------------------------
 # Route: PUT /api/behavior/acompanhamento/<int:record_id>  (admin only)
 # ---------------------------------------------------------------------------
+@behavior_bp.route('/retorno')
+def api_behavior_retorno():
+    """Contratos com retorno vencido — último registro por contrato onde snooze_ate <= hoje."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    conn = get_db()
+    try:
+        _ensure_acompanhamento_table(conn)
+        page    = max(1, int(request.args.get('page', 1)))
+        limit   = min(100, int(request.args.get('limit', 100)))
+        offset  = (page - 1) * limit
+        usuario = request.args.get('usuario', '').strip()
+
+        usr_cond = 'AND A.usuario = ?' if usuario else ''
+        params   = [usuario] if usuario else []
+
+        rows = conn.execute(f"""
+            SELECT A.id, A.contrato_id, A.usuario, A.data_registro,
+                   A.tipo_acao, A.resultado, A.observacao, A.data_retorno, A.snooze_ate,
+                   C.Cliente AS cliente, C.Cidade AS cidade,
+                   cl.Whatsapp         AS whatsapp,
+                   cl.Telefone_celular AS telefone_cel
+            FROM Acompanhamento_Clientes A
+            LEFT JOIN Contratos C  ON C.ID  = A.contrato_id
+            LEFT JOIN Clientes  cl ON cl.Raz_o_social = C.Cliente
+            WHERE A.id IN (
+                SELECT MAX(id) FROM Acompanhamento_Clientes
+                WHERE (snooze_ate IS NULL OR snooze_ate <= date('now'))
+                {usr_cond}
+                GROUP BY contrato_id
+            )
+            ORDER BY A.snooze_ate ASC, A.data_registro ASC
+            LIMIT ? OFFSET ?
+        """, params + [limit, offset]).fetchall()
+
+        total = conn.execute(f"""
+            SELECT COUNT(DISTINCT contrato_id) FROM Acompanhamento_Clientes A
+            WHERE (snooze_ate IS NULL OR snooze_ate <= date('now')) {usr_cond}
+        """, params).fetchone()[0]
+
+        usuarios = [r[0] for r in conn.execute(
+            "SELECT DISTINCT usuario FROM Acompanhamento_Clientes ORDER BY usuario"
+        ).fetchall()]
+
+        return jsonify({
+            'registros': [dict(r) for r in rows],
+            'total':     total,
+            'page':      page,
+            'pages':     max(1, -(-total // limit)),
+            'usuarios':  usuarios,
+        })
+    except Exception as e:
+        logger.error(f"Erro em retorno: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
 @behavior_bp.route('/acompanhamento/<int:record_id>', methods=['PUT'])
 def api_behavior_acompanhamento_put(record_id):
     if not current_user.is_authenticated:
@@ -3575,6 +3633,9 @@ RETIRADA_ASSUNTOS = (
     'CANCELAMENTO RETIRADA',
 )
 
+# Cidades conhecidas — filtra IDs numéricos do IXC
+_CIDADES_CONHECIDAS = {'Dom Pedro', 'Presidente Dutra', 'São Domingos do Maranhão', 'Tuntum'}
+
 _MELHOR_HORARIO = {
     'M': 'Manhã', 'T': 'Tarde', 'N': 'Noite', 'Q': 'Qualquer', '': '—'
 }
@@ -3589,17 +3650,54 @@ def api_behavior_retiradas_filtros():
         conn = current_app.config['GET_DB_CONNECTION']()
         ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
         cidades = [r[0] for r in conn.execute(
-            f"SELECT DISTINCT Cidade FROM OS WHERE Assunto IN ({ph}) AND Cidade IS NOT NULL AND Cidade != '' ORDER BY Cidade",
+            f"SELECT DISTINCT Cidade FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ('Dom Pedro','Presidente Dutra','São Domingos do Maranhão','Tuntum') ORDER BY Cidade",
             RETIRADA_ASSUNTOS).fetchall()]
         bairros = [r[0] for r in conn.execute(
             f"SELECT DISTINCT Bairro FROM OS WHERE Assunto IN ({ph}) AND Bairro IS NOT NULL AND Bairro != '' ORDER BY Bairro",
             RETIRADA_ASSUNTOS).fetchall()]
-        colaboradores = [r[0] for r in conn.execute(
+        colab_ids = [str(r[0]) for r in conn.execute(
             f"SELECT DISTINCT Colaborador FROM OS WHERE Assunto IN ({ph}) AND Colaborador IS NOT NULL AND Colaborador != '' ORDER BY Colaborador",
             RETIRADA_ASSUNTOS).fetchall()]
         filiais = [r[0] for r in conn.execute(
             f"SELECT DISTINCT Filial FROM OS WHERE Assunto IN ({ph}) AND Filial IS NOT NULL ORDER BY Filial",
             RETIRADA_ASSUNTOS).fetchall()]
+        try:
+            equipamentos = [r[0] for r in conn.execute(
+                f"SELECT DISTINCT eq.Descricao_produto FROM Equipamento eq "
+                f"JOIN OS o ON CAST(o.Contrato AS TEXT) = CAST(eq.ID_contrato AS TEXT) "
+                f"WHERE o.Assunto IN ({ph}) AND eq.Descricao_produto IS NOT NULL AND eq.Descricao_produto != '' "
+                f"ORDER BY eq.Descricao_produto",
+                RETIRADA_ASSUNTOS).fetchall()]
+        except Exception:
+            equipamentos = []
+
+        # Resolve nomes dos técnicos via IXC endpoint 'funcionarios'
+        tecnicos_map = {}
+        try:
+            token = _ret_get_token()
+            if token:
+                encoded2 = base64.b64encode(token.encode()).decode()
+                r2 = requests.post(
+                    f'{_IXC_BASE}/funcionarios',
+                    data={'sortname': 'funcionario', 'sortorder': 'asc', 'rp': '500', 'page': '1'},
+                    headers={'Authorization': f'Basic {encoded2}', 'ixcsoft': 'listar'},
+                    timeout=15, verify=False
+                )
+                recs = r2.json().get('registros', []) if r2.ok else []
+                for rec in recs:
+                    fid  = str(rec.get('id', ''))
+                    nome = (rec.get('funcionario') or '').strip()
+                    if fid and nome:
+                        tecnicos_map[fid] = nome
+        except Exception:
+            pass  # sem IXC, usa IDs
+
+        # Monta lista de colaboradores com nome se disponível
+        colaboradores = []
+        for cid in colab_ids:
+            nome = tecnicos_map.get(cid, '')
+            colaboradores.append({'id': cid, 'nome': nome or cid})
+
         return jsonify({
             'assuntos': list(RETIRADA_ASSUNTOS),
             'status': ['Aberta', 'Encaminhada', 'Agendada', 'Finalizada'],
@@ -3607,6 +3705,8 @@ def api_behavior_retiradas_filtros():
             'bairros': bairros,
             'colaboradores': colaboradores,
             'filiais': filiais,
+            'equipamentos': equipamentos,
+            'tecnicos_map': tecnicos_map,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -3628,6 +3728,7 @@ def api_behavior_retiradas():
         cidade_f  = request.args.get('cidade', '')
         bairro_f  = request.args.get('bairro', '')
         colab_f   = request.args.get('colaborador', '')
+        equip_f   = request.args.get('equipamento', '').strip()
         date_from = request.args.get('date_from', '')
         date_to   = request.args.get('date_to', '')
         search    = request.args.get('search', '').strip()
@@ -3655,6 +3756,9 @@ def api_behavior_retiradas():
             conds.append("o.Bairro = ?"); params.append(bairro_f)
         if colab_f:
             conds.append("o.Colaborador = ?"); params.append(colab_f)
+        if equip_f:
+            conds.append("EXISTS (SELECT 1 FROM Equipamento eq WHERE CAST(eq.ID_contrato AS TEXT) = CAST(o.Contrato AS TEXT) AND eq.Descricao_produto = ?)")
+            params.append(equip_f)
         if date_from:
             conds.append("o.Abertura >= ?"); params.append(date_from)
         if date_to:
@@ -3699,6 +3803,35 @@ def api_behavior_retiradas():
         total  = kpi_row[0] if kpi_row else 0
         offset = (page - 1) * limit
 
+        sort_by  = request.args.get('sort_by', '')
+        sort_dir = request.args.get('sort_dir', 'desc').lower()
+        if sort_dir not in ('asc', 'desc'):
+            sort_dir = 'desc'
+
+        _SORT_COLS = {
+            'id':           'o.ID',
+            'cliente':      'o.Cliente',
+            'abertura':     'o.Abertura',
+            'tempo_aberto': 'o.Abertura',   # mais dias = abertura mais antiga = ASC invertido
+            'agendamento':  'o.Agendamento',
+            'colaborador':  'o.Colaborador',
+            'status':       'o.Status',
+        }
+
+        if sort_by in _SORT_COLS:
+            # Para tempo_aberto: "maior = mais antigo", então invertemos a direção
+            effective_dir = sort_dir
+            if sort_by == 'tempo_aberto':
+                effective_dir = 'asc' if sort_dir == 'desc' else 'desc'
+            order_clause = f"{_SORT_COLS[sort_by]} {effective_dir.upper()}"
+        else:
+            order_clause = """CASE o.Status
+                    WHEN 'Aberta'      THEN 1
+                    WHEN 'Encaminhada' THEN 2
+                    WHEN 'Agendada'    THEN 3
+                    ELSE 4
+                END, o.Abertura DESC"""
+
         rows = conn.execute(f"""
             SELECT
                 o.ID, o.Assunto, o.Status, o.Cliente, o.Colaborador,
@@ -3709,18 +3842,15 @@ def api_behavior_retiradas():
                 o.In_cio, o.Final, o.Fechamento, o.Prazo_limite,
                 o.Contrato, o.ID_Atendimento,
                 a.Descri_o AS atend_descricao,
-                a.Novo_status AS atend_status
+                a.Novo_status AS atend_status,
+                cl.WhatsApp AS cl_whatsapp,
+                cl.Telefone_celular AS cl_tel_cel
             FROM OS o
             LEFT JOIN Atendimentos a ON a.ID = o.ID_Atendimento
+            LEFT JOIN Contratos ct ON CAST(ct.ID AS TEXT) = CAST(o.Contrato AS TEXT)
+            LEFT JOIN Clientes cl ON cl.Raz_o_social = ct.Cliente
             {where}
-            ORDER BY
-                CASE o.Status
-                    WHEN 'Aberta'      THEN 1
-                    WHEN 'Encaminhada' THEN 2
-                    WHEN 'Agendada'    THEN 3
-                    ELSE 4
-                END,
-                o.Abertura DESC
+            ORDER BY {order_clause}
             LIMIT ? OFFSET ?
         """, params + [limit, offset]).fetchall()
 
@@ -3742,8 +3872,20 @@ def api_behavior_retiradas():
         def _clean(v):
             return None if v in (None, '', '0000-00-00 00:00:00', '0000-00-00') else v
 
+        def _cidade_nome(v):
+            """Converte ID numérico de cidade para nome ou retorna o valor original."""
+            if not v:
+                return ''
+            if v in _CIDADES_CONHECIDAS:
+                return v
+            _ID_MAP = {'3823': 'Presidente Dutra', '599': 'Presidente Dutra',
+                       '656': 'Tuntum', '515': 'Dom Pedro', '624': 'São Domingos do Maranhão'}
+            return _ID_MAP.get(str(v), v if not str(v).isdigit() else '')
+
         def fmt(r):
-            tel = r[13] or r[14] or r[15] or r[16]
+            # Telefone: OS campos (geralmente vazios no sync) → fallback Clientes
+            whatsapp  = r[14] or r[30] or ''
+            tel_cel   = r[13] or r[31] or ''
             return {
                 'id':             r[0],
                 'assunto':        r[1],
@@ -3756,11 +3898,11 @@ def api_behavior_retiradas():
                 'endereco':       r[8],
                 'complemento':    r[9],
                 'bairro':         r[10],
-                'cidade':         r[11],
+                'cidade':         _cidade_nome(r[11]),
                 'referencia':     r[12],
-                'telefone':       tel,
-                'telefone_cel':   r[13],
-                'whatsapp':       r[14],
+                'telefone':       whatsapp or tel_cel or r[15] or r[16] or '',
+                'telefone_cel':   tel_cel,
+                'whatsapp':       whatsapp,
                 'telefone_res':   r[15],
                 'telefone_com':   r[16],
                 'mensagem':       r[17],
@@ -3796,6 +3938,8 @@ def api_behavior_retiradas():
             'page':        page,
             'limit':       limit,
             'pages':       max(1, -(-total // limit)),
+            'sort_by':     sort_by,
+            'sort_dir':    sort_dir,
         })
     except Exception as e:
         import traceback
@@ -4099,7 +4243,15 @@ def api_ret_arquivos_counts():
         def _count_one(os_id):
             try:
                 recs = _ixc_arquivos(os_id, token)
-                return str(os_id), len(recs)
+                if not recs:
+                    return str(os_id), 0
+                # Conta dias distintos (cada dia com arquivo = 1 visita)
+                dias = set()
+                for rec in recs:
+                    dt = (rec.get('data_envio') or rec.get('data') or '')[:10]
+                    if dt and dt != '0000-00-00':
+                        dias.add(dt)
+                return str(os_id), len(dias) if dias else len(recs)
             except Exception:
                 return str(os_id), 0
 

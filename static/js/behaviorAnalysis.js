@@ -191,6 +191,9 @@ export function handleBehaviorTabChange(tabName) {
             case 'retirada':
                 renderRetiradaTab();
                 break;
+            case 'retorno':
+                renderRetornoTab();
+                break;
             default:
                 console.warn(`Aba de comportamento desconhecida: ${tabName}`);
                 if (targetPane) targetPane.innerHTML = `<p class="text-red-500">Conteúdo para aba "${tabName}" não definido.</p>`;
@@ -2408,7 +2411,189 @@ async function renderAlertasAcaoTab() {
         if (tr && typeof showClientDetail === 'function') showClientDetail(tr.dataset.contrato);
     });
 
+    window._alertaRefresh = () => fetchAndRenderAlertaTable(_alertaCurrentPage);
     await fetchAndRenderAlertaTable(1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Retorno
+// ─────────────────────────────────────────────────────────────────────────────
+let _retornoSelected = null;
+let _retornoRegistros = [];
+
+function _retornoMensagens(reg) {
+    const nome     = (reg.cliente || '').split(' ')[0] || 'Cliente';
+    const contrato = reg.contrato_id;
+    const res      = reg.resultado || '';
+    const obs      = reg.observacao ? `\n\n(Obs. anterior: ${reg.observacao})` : '';
+    const base = {
+        sem_resposta: [
+            { icon: '💬', label: 'Retorno WhatsApp curto',    msg: `Olá, ${nome}! Aqui é da NetVale. Tentei contato sobre o contrato #${contrato} mas não consegui falar. Pode me responder agora? 😊` },
+            { icon: '💬', label: 'Retorno WhatsApp amigável', msg: `Oi ${nome}! NetVale aqui. Há uma pendência no contrato #${contrato} que podemos resolver juntos. Quando podemos conversar?` },
+            { icon: '📞', label: 'Script para ligação',       msg: `"Bom dia/tarde, posso falar com ${nome}? Aqui é [seu nome] da NetVale. Estou retornando contato sobre o contrato #${contrato}. Tem um momento?"` },
+        ],
+        reagendou: [
+            { icon: '💬', label: 'Como combinamos',    msg: `Olá, ${nome}! NetVale aqui. Conforme combinamos, estou retornando sobre o contrato #${contrato}. Podemos resolver agora? 👍` },
+            { icon: '📞', label: 'Script para ligação', msg: `"Bom dia/tarde, ${nome}? Aqui é [seu nome] da NetVale. Estou retornando conforme combinamos sobre o contrato #${contrato}."` },
+        ],
+        negociacao: [
+            { icon: '💬', label: 'Continuação negociação', msg: `Olá, ${nome}! NetVale aqui. Dando continuidade à nossa conversa sobre o contrato #${contrato}. Como está? Conseguiu resolver? 🙏` },
+            { icon: '📞', label: 'Script para ligação',     msg: `"Olá ${nome}, aqui é [seu nome] da NetVale. Retornando sobre a negociação do contrato #${contrato}. Houve algum avanço?"` },
+        ],
+        retido: [
+            { icon: '💬', label: 'Acompanhamento pós-retenção', msg: `Olá, ${nome}! NetVale aqui. Fazendo um acompanhamento: está tudo ok com o serviço do contrato #${contrato}? Estamos à disposição! 😊` },
+        ],
+        cancelou: [
+            { icon: '💬', label: 'Tentativa de reconexão', msg: `Olá, ${nome}! Aqui é da NetVale. Gostaríamos de entender melhor o motivo do cancelamento do contrato #${contrato} e ver se podemos ajudar. Tem um momento?` },
+        ],
+    };
+    return (base[res] || [
+        { icon: '💬', label: 'Contato geral',      msg: `Olá, ${nome}! Aqui é da NetVale. Entrando em contato sobre o contrato #${contrato}. Tem um momento? 👋` },
+        { icon: '📞', label: 'Script para ligação', msg: `"Bom dia/tarde, ${nome}? Aqui é [seu nome] da NetVale. Tudo bem? Estou ligando sobre o contrato #${contrato}."` },
+    ]);
+}
+
+function _retornoRenderRight(reg) {
+    const panel = document.getElementById('retorno-panel');
+    if (!panel) return;
+
+    const tel      = reg.whatsapp || reg.telefone_cel || '—';
+    const wa       = reg.whatsapp ? `<a href="https://wa.me/55${reg.whatsapp.replace(/\D/g,'')}" target="_blank" class="text-green-600 hover:underline">💬 ${reg.whatsapp}</a>` : '—';
+    const msgs     = _retornoMensagens(reg);
+    const diasAtra = reg.snooze_ate ? Math.floor((new Date() - new Date(reg.snooze_ate)) / 86400000) : null;
+    const atrasoTxt = diasAtra !== null && diasAtra > 0 ? `<span class="text-red-600 font-semibold">${diasAtra}d atrasado</span>` : '<span class="text-green-600">hoje</span>';
+
+    const RESULTADO_LABEL = { sem_resposta:'Sem resposta', reagendou:'Reagendou', negociacao:'Em negociação', retido:'Retido', cancelou:'Cancelou', '':'—' };
+    const TIPO_LABEL      = { ligacao:'📞 Ligação', whatsapp:'💬 WhatsApp', visita:'🏠 Visita', email:'✉️ E-mail', '':'—' };
+
+    panel.innerHTML = `
+    <div class="p-5 flex flex-col gap-4 h-full">
+
+      <!-- Cabeçalho cliente -->
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="font-bold text-gray-900 text-lg leading-tight">${reg.cliente || '—'}</div>
+          <div class="text-sm text-gray-500">${reg.cidade || '—'} · Contrato <strong>#${reg.contrato_id}</strong></div>
+        </div>
+        <button onclick="if(typeof showClientDetail==='function') showClientDetail('${reg.contrato_id}')"
+          class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 flex-shrink-0">
+          📋 Detalhes / Nova Ação
+        </button>
+      </div>
+
+      <!-- Contato -->
+      <div class="bg-gray-50 rounded-lg p-3 grid grid-cols-2 gap-2 text-sm">
+        <div><span class="text-gray-500 text-xs">WhatsApp</span><div>${wa}</div></div>
+        <div><span class="text-gray-500 text-xs">Telefone</span><div class="text-gray-800">${tel}</div></div>
+        <div><span class="text-gray-500 text-xs">Retorno previsto</span><div class="text-gray-800">${reg.snooze_ate || '—'} · ${atrasoTxt}</div></div>
+        <div><span class="text-gray-500 text-xs">Último contato por</span><div class="text-gray-800">${reg.usuario || '—'}</div></div>
+      </div>
+
+      <!-- Último atendimento -->
+      <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm">
+        <div class="font-semibold text-blue-800 text-xs mb-2 uppercase tracking-wide">Último atendimento</div>
+        <div class="grid grid-cols-2 gap-1 text-xs text-gray-700">
+          <div><span class="text-gray-400">Data</span><div>${reg.data_registro?.slice(0,16) || '—'}</div></div>
+          <div><span class="text-gray-400">Tipo</span><div>${TIPO_LABEL[reg.tipo_acao||''] || reg.tipo_acao || '—'}</div></div>
+          <div><span class="text-gray-400">Resultado</span><div>${RESULTADO_LABEL[reg.resultado||''] || reg.resultado || '—'}</div></div>
+          <div><span class="text-gray-400">Retorno marcado para</span><div>${reg.data_retorno || '—'}</div></div>
+        </div>
+        ${reg.observacao ? `<div class="mt-2 text-xs text-gray-600 italic border-t border-blue-100 pt-2">"${reg.observacao}"</div>` : ''}
+      </div>
+
+      <!-- Mensagens prontas -->
+      <div>
+        <div class="font-semibold text-sm text-gray-700 mb-2">✉️ Mensagens prontas</div>
+        <div class="flex flex-col gap-2">
+          ${msgs.map((m, i) => `
+          <div class="bg-white border border-gray-200 rounded-lg p-3 hover:border-blue-300 transition cursor-pointer group"
+               onclick="navigator.clipboard.writeText(${JSON.stringify(m.msg)}).then(()=>{ const t=this.querySelector('.copy-ok'); t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'),1800); })">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-semibold text-gray-600">${m.icon} ${m.label}</span>
+              <span class="text-xs text-blue-500 group-hover:text-blue-700">Copiar</span>
+            </div>
+            <p class="text-xs text-gray-700 whitespace-pre-line leading-relaxed">${m.msg}</p>
+            <div class="copy-ok hidden mt-1 text-xs text-green-600 font-medium">✅ Copiado!</div>
+          </div>`).join('')}
+        </div>
+      </div>
+
+    </div>`;
+}
+
+function _retornoRenderList() {
+    const container = document.getElementById('retorno-cards');
+    if (!container) return;
+    if (!_retornoRegistros.length) {
+        container.innerHTML = '<div class="p-6 text-center text-gray-400 text-sm">Nenhum retorno pendente. 🎉</div>';
+        return;
+    }
+    const RESULTADO_CLS = { sem_resposta:'bg-red-100 text-red-700', reagendou:'bg-yellow-100 text-yellow-700', negociacao:'bg-blue-100 text-blue-700', retido:'bg-green-100 text-green-700', cancelou:'bg-gray-100 text-gray-600' };
+    const RESULTADO_LBL = { sem_resposta:'Sem resposta', reagendou:'Reagendou', negociacao:'Em negociação', retido:'Retido', cancelou:'Cancelou' };
+
+    container.innerHTML = _retornoRegistros.map(reg => {
+        const diasAtra = reg.snooze_ate ? Math.floor((new Date() - new Date(reg.snooze_ate)) / 86400000) : 0;
+        const resCls = RESULTADO_CLS[reg.resultado] || 'bg-gray-100 text-gray-600';
+        const resLbl = RESULTADO_LBL[reg.resultado] || reg.resultado || '—';
+        const ativo  = _retornoSelected === reg.id;
+        return `<div class="border-b border-gray-100 p-3 cursor-pointer hover:bg-blue-50 transition ${ativo ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}"
+                     data-retorno-contrato="${reg.contrato_id}"
+                     onclick="window._retornoSelect(${reg.id})">
+          <div class="flex items-center justify-between mb-0.5">
+            <span class="font-medium text-sm text-gray-900 truncate max-w-[60%]">${reg.cliente || '—'}</span>
+            ${diasAtra > 0 ? `<span class="text-xs text-red-600 font-semibold flex-shrink-0">${diasAtra}d atrasado</span>` : '<span class="text-xs text-green-600 flex-shrink-0">hoje</span>'}
+          </div>
+          <div class="flex items-center gap-2 mt-1">
+            <span class="text-xs text-gray-400">${reg.cidade || '—'} · #${reg.contrato_id}</span>
+            <span class="text-xs px-1.5 py-0.5 rounded-full font-medium ${resCls}">${resLbl}</span>
+          </div>
+          <div class="text-xs text-gray-400 mt-0.5">Retorno: ${reg.snooze_ate || '—'} · por ${reg.usuario || '—'}</div>
+        </div>`;
+    }).join('');
+}
+
+window._retornoSelect = function(id) {
+    _retornoSelected = id;
+    const reg = _retornoRegistros.find(r => r.id === id);
+    _retornoRenderList(); // re-render para highlight ativo
+    if (reg) _retornoRenderRight(reg);
+};
+
+async function renderRetornoTab() {
+    const pane = document.getElementById('tab-content-retorno');
+    if (!pane) return;
+    pane.innerHTML = '<div class="p-8 text-center text-gray-500">Carregando...</div>';
+    try {
+        const d = await fetch('/api/behavior/retorno?limit=200').then(r => r.json());
+        if (d.error) throw new Error(d.error);
+        _retornoRegistros = d.registros || [];
+        _retornoSelected  = null;
+
+        pane.innerHTML = `
+        <div class="flex" style="height:calc(100vh - 200px); min-height:520px;">
+          <!-- Lista esquerda -->
+          <div class="flex flex-col border-r border-gray-200" style="width:340px;flex-shrink:0;">
+            <div class="px-3 py-2 border-b bg-gray-50 flex items-center justify-between flex-shrink-0">
+              <span class="font-semibold text-sm text-gray-700">📅 Retornos Pendentes</span>
+              <span class="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">${d.total}</span>
+            </div>
+            <div id="retorno-cards" class="overflow-y-auto flex-1"></div>
+          </div>
+          <!-- Painel direito -->
+          <div id="retorno-panel" class="flex-1 overflow-y-auto">
+            <div class="p-10 text-center text-gray-400 mt-8">
+              <div class="text-5xl mb-3">👈</div>
+              <div class="text-sm">Selecione um cliente para ver detalhes e mensagens prontas</div>
+            </div>
+          </div>
+        </div>`;
+
+        _retornoRenderList();
+        // seleciona o primeiro automaticamente
+        if (_retornoRegistros.length) window._retornoSelect(_retornoRegistros[0].id);
+    } catch(e) {
+        pane.innerHTML = `<div class="p-6 text-red-600">Erro: ${e.message}</div>`;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3075,8 +3260,13 @@ let _retTotal     = 0;
 let _retFilters   = {};
 let _retFiltros   = {};
 let _retExpanded  = new Set();
+let _retSortBy    = '';
+let _retSortDir   = 'desc';
+let _retTecnicosMap = {}; // { id: nome }
 const _retTabLoaded   = {};
 const _retVisitasCache = {}; // { osId: count } — persiste entre re-renders
+
+const _retNomeTecnico = (id) => _retTecnicosMap[String(id)] || String(id || '—');
 
 const _RET_STATUS_CLS = {
     'Aberta':       'bg-red-100 text-red-800',
@@ -3099,7 +3289,7 @@ const _RET_ASSUNTO_CLS = {
     'CANCELAMENTO RETIRADA':                    'bg-gray-100 text-gray-700',
 };
 
-async function renderRetiradaTab() {
+export async function renderRetiradaTab() {
     const pane = document.getElementById('tab-content-retirada');
     if (!pane) return;
     pane.innerHTML = '<div class="p-8 text-center text-gray-500">Carregando...</div>';
@@ -3109,7 +3299,8 @@ async function renderRetiradaTab() {
             fetch('/api/behavior/retiradas/filtros').then(r => r.json()),
         ]);
         _retFiltros = filtros;
-        _retFilters = { status: '', assunto: '', filial: '', cidade: '', bairro: '', colaborador: '', date_from: '', date_to: '', search: '' };
+        _retTecnicosMap = filtros.tecnicos_map || {};
+        _retFilters = { status: 'Aberta,Encaminhada,Agendada', assunto: '', filial: '', cidade: '', bairro: '', colaborador: '', equipamento: '', min_visitas: '', date_from: '', date_to: '', search: '' };
         _retPage    = 1;
         _retExpanded.clear();
 
@@ -3126,18 +3317,19 @@ function _retShell(f) {
         <option value="">${ph}</option>${opts.map(o => `<option value="${o}">${o}</option>`).join('')}
     </select>`;
 
-    const STATUS_LIST = ['Aberta','Encaminhada','Agendada','Finalizada'];
-    const STATUS_CLS  = { Aberta:'text-red-700', Encaminhada:'text-yellow-700', Agendada:'text-blue-700', Finalizada:'text-green-700' };
+    const STATUS_LIST    = ['Aberta','Encaminhada','Agendada','Finalizada'];
+    const STATUS_DEFAULT = new Set(['Aberta','Encaminhada','Agendada']);
+    const STATUS_CLS     = { Aberta:'text-red-700', Encaminhada:'text-yellow-700', Agendada:'text-blue-700', Finalizada:'text-green-700' };
     const multiStatus = `
 <div class="ret-ms-wrap relative" id="ret-ms-status">
   <div class="ret-ms-trigger border border-gray-300 rounded px-2 py-1 text-sm cursor-pointer select-none flex justify-between items-center gap-2 min-w-[140px] bg-white" id="ret-ms-trigger">
-    <span id="ret-ms-label" class="truncate">Todos status</span>
+    <span id="ret-ms-label" class="truncate">Aberta, Encaminhada, Agendada</span>
     <span class="text-gray-400 text-xs flex-shrink-0">▾</span>
   </div>
   <div class="ret-ms-dropdown hidden absolute z-50 bg-white border border-gray-300 rounded-lg shadow-lg mt-1 py-1 min-w-[160px]" id="ret-ms-dropdown">
     ${STATUS_LIST.map(s => `
     <label class="flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm hover:bg-gray-50 ${STATUS_CLS[s]||''}">
-      <input type="checkbox" value="${s}" class="ret-ms-cb accent-blue-600">
+      <input type="checkbox" value="${s}" class="ret-ms-cb accent-blue-600" ${STATUS_DEFAULT.has(s) ? 'checked' : ''}>
       <span class="font-medium">${s}</span>
     </label>`).join('')}
     <div class="border-t border-gray-100 mt-1 pt-1 px-3 pb-1">
@@ -3181,7 +3373,10 @@ function _retShell(f) {
       </div>
       <div class="flex flex-col gap-1">
         <label class="text-xs text-gray-500 font-medium">Colaborador</label>
-        ${sel('ret-f-colab', f.colaboradores || [], 'Todos colaboradores')}
+        <select id="ret-f-colab" class="ret-filter border border-gray-300 rounded px-2 py-1 text-sm">
+          <option value="">Todos colaboradores</option>
+          ${(f.colaboradores || []).map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}
+        </select>
       </div>
       <div class="flex flex-col gap-1">
         <label class="text-xs text-gray-500 font-medium">De</label>
@@ -3190,6 +3385,14 @@ function _retShell(f) {
       <div class="flex flex-col gap-1">
         <label class="text-xs text-gray-500 font-medium">Até</label>
         <input type="date" id="ret-f-ate" class="border border-gray-300 rounded px-2 py-1 text-sm">
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-500 font-medium">Equipamento</label>
+        ${sel('ret-f-equip', f.equipamentos || [], 'Todos equipamentos')}
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-500 font-medium">Visitas (mín.)</label>
+        <input type="number" id="ret-f-min-visitas" min="0" placeholder="0" class="border border-gray-300 rounded px-2 py-1 text-sm w-20">
       </div>
       <div class="flex flex-col gap-1">
         <label class="text-xs text-gray-500 font-medium">Busca</label>
@@ -3243,6 +3446,8 @@ function _retBindEvents(pane) {
         _retFilters.cidade      = pane.querySelector('#ret-f-cidade')?.value || '';
         _retFilters.bairro      = pane.querySelector('#ret-f-bairro')?.value || '';
         _retFilters.colaborador = pane.querySelector('#ret-f-colab')?.value || '';
+        _retFilters.equipamento = pane.querySelector('#ret-f-equip')?.value || '';
+        _retFilters.min_visitas = pane.querySelector('#ret-f-min-visitas')?.value || '';
         _retFilters.date_from   = pane.querySelector('#ret-f-de')?.value || '';
         _retFilters.date_to     = pane.querySelector('#ret-f-ate')?.value || '';
         _retFilters.search      = pane.querySelector('#ret-f-search')?.value || '';
@@ -3253,9 +3458,11 @@ function _retBindEvents(pane) {
     pane.querySelector('#ret-btn-limpar')?.addEventListener('click', () => {
         pane.querySelectorAll('.ret-ms-cb').forEach(cb => cb.checked = false);
         _retUpdateStatusLabel();
-        ['#ret-f-assunto','#ret-f-filial','#ret-f-cidade','#ret-f-bairro','#ret-f-colab','#ret-f-de','#ret-f-ate','#ret-f-search']
+        ['#ret-f-assunto','#ret-f-filial','#ret-f-cidade','#ret-f-bairro','#ret-f-colab','#ret-f-equip','#ret-f-min-visitas','#ret-f-de','#ret-f-ate','#ret-f-search']
             .forEach(s => { const el = pane.querySelector(s); if (el) el.value = ''; });
-        _retFilters = { status:'',assunto:'',filial:'',cidade:'',bairro:'',colaborador:'',date_from:'',date_to:'',search:'' };
+        _retFilters = { status:'',assunto:'',filial:'',cidade:'',bairro:'',colaborador:'',equipamento:'',min_visitas:'',date_from:'',date_to:'',search:'' };
+        _retSortBy  = '';
+        _retSortDir = 'desc';
         _retPage = 1;
         _retExpanded.clear();
         _retLoad();
@@ -3267,7 +3474,7 @@ async function _retLoad() {
     const pgDiv = document.getElementById('ret-pagination');
     if (wrap) wrap.innerHTML = '<div class="p-6 text-center text-gray-400">Carregando...</div>';
 
-    const q = new URLSearchParams({ ..._retFilters, page: _retPage, limit: _retPageSize });
+    const q = new URLSearchParams({ ..._retFilters, page: _retPage, limit: _retPageSize, sort_by: _retSortBy, sort_dir: _retSortDir });
     const d = await fetch(`/api/behavior/retiradas?${q}`).then(r => r.json());
     if (d.error) { if(wrap) wrap.innerHTML = `<div class="p-4 text-red-600">Erro: ${d.error}</div>`; return; }
 
@@ -3334,28 +3541,30 @@ function _retRenderTable(wrap) {
         const diasInfo   = _retDiasAberto(o);
         const equipTxt   = o.equipamentos_comodato || '—';
 
+        const nomeTecnico = _retNomeTecnico(o.colaborador);
         let detail = '';
         if (expanded) {
             const rows2 = [
-                ['🏠 Endereço', [o.endereco, o.complemento, o.referencia].filter(Boolean).join(' | ') || '—'],
-                ['📍 Bairro / Cidade', [o.bairro, o.cidade].filter(Boolean).join(' / ') || '—'],
-                ['📱 WhatsApp', o.whatsapp || '—'],
-                ['📞 Celular', o.telefone_cel || '—'],
-                ['☎️ Residencial', o.telefone_res || '—'],
+                ['🔧 Colaborador',       nomeTecnico],
+                ['🏢 Filial',            o.filial || '—'],
+                ['🚨 Prioridade',        o.prioridade || '—'],
+                ['📡 SLA',               o.sla || '—'],
+                ['🏠 Endereço',          [o.endereco, o.complemento].filter(Boolean).join(' | ') || '—'],
+                ['📍 Bairro / Cidade',   [o.bairro, o.cidade].filter(Boolean).join(' / ') || '—'],
+                ['📌 Referência',        o.referencia || '—'],
+                ['📱 WhatsApp',          o.whatsapp || '—'],
+                ['📞 Celular',           o.telefone_cel || '—'],
+                ['☎️ Residencial',       o.telefone_res || '—'],
                 ['📋 Mensagem / Motivo', o.mensagem || '—'],
                 ['💬 Desc. Atendimento', o.atend_descricao || '—'],
-                ['🔧 Colaborador', o.colaborador || '—'],
-                ['⏰ Melhor Horário', o.melhor_horario || '—'],
-                ['📅 Agendamento', agendTxt],
-                ['⏱️ Prazo Limite', o.prazo_limite ? o.prazo_limite.slice(0,16) : '—'],
-                ['✅ Início', o.inicio ? o.inicio.slice(0,16) : '—'],
-                ['🏁 Final', o.final ? o.final.slice(0,16) : '—'],
-                ['🔒 Fechamento', o.fechamento ? o.fechamento.slice(0,16) : '—'],
-                ['🔢 Protocolo', o.protocolo || '—'],
-                ['📝 Contrato', o.contrato || '—'],
-                ['🏢 Filial', o.filial || '—'],
-                ['🚨 Prioridade', o.prioridade || '—'],
-                ['📡 SLA', o.sla || '—'],
+                ['⏰ Melhor Horário',    o.melhor_horario || '—'],
+                ['📅 Agendamento',       agendTxt],
+                ['⏱️ Prazo Limite',      o.prazo_limite ? o.prazo_limite.slice(0,16) : '—'],
+                ['✅ Início',            o.inicio ? o.inicio.slice(0,16).replace('T',' ') : '—'],
+                ['🏁 Final',             o.final ? o.final.slice(0,16).replace('T',' ') : '—'],
+                ['🔒 Fechamento',        o.fechamento ? o.fechamento.slice(0,16).replace('T',' ') : '—'],
+                ['🔢 Protocolo',         o.protocolo || '—'],
+                ['📝 Contrato',          o.contrato || '—'],
             ];
             detail = `<tr id="ret-detail-${o.id}">
               <td colspan="11" class="bg-blue-50 border-b border-blue-200 p-0">
@@ -3373,12 +3582,15 @@ function _retRenderTable(wrap) {
                     📎 Arquivos
                   </button>
                 </div>
-                <div id="ret-panel-${o.id}-detalhes" class="ret-dpanel px-6 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2">
-                  ${rows2.map(([lbl, val]) => `
-                    <div class="flex flex-col">
+                <div id="ret-panel-${o.id}-detalhes" class="ret-dpanel px-6 py-4 grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3">
+                  ${rows2.map(([lbl, val], idx) => {
+                    // Endereço e campos longos ocupam 2 colunas
+                    const wide = lbl.includes('Endereço') || lbl.includes('Mensagem') || lbl.includes('Desc.');
+                    return `<div class="flex flex-col min-w-0 overflow-hidden ${wide ? 'col-span-2' : ''}">
                       <span class="text-xs text-gray-500 font-medium">${lbl}</span>
-                      <span class="text-sm text-gray-900 break-words">${val}</span>
-                    </div>`).join('')}
+                      <span class="text-sm text-gray-900 break-all leading-snug">${val}</span>
+                    </div>`;
+                  }).join('')}
                 </div>
                 <div id="ret-panel-${o.id}-mensagens" class="ret-dpanel hidden px-6 py-4">
                   <div class="text-xs text-gray-400 italic">Clique na aba para carregar mensagens...</div>
@@ -3401,7 +3613,7 @@ function _retRenderTable(wrap) {
           </td>
           <td class="px-3 py-2 text-sm text-gray-900 font-medium max-w-[180px] truncate" title="${o.cliente || ''}">${o.cliente || '—'}</td>
           <td class="px-3 py-2 text-xs text-gray-600 max-w-[240px] truncate" title="${endDisplay}">${endDisplay || '—'}</td>
-          <td class="px-3 py-2 text-xs text-gray-600">${o.colaborador || '—'}</td>
+          <td class="px-3 py-2 text-xs text-gray-600 max-w-[120px] truncate" title="${nomeTecnico}">${nomeTecnico}</td>
           <td class="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">${abertura}</td>
           <td class="px-3 py-2 text-xs ${o.agendamento ? 'text-blue-700 font-medium' : 'text-gray-400'} whitespace-nowrap">${agendTxt}</td>
           <td class="px-3 py-2 text-xs whitespace-nowrap ${diasInfo.cls}">${diasInfo.txt}</td>
@@ -3414,19 +3626,27 @@ function _retRenderTable(wrap) {
         </tr>${detail}`;
     }).join('');
 
+    const _sortArrow = (col) => {
+        if (_retSortBy !== col) return '<span class="text-gray-500 ml-1">⇅</span>';
+        return _retSortDir === 'desc' ? '<span class="text-yellow-300 ml-1">↓</span>' : '<span class="text-yellow-300 ml-1">↑</span>';
+    };
+    const _sortTh = (col, label, extra = '') =>
+        `<th class="px-3 py-2 font-semibold cursor-pointer hover:bg-gray-700 select-none whitespace-nowrap ${extra}"
+             onclick="window._retSort('${col}')">${label}${_sortArrow(col)}</th>`;
+
     wrap.innerHTML = `
     <table class="min-w-full text-left">
       <thead>
         <tr class="bg-gray-800 text-white text-xs">
-          <th class="px-3 py-2 font-semibold">ID</th>
+          ${_sortTh('id', 'ID')}
           <th class="px-3 py-2 font-semibold">Tipo</th>
-          <th class="px-3 py-2 font-semibold">Status</th>
-          <th class="px-3 py-2 font-semibold">Cliente</th>
+          ${_sortTh('status', 'Status')}
+          ${_sortTh('cliente', 'Cliente')}
           <th class="px-3 py-2 font-semibold">Endereço</th>
-          <th class="px-3 py-2 font-semibold">Colaborador</th>
-          <th class="px-3 py-2 font-semibold">Abertura</th>
-          <th class="px-3 py-2 font-semibold">Agendamento</th>
-          <th class="px-3 py-2 font-semibold whitespace-nowrap">Tempo Aberto</th>
+          ${_sortTh('colaborador', 'Colaborador')}
+          ${_sortTh('abertura', 'Abertura')}
+          ${_sortTh('agendamento', 'Agendamento')}
+          ${_sortTh('tempo_aberto', 'Tempo Aberto')}
           <th class="px-3 py-2 font-semibold whitespace-nowrap">Equipamentos</th>
           <th class="px-3 py-2 font-semibold whitespace-nowrap">Visitas</th>
         </tr>
@@ -3436,12 +3656,17 @@ function _retRenderTable(wrap) {
 }
 
 function _retVisitasApply() {
+    const minV = parseInt(_retFilters.min_visitas) || 0;
     document.querySelectorAll('.ret-visitas-cell').forEach(cell => {
         const n = _retVisitasCache[cell.dataset.osid];
         if (n === undefined) return;
         cell.innerHTML = n > 0
             ? `<span class="text-blue-700 font-semibold">${n}</span>`
             : '<span class="text-gray-400">0</span>';
+        if (minV > 0) {
+            const tr = cell.closest('tr');
+            if (tr) tr.style.display = n >= minV ? '' : 'none';
+        }
     });
 }
 
@@ -3490,6 +3715,18 @@ window._retToggle = function(id) {
 
 window._retGoPage = function(p) {
     _retPage = p;
+    _retExpanded.clear();
+    _retLoad();
+};
+
+window._retSort = function(col) {
+    if (_retSortBy === col) {
+        _retSortDir = _retSortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+        _retSortBy  = col;
+        _retSortDir = 'desc'; // primeiro clique sempre maior→menor
+    }
+    _retPage = 1;
     _retExpanded.clear();
     _retLoad();
 };
