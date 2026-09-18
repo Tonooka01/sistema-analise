@@ -98,6 +98,7 @@ _TAB_ROUTE_KEYS = {
     '/acompanhamento':            'acompanhamento',
     '/acompanhamento/all':        'acompanhamento',
     # /client_detail/<id> — sem restrição de aba, apenas módulo
+    # /retiradas/* — controlado pelo módulo 'retiradas' ou 'behavior' diretamente
 }
 
 @behavior_bp.before_request
@@ -118,20 +119,28 @@ def _require_behavior_access():
     except Exception:
         perm_list = []
 
-    # Verifica acesso ao módulo behavior
-    if 'behavior' not in perm_list:
-        return jsonify({"error": "Sem acesso ao módulo de Análise de Comportamento"}), 403
+    # Retiradas: aceita permissão de módulo 'retiradas' OU 'behavior'
+    suffix = request.path[len('/api/behavior'):]
+    suffix_base = '/' + suffix.lstrip('/').split('/')[0]
+    is_retiradas_route = suffix_base == '/retiradas'
+
+    has_behavior  = 'behavior'  in perm_list
+    has_retiradas = 'retiradas' in perm_list
+
+    if is_retiradas_route:
+        if not has_behavior and not has_retiradas:
+            return jsonify({"error": "Sem acesso ao módulo de Retiradas"}), 403
+    else:
+        if not has_behavior:
+            return jsonify({"error": "Sem acesso ao módulo de Análise de Comportamento"}), 403
 
     # Verifica acesso à aba específica (somente se existirem behavior:* na lista)
-    behavior_tab_perms = [p for p in perm_list if p.startswith('behavior:')]
-    if behavior_tab_perms:
-        # Normaliza path: /api/behavior/payment_profile → /payment_profile
-        suffix = request.path[len('/api/behavior'):]
-        # Remove parâmetros de rota dinâmicos ex: /client_detail/123 → /client_detail
-        suffix_base = '/' + suffix.lstrip('/').split('/')[0]
-        tab_key = _TAB_ROUTE_KEYS.get(suffix_base)
-        if tab_key and ('behavior:' + tab_key) not in perm_list:
-            return jsonify({"error": f"Sem acesso à aba: {tab_key}"}), 403
+    if has_behavior:
+        behavior_tab_perms = [p for p in perm_list if p.startswith('behavior:')]
+        if behavior_tab_perms:
+            tab_key = _TAB_ROUTE_KEYS.get(suffix_base)
+            if tab_key and ('behavior:' + tab_key) not in perm_list:
+                return jsonify({"error": f"Sem acesso à aba: {tab_key}"}), 403
 
     return None
 
@@ -3633,6 +3642,42 @@ RETIRADA_ASSUNTOS = (
     'CANCELAMENTO RETIRADA',
 )
 
+# Cache de técnicos — populado uma vez, reusado nas requisições seguintes
+_tecnicos_cache: dict = {}
+_tecnicos_cache_ts: float = 0.0
+
+
+def _get_tecnicos_map() -> dict:
+    """Retorna mapa {id: nome} de técnicos, com cache de 1 hora."""
+    import time
+    global _tecnicos_cache, _tecnicos_cache_ts
+    if _tecnicos_cache and (time.time() - _tecnicos_cache_ts) < 3600:
+        return _tecnicos_cache
+    try:
+        token = _ret_get_token()
+        if not token:
+            return _tecnicos_cache
+        encoded = base64.b64encode(token.encode()).decode()
+        r = requests.post(
+            f'{_IXC_BASE}/funcionarios',
+            data={'sortname': 'funcionario', 'sortorder': 'asc', 'rp': '500', 'page': '1'},
+            headers={'Authorization': f'Basic {encoded}', 'ixcsoft': 'listar'},
+            timeout=10, verify=False
+        )
+        recs = r.json().get('registros', []) if r.ok else []
+        m = {}
+        for rec in recs:
+            fid  = str(rec.get('id', ''))
+            nome = (rec.get('funcionario') or '').strip()
+            if fid and nome:
+                m[fid] = nome
+        if m:
+            _tecnicos_cache    = m
+            _tecnicos_cache_ts = time.time()
+    except Exception:
+        pass
+    return _tecnicos_cache
+
 # Cidades conhecidas — filtra IDs numéricos do IXC
 _CIDADES_CONHECIDAS = {'Dom Pedro', 'Presidente Dutra', 'São Domingos do Maranhão', 'Tuntum'}
 
@@ -3663,34 +3708,17 @@ def api_behavior_retiradas_filtros():
             RETIRADA_ASSUNTOS).fetchall()]
         try:
             equipamentos = [r[0] for r in conn.execute(
-                f"SELECT DISTINCT eq.Descricao_produto FROM Equipamento eq "
-                f"JOIN OS o ON CAST(o.Contrato AS TEXT) = CAST(eq.ID_contrato AS TEXT) "
-                f"WHERE o.Assunto IN ({ph}) AND eq.Descricao_produto IS NOT NULL AND eq.Descricao_produto != '' "
-                f"ORDER BY eq.Descricao_produto",
-                RETIRADA_ASSUNTOS).fetchall()]
+                "SELECT Descricao_produto, COUNT(*) AS cnt FROM Equipamento "
+                "WHERE Descricao_produto IS NOT NULL AND Descricao_produto != '' "
+                "AND (UPPER(Descricao_produto) LIKE '%ONU%' OR UPPER(Descricao_produto) LIKE '%ONT%' "
+                "     OR UPPER(Descricao_produto) LIKE '%ROTEADOR%' OR UPPER(Descricao_produto) LIKE '%ROUTER%') "
+                "GROUP BY Descricao_produto ORDER BY cnt DESC LIMIT 60"
+            ).fetchall()]
         except Exception:
             equipamentos = []
 
-        # Resolve nomes dos técnicos via IXC endpoint 'funcionarios'
-        tecnicos_map = {}
-        try:
-            token = _ret_get_token()
-            if token:
-                encoded2 = base64.b64encode(token.encode()).decode()
-                r2 = requests.post(
-                    f'{_IXC_BASE}/funcionarios',
-                    data={'sortname': 'funcionario', 'sortorder': 'asc', 'rp': '500', 'page': '1'},
-                    headers={'Authorization': f'Basic {encoded2}', 'ixcsoft': 'listar'},
-                    timeout=15, verify=False
-                )
-                recs = r2.json().get('registros', []) if r2.ok else []
-                for rec in recs:
-                    fid  = str(rec.get('id', ''))
-                    nome = (rec.get('funcionario') or '').strip()
-                    if fid and nome:
-                        tecnicos_map[fid] = nome
-        except Exception:
-            pass  # sem IXC, usa IDs
+        # Resolve nomes dos técnicos via cache (atualizado 1×/hora)
+        tecnicos_map = _get_tecnicos_map()
 
         # Monta lista de colaboradores com nome se disponível
         colaboradores = []
@@ -3757,8 +3785,18 @@ def api_behavior_retiradas():
         if colab_f:
             conds.append("o.Colaborador = ?"); params.append(colab_f)
         if equip_f:
-            conds.append("EXISTS (SELECT 1 FROM Equipamento eq WHERE CAST(eq.ID_contrato AS TEXT) = CAST(o.Contrato AS TEXT) AND eq.Descricao_produto = ?)")
-            params.append(equip_f)
+            contratos_com_equip = [
+                str(r[0]) for r in conn.execute(
+                    "SELECT DISTINCT ID_contrato FROM Equipamento WHERE Descricao_produto = ?",
+                    (equip_f,)
+                ).fetchall()
+            ]
+            if contratos_com_equip:
+                ph_eq = ','.join('?' * len(contratos_com_equip))
+                conds.append(f"CAST(o.Contrato AS TEXT) IN ({ph_eq})")
+                params.extend(contratos_com_equip)
+            else:
+                conds.append("1=0")  # nenhum contrato tem esse equipamento
         if date_from:
             conds.append("o.Abertura >= ?"); params.append(date_from)
         if date_to:
@@ -3787,10 +3825,37 @@ def api_behavior_retiradas():
             GROUP BY o.Assunto ORDER BY COUNT(*) DESC
         """, params).fetchall()
 
+        _CIDADES_OP = ('Dom Pedro', 'Presidente Dutra', 'Tuntum', 'São Domingos do Maranhão')
+
         por_cidade = conn.execute(f"""
             SELECT o.Cidade, COUNT(*) FROM OS o {where}
+            AND o.Cidade IS NOT NULL AND TRIM(o.Cidade) != ''
+            AND o.Cidade GLOB '*[A-Za-z]*'
             GROUP BY o.Cidade ORDER BY COUNT(*) DESC LIMIT 10
         """, params).fetchall()
+
+        _ph_cid = ','.join('?' * len(_CIDADES_OP))
+        por_colaborador = conn.execute(f"""
+            SELECT o.Colaborador,
+                   COUNT(*) AS total,
+                   COUNT(CASE WHEN o.Status = 'Finalizada' THEN 1 END) AS finalizadas,
+                   COUNT(CASE WHEN o.Status IN ('Aberta','Encaminhada','Agendada') THEN 1 END) AS pendentes
+            FROM OS o {where}
+            AND o.Cidade IN ({_ph_cid})
+            AND o.Colaborador IS NOT NULL AND TRIM(o.Colaborador) != '' AND o.Colaborador != '0'
+            GROUP BY o.Colaborador
+            ORDER BY total DESC
+        """, params + list(_CIDADES_OP)).fetchall()
+
+        _tec_map = _get_tecnicos_map()
+        por_colab_fmt = []
+        for r in por_colaborador:
+            cid = str(r[0]).strip()
+            nome = _tec_map.get(cid) or _tec_map.get(cid.lstrip('0')) or f'#{cid}'
+            por_colab_fmt.append({
+                'id': cid, 'nome': nome,
+                'total': r[1], 'finalizadas': r[2], 'pendentes': r[3]
+            })
 
         tendencia = conn.execute(f"""
             SELECT strftime('%Y-%m', o.Abertura) ym, COUNT(*),
@@ -3844,11 +3909,12 @@ def api_behavior_retiradas():
                 a.Descri_o AS atend_descricao,
                 a.Novo_status AS atend_status,
                 cl.WhatsApp AS cl_whatsapp,
-                cl.Telefone_celular AS cl_tel_cel
+                cl.Telefone_celular AS cl_tel_cel,
+                cl.Telefone AS cl_telefone
             FROM OS o
             LEFT JOIN Atendimentos a ON a.ID = o.ID_Atendimento
             LEFT JOIN Contratos ct ON CAST(ct.ID AS TEXT) = CAST(o.Contrato AS TEXT)
-            LEFT JOIN Clientes cl ON cl.Raz_o_social = ct.Cliente
+            LEFT JOIN Clientes cl ON cl.Raz_o_social = COALESCE(ct.Cliente, o.Cliente)
             {where}
             ORDER BY {order_clause}
             LIMIT ? OFFSET ?
@@ -3883,9 +3949,12 @@ def api_behavior_retiradas():
             return _ID_MAP.get(str(v), v if not str(v).isdigit() else '')
 
         def fmt(r):
-            # Telefone: OS campos (geralmente vazios no sync) → fallback Clientes
-            whatsapp  = r[14] or r[30] or ''
-            tel_cel   = r[13] or r[31] or ''
+            # r[30]=cl_whatsapp, r[31]=cl_tel_cel (sempre NULL), r[32]=cl_telefone
+            # Prioridade: campo da OS → campo do cliente via JOIN
+            whatsapp = r[14] or r[30] or ''
+            tel_cel  = r[13] or r[31] or r[30] or ''   # cel → cl.WhatsApp como fallback
+            tel_res  = r[15] or r[32] or ''             # residencial → cl.Telefone como fallback
+            telefone = whatsapp or tel_cel or tel_res or r[16] or ''
             return {
                 'id':             r[0],
                 'assunto':        r[1],
@@ -3900,10 +3969,10 @@ def api_behavior_retiradas():
                 'bairro':         r[10],
                 'cidade':         _cidade_nome(r[11]),
                 'referencia':     r[12],
-                'telefone':       whatsapp or tel_cel or r[15] or r[16] or '',
+                'telefone':       telefone,
                 'telefone_cel':   tel_cel,
                 'whatsapp':       whatsapp,
-                'telefone_res':   r[15],
+                'telefone_res':   tel_res,
                 'telefone_com':   r[16],
                 'mensagem':       r[17],
                 'protocolo':      r[18],
@@ -3930,9 +3999,10 @@ def api_behavior_retiradas():
                 'finalizadas':     kpi_row[4],
                 'sem_agendamento': kpi_row[5],
             },
-            'por_assunto': [{'assunto': r[0], 'total': r[1]} for r in por_assunto],
-            'por_cidade':  [{'cidade': r[0] or '—', 'total': r[1]} for r in por_cidade],
-            'tendencia':   [{'mes': r[0], 'total': r[1], 'finalizadas': r[2]} for r in tendencia],
+            'por_assunto':      [{'assunto': r[0], 'total': r[1]} for r in por_assunto],
+            'por_cidade':       [{'cidade': r[0] or '—', 'total': r[1]} for r in por_cidade],
+            'por_colaborador':  por_colab_fmt,
+            'tendencia':        [{'mes': r[0], 'total': r[1], 'finalizadas': r[2]} for r in tendencia],
             'ordens':      [fmt(r) for r in rows],
             'total':       total,
             'page':        page,
@@ -3945,6 +4015,96 @@ def api_behavior_retiradas():
         import traceback
         logger.error(f"Erro retiradas: {e}", exc_info=True)
         return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+    finally:
+        if conn: conn.close()
+
+
+@behavior_bp.route('/retiradas/historico')
+def ret_historico():
+    """Histórico de todas as OS de retirada de um cliente específico."""
+    cliente  = request.args.get('cliente', '').strip()
+    contrato = request.args.get('contrato', '').strip()
+    if not cliente and not contrato:
+        return jsonify({'error': 'cliente ou contrato requerido'}), 400
+
+    conn = None
+    try:
+        conn = current_app.config['GET_DB_CONNECTION']()
+        assuntos_ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
+        params_q = list(RETIRADA_ASSUNTOS)
+
+        # Prefere busca por nome (traz todo histórico do cliente);
+        # usa contrato só se o "cliente" parece ser ID numérico (OS antigas)
+        if cliente and not cliente.isdigit():
+            cond_cli = "AND o.Cliente = ?"
+            params_q.append(cliente)
+        elif contrato:
+            cond_cli = "AND o.Contrato = ?"
+            params_q.append(contrato)
+        else:
+            cond_cli = "AND o.Cliente = ?"
+            params_q.append(cliente)
+
+        rows = conn.execute(f"""
+            SELECT o.ID, o.Status, o.Assunto, o.Abertura, o.Fechamento,
+                   o.Final, o.Colaborador, o.Agendamento, o.Contrato
+            FROM OS o
+            WHERE o.Assunto IN ({assuntos_ph})
+            {cond_cli}
+            ORDER BY o.Abertura DESC
+        """, params_q).fetchall()
+
+        from datetime import datetime as _dt
+        def _to_date(s):
+            if not s or str(s).startswith('0000'): return None
+            try: return _dt.fromisoformat(str(s)[:19])
+            except: return None
+
+        from collections import defaultdict
+        por_mes   = defaultdict(int)
+        dias_list = []
+        hoje      = _dt.utcnow()
+
+        ordens = []
+        for r in rows:
+            ab  = _to_date(r[3])
+            fe  = _to_date(r[4]) or _to_date(r[5])
+            agd = r[7]
+            if ab:
+                por_mes[ab.strftime('%Y-%m')] += 1
+            if r[1] == 'Finalizada' and ab and fe:
+                dias_list.append(max(0, (fe - ab).days))
+
+            dias_aberto = (hoje - ab).days if ab and r[1] != 'Finalizada' else (
+                (fe - ab).days if ab and fe else None)
+
+            ordens.append({
+                'id':          r[0],
+                'status':      r[1],
+                'assunto':     r[2],
+                'abertura':    r[3],
+                'fechamento':  r[4],
+                'agendamento': str(agd) if agd and not str(agd).startswith('0000') else None,
+                'contrato':    r[8],
+                'dias_aberto': dias_aberto,
+            })
+
+        total       = len(ordens)
+        finalizadas = sum(1 for o in ordens if o['status'] == 'Finalizada')
+        abertas     = total - finalizadas
+        media_dias  = round(sum(dias_list) / len(dias_list)) if dias_list else None
+
+        return jsonify({
+            'total':       total,
+            'finalizadas': finalizadas,
+            'abertas':     abertas,
+            'media_dias':  media_dias,
+            'por_mes':     [{'mes': k, 'total': v} for k, v in sorted(por_mes.items())],
+            'ordens':      ordens,
+        })
+    except Exception as e:
+        logger.error(f"Erro ret_historico: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
     finally:
         if conn: conn.close()
 

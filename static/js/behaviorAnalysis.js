@@ -3340,74 +3340,96 @@ function _retShell(f) {
 
     return `
 <div class="p-4">
-  <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+  <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
     <h2 class="text-xl font-bold text-gray-800">📦 Análise de Retirada de Equipamentos</h2>
     <span class="text-sm text-gray-500">Ordens de Serviço · Pendentes e Histórico</span>
   </div>
 
   <!-- KPIs -->
-  <div id="ret-kpis" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5"></div>
+  <div id="ret-kpis" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4"></div>
 
-  <!-- Filtros -->
-  <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-    <div class="flex flex-wrap gap-2 items-end">
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500 font-medium">Status</label>
-        ${multiStatus}
-      </div>
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500 font-medium">Tipo</label>
-        ${sel('ret-f-assunto', (f.assuntos||[]).map(a => a), 'Todos tipos')}
-      </div>
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500 font-medium">Filial</label>
-        ${sel('ret-f-filial', f.filiais || [], 'Todas filiais')}
-      </div>
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500 font-medium">Cidade</label>
-        ${sel('ret-f-cidade', f.cidades || [], 'Todas cidades')}
-      </div>
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500 font-medium">Bairro</label>
-        ${sel('ret-f-bairro', f.bairros || [], 'Todos bairros')}
-      </div>
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500 font-medium">Colaborador</label>
-        <select id="ret-f-colab" class="ret-filter border border-gray-300 rounded px-2 py-1 text-sm">
-          <option value="">Todos colaboradores</option>
-          ${(f.colaboradores || []).map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}
-        </select>
-      </div>
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500 font-medium">De</label>
-        <input type="date" id="ret-f-de" class="border border-gray-300 rounded px-2 py-1 text-sm">
-      </div>
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500 font-medium">Até</label>
-        <input type="date" id="ret-f-ate" class="border border-gray-300 rounded px-2 py-1 text-sm">
-      </div>
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500 font-medium">Equipamento</label>
-        ${sel('ret-f-equip', f.equipamentos || [], 'Todos equipamentos')}
-      </div>
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500 font-medium">Visitas (mín.)</label>
-        <input type="number" id="ret-f-min-visitas" min="0" placeholder="0" class="border border-gray-300 rounded px-2 py-1 text-sm w-20">
-      </div>
-      <div class="flex flex-col gap-1">
-        <label class="text-xs text-gray-500 font-medium">Busca</label>
-        <input type="text" id="ret-f-search" placeholder="Cliente, endereço, bairro..." class="border border-gray-300 rounded px-2 py-1 text-sm w-48">
-      </div>
-      <button id="ret-btn-filtrar" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700">Filtrar</button>
-      <button id="ret-btn-limpar" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-300">Limpar</button>
-    </div>
+  <!-- Abas principais -->
+  <div class="flex gap-0 border-b border-gray-200 mb-4">
+    <button id="ret-main-tab-ordens"
+      class="px-5 py-2.5 text-sm font-semibold border-b-2 border-blue-600 text-blue-700 bg-white"
+      onclick="window._retMainTab('ordens')">
+      📋 Ordens
+    </button>
+    <button id="ret-main-tab-dashboard"
+      class="px-5 py-2.5 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-blue-700 hover:bg-gray-50"
+      onclick="window._retMainTab('dashboard')">
+      📊 Dashboard
+    </button>
   </div>
 
-  <!-- Tabela -->
-  <div id="ret-table-wrap" class="overflow-x-auto rounded-lg border border-gray-200"></div>
+  <!-- Painel: Ordens -->
+  <div id="ret-panel-ordens">
+    <!-- Filtros -->
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+      <div class="flex flex-wrap gap-2 items-end">
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Status</label>
+          ${multiStatus}
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Tipo</label>
+          ${sel('ret-f-assunto', (f.assuntos||[]).map(a => a), 'Todos tipos')}
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Filial</label>
+          ${sel('ret-f-filial', f.filiais || [], 'Todas filiais')}
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Cidade</label>
+          ${sel('ret-f-cidade', f.cidades || [], 'Todas cidades')}
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Bairro</label>
+          ${sel('ret-f-bairro', f.bairros || [], 'Todos bairros')}
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Colaborador</label>
+          <select id="ret-f-colab" class="ret-filter border border-gray-300 rounded px-2 py-1 text-sm">
+            <option value="">Todos colaboradores</option>
+            ${(f.colaboradores || []).map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}
+          </select>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">De</label>
+          <input type="date" id="ret-f-de" class="border border-gray-300 rounded px-2 py-1 text-sm">
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Até</label>
+          <input type="date" id="ret-f-ate" class="border border-gray-300 rounded px-2 py-1 text-sm">
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Equipamento</label>
+          ${sel('ret-f-equip', f.equipamentos || [], 'Todos equipamentos')}
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Visitas (mín.)</label>
+          <input type="number" id="ret-f-min-visitas" min="0" placeholder="0" class="border border-gray-300 rounded px-2 py-1 text-sm w-20">
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Busca</label>
+          <input type="text" id="ret-f-search" placeholder="Cliente, endereço, bairro..." class="border border-gray-300 rounded px-2 py-1 text-sm w-48">
+        </div>
+        <button id="ret-btn-filtrar" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700">Filtrar</button>
+        <button id="ret-btn-limpar" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-300">Limpar</button>
+      </div>
+    </div>
+    <!-- Tabela -->
+    <div id="ret-table-wrap" class="overflow-x-auto rounded-lg border border-gray-200"></div>
+    <!-- Paginação -->
+    <div id="ret-pagination" class="flex justify-between items-center mt-3 text-sm text-gray-600"></div>
+  </div>
 
-  <!-- Paginação -->
-  <div id="ret-pagination" class="flex justify-between items-center mt-3 text-sm text-gray-600"></div>
+  <!-- Painel: Dashboard -->
+  <div id="ret-panel-dashboard" class="hidden">
+    <div id="ret-dash-content" class="text-sm text-gray-400 italic py-4 text-center">
+      Carregando dashboard...
+    </div>
+  </div>
 </div>`;
 }
 
@@ -3482,6 +3504,7 @@ async function _retLoad() {
     _retTotal = d.total  || 0;
 
     _retRenderKpis(d.kpis, d.por_assunto, d.por_cidade);
+    _retRenderMainDashboard(d);
     _retRenderTable(wrap);
     _retRenderPagination(pgDiv, d.page, d.pages, d.total);
     _retLoadVisitas(); // batch count de arquivos (assíncrono, não bloqueia)
@@ -3700,6 +3723,262 @@ function _retRenderPagination(el, page, pages, total) {
           ${page > 1 ? `<button onclick="window._retGoPage(${page-1})" class="px-3 py-1 rounded border text-sm hover:bg-gray-100">← Anterior</button>` : ''}
           ${page < pages ? `<button onclick="window._retGoPage(${page+1})" class="px-3 py-1 rounded border text-sm hover:bg-gray-100">Próxima →</button>` : ''}
         </div>`;
+}
+
+window._retMainTab = function(tab) {
+    ['ordens','dashboard'].forEach(t => {
+        const btn = document.getElementById(`ret-main-tab-${t}`);
+        const panel = document.getElementById(`ret-panel-${t}`);
+        if (btn) {
+            btn.classList.toggle('border-blue-600', t === tab);
+            btn.classList.toggle('text-blue-700', t === tab);
+            btn.classList.toggle('bg-white', t === tab);
+            btn.classList.toggle('border-transparent', t !== tab);
+            btn.classList.toggle('text-gray-500', t !== tab);
+        }
+        if (panel) panel.classList.toggle('hidden', t !== tab);
+    });
+};
+
+function _retRenderMainDashboard(d) {
+    const el = document.getElementById('ret-dash-content');
+    if (!el) return;
+
+    const kpis = d.kpis || {};
+    const tendencia  = d.tendencia  || [];
+    const porAssunto = d.por_assunto || [];
+    const porCidade  = d.por_cidade  || [];
+
+    // ── Gráfico de tendência (barras agrupadas: total vs finalizadas por mês) ──
+    let trendHtml = '';
+    if (tendencia.length) {
+        const maxT = Math.max(...tendencia.map(m => m.total), 1);
+        const bars = tendencia.slice(-18).map(m => {
+            const pctT = Math.round((m.total / maxT) * 100);
+            const pctF = Math.round((m.finalizadas / maxT) * 100);
+            const [yy, mm] = m.mes.split('-');
+            const lbl = `${mm}/${yy.slice(2)}`;
+            return `<div class="flex flex-col items-center gap-0.5 flex-1 min-w-0 group" title="${m.mes}: ${m.total} OS, ${m.finalizadas} finalizadas">
+                <span class="text-[10px] font-semibold text-gray-600 group-hover:text-blue-700">${m.total}</span>
+                <div class="w-full relative" style="height:80px;display:flex;align-items:flex-end;gap:1px;">
+                    <div class="flex-1 bg-blue-400 rounded-t opacity-80 transition-all" style="height:${pctT}%;min-height:2px;" title="Total: ${m.total}"></div>
+                    <div class="flex-1 bg-green-400 rounded-t opacity-80 transition-all" style="height:${pctF}%;min-height:${m.finalizadas?'2px':'0'};" title="Finalizadas: ${m.finalizadas}"></div>
+                </div>
+                <span class="text-[10px] text-gray-400 truncate w-full text-center">${lbl}</span>
+            </div>`;
+        }).join('');
+        trendHtml = `
+        <div class="bg-white border border-gray-100 rounded-xl p-4 mb-4">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-sm font-semibold text-gray-700">Evolução Mensal de OS</span>
+            <div class="flex gap-3 text-xs text-gray-500">
+              <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded bg-blue-400"></span> Total</span>
+              <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded bg-green-400"></span> Finalizadas</span>
+            </div>
+          </div>
+          <div class="flex items-end gap-1 px-1" style="height:100px;">${bars}</div>
+        </div>`;
+    }
+
+    // ── Horizontal bars helper ──
+    const hBars = (title, items, colorCls) => {
+        if (!items.length) return '';
+        const maxV = Math.max(...items.map(x => x.total), 1);
+        const rows = items.slice(0, 8).map(x => {
+            const pct = Math.round((x.total / maxV) * 100);
+            const label = x.assunto || x.cidade || x.nome || '—';
+            const short = label.length > 28 ? label.slice(0, 28) + '…' : label;
+            return `<div class="mb-1.5">
+                <div class="flex justify-between text-xs mb-0.5">
+                    <span class="text-gray-700 truncate" title="${label}">${short}</span>
+                    <span class="font-semibold text-gray-800 ml-2 flex-shrink-0">${x.total}</span>
+                </div>
+                <div class="w-full bg-gray-100 rounded-full h-2">
+                    <div class="${colorCls} h-2 rounded-full transition-all" style="width:${pct}%"></div>
+                </div>
+            </div>`;
+        }).join('');
+        return `<div class="bg-white border border-gray-100 rounded-xl p-4">
+            <div class="text-sm font-semibold text-gray-700 mb-3">${title}</div>
+            ${rows}
+        </div>`;
+    };
+
+    // ── Por tipo (assunto) ──
+    const assuntoData = porAssunto.map(x => ({
+        assunto: (x.assunto || '').replace('RETIRADA DE EQUIPAMENTO', 'Retirada Equip.')
+                                  .replace('INADIMPLENCIA RETIRADA', 'Inadim. Retirada')
+                                  .replace('EQUIPAMENTO NÃO RETIRADO', 'Equip. Não Ret.')
+                                  .replace('RETIRADA DE EQUIPAMENTO PONTO ADICIONAL', 'Ret. Pto Adicional')
+                                  .replace('CANCELAMENTO RETIRADA', 'Cancelamento'),
+        total: x.total
+    }));
+    const tipoHtml   = hBars('Por Tipo de OS',  assuntoData, 'bg-orange-400');
+    const cidadeHtml = hBars('Por Cidade',       porCidade,   'bg-indigo-400');
+
+    // ── Taxa de finalização ──
+    const total = kpis.total || 0;
+    const finalizadas = kpis.finalizadas || 0;
+    const taxaFin = total ? Math.round(finalizadas / total * 100) : 0;
+    const abertas = (kpis.abertas || 0) + (kpis.encaminhadas || 0) + (kpis.agendadas || 0);
+    const taxaAberta = total ? Math.round(abertas / total * 100) : 0;
+
+    const metricCards = `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+      <div class="bg-white border border-gray-100 rounded-xl p-4 text-center">
+        <div class="text-3xl font-bold text-gray-800">${total}</div>
+        <div class="text-xs text-gray-500 mt-1">Total de OS</div>
+      </div>
+      <div class="bg-white border border-red-100 rounded-xl p-4 text-center">
+        <div class="text-3xl font-bold text-red-600">${abertas}</div>
+        <div class="text-xs text-gray-500 mt-1">Pendentes</div>
+        <div class="mt-1 text-xs font-semibold text-red-500">${taxaAberta}% do total</div>
+      </div>
+      <div class="bg-white border border-green-100 rounded-xl p-4 text-center">
+        <div class="text-3xl font-bold text-green-600">${finalizadas}</div>
+        <div class="text-xs text-gray-500 mt-1">Finalizadas</div>
+        <div class="mt-1 text-xs font-semibold text-green-500">${taxaFin}% do total</div>
+      </div>
+      <div class="bg-white border border-yellow-100 rounded-xl p-4 text-center">
+        <div class="text-3xl font-bold text-yellow-600">${kpis.sem_agendamento || 0}</div>
+        <div class="text-xs text-gray-500 mt-1">Sem Agendamento</div>
+      </div>
+    </div>`;
+
+    // ── Produção por técnico (4 cidades operacionais) ──
+    const porColab = d.por_colaborador || [];
+    let colabHtml = '';
+    if (porColab.length) {
+        const maxC = Math.max(...porColab.map(x => x.total), 1);
+        const rows = porColab.map((x, i) => {
+            const pctFin = x.total ? Math.round(x.finalizadas / x.total * 100) : 0;
+            const pctBar = Math.round(x.total / maxC * 100);
+            const rank   = i < 3 ? ['🥇','🥈','🥉'][i] : `${i+1}º`;
+            return `<tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                <td class="py-2 px-3 text-xs text-gray-500 font-mono w-8 text-center">${rank}</td>
+                <td class="py-2 px-3">
+                    <div class="text-sm font-medium text-gray-800">${x.nome}</div>
+                    <div class="mt-1 w-full bg-gray-100 rounded-full h-1.5">
+                        <div class="bg-blue-400 h-1.5 rounded-full" style="width:${pctBar}%"></div>
+                    </div>
+                </td>
+                <td class="py-2 px-3 text-center text-sm font-bold text-gray-800 tabular-nums">${x.total}</td>
+                <td class="py-2 px-3 text-center text-sm font-semibold text-green-600 tabular-nums">${x.finalizadas}</td>
+                <td class="py-2 px-3 text-center text-sm text-red-500 tabular-nums">${x.pendentes}</td>
+                <td class="py-2 px-3 text-center">
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${pctFin >= 70 ? 'bg-green-100 text-green-700' : pctFin >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'}">${pctFin}%</span>
+                </td>
+            </tr>`;
+        }).join('');
+        colabHtml = `
+        <div class="bg-white border border-gray-100 rounded-xl p-4 mt-4">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-sm font-semibold text-gray-700">Produção por Técnico <span class="text-xs font-normal text-gray-400 ml-1">(Dom Pedro · Presidente Dutra · Tuntum · São Domingos)</span></span>
+          </div>
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-gray-100">
+                <th class="text-left text-xs text-gray-400 font-medium pb-2 px-3 w-8">#</th>
+                <th class="text-left text-xs text-gray-400 font-medium pb-2 px-3">Técnico</th>
+                <th class="text-center text-xs text-gray-400 font-medium pb-2 px-3">Total</th>
+                <th class="text-center text-xs text-gray-400 font-medium pb-2 px-3">Retiradas</th>
+                <th class="text-center text-xs text-gray-400 font-medium pb-2 px-3">Pendentes</th>
+                <th class="text-center text-xs text-gray-400 font-medium pb-2 px-3">Taxa</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    el.innerHTML = `
+    <div>
+      ${metricCards}
+      ${trendHtml}
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        ${tipoHtml}
+        ${cidadeHtml}
+      </div>
+      ${colabHtml}
+    </div>`;
+}
+
+function _retRenderDashboard(d, o) {
+    const STATUS_CLS = { Aberta:'bg-red-100 text-red-800', Encaminhada:'bg-yellow-100 text-yellow-800', Agendada:'bg-blue-100 text-blue-800', Finalizada:'bg-green-100 text-green-700' };
+    const ASSUNTO_SHORT = { 'RETIRADA DE EQUIPAMENTO':'Retirada', 'INADIMPLENCIA RETIRADA':'Inadim.', 'EQUIPAMENTO NÃO RETIRADO':'Equip. N. Ret.', 'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL':'Pto. Adicional', 'CANCELAMENTO RETIRADA':'Cancelamento' };
+
+    // Cards topo
+    const cards = [
+        { val: d.total,       lbl: 'Total OS',          cls: 'bg-gray-50 border-gray-200 text-gray-800' },
+        { val: d.finalizadas, lbl: 'Finalizadas',        cls: 'bg-green-50 border-green-200 text-green-800' },
+        { val: d.abertas,     lbl: 'Pendentes',          cls: d.abertas > 0 ? 'bg-red-50 border-red-200 text-red-800' : 'bg-gray-50 border-gray-200 text-gray-800' },
+        { val: d.media_dias != null ? `${d.media_dias}d` : '—', lbl: 'Média p/ Finalizar', cls: 'bg-blue-50 border-blue-200 text-blue-800' },
+    ].map(c => `<div class="rounded-lg border px-4 py-3 ${c.cls} text-center">
+        <div class="text-2xl font-bold">${c.val}</div>
+        <div class="text-xs font-medium mt-0.5">${c.lbl}</div>
+    </div>`).join('');
+
+    // Gráfico de barras por mês (CSS)
+    let barChart = '';
+    if (d.por_mes && d.por_mes.length > 0) {
+        const maxV = Math.max(...d.por_mes.map(m => m.total), 1);
+        const bars = d.por_mes.slice(-18).map(m => {
+            const pct = Math.round((m.total / maxV) * 100);
+            const mesLabel = m.mes.slice(5); // MM
+            const [yy, mm] = m.mes.split('-');
+            const label = `${mm}/${yy.slice(2)}`;
+            return `<div class="flex flex-col items-center gap-1 flex-1 min-w-0" title="${m.mes}: ${m.total} OS">
+                <span class="text-xs font-semibold text-blue-700">${m.total}</span>
+                <div class="w-full bg-gray-100 rounded-t" style="height:60px; display:flex; align-items:flex-end;">
+                    <div class="w-full bg-blue-500 rounded-t transition-all" style="height:${pct}%;min-height:2px;"></div>
+                </div>
+                <span class="text-xs text-gray-500 truncate w-full text-center">${label}</span>
+            </div>`;
+        }).join('');
+        barChart = `<div class="mb-4">
+            <div class="text-xs font-semibold text-gray-600 mb-2">OS por Mês</div>
+            <div class="flex items-end gap-1 h-[88px] bg-white border border-gray-100 rounded-lg px-3 pt-3 pb-0">${bars}</div>
+        </div>`;
+    }
+
+    // Tabela de histórico
+    const rows = d.ordens.map(item => {
+        const sc  = STATUS_CLS[item.status] || 'bg-gray-100 text-gray-700';
+        const ass = ASSUNTO_SHORT[item.assunto] || item.assunto || '—';
+        const ab  = item.abertura ? item.abertura.slice(0,10) : '—';
+        const fe  = item.fechamento && !item.fechamento.startsWith('0000') ? item.fechamento.slice(0,10) : '—';
+        const da  = item.dias_aberto != null ? `${item.dias_aberto}d` : '—';
+        const isCurrent = item.id === o.id;
+        return `<tr class="${isCurrent ? 'bg-yellow-50 font-semibold' : 'hover:bg-gray-50'} border-b border-gray-100 text-xs">
+            <td class="px-2 py-1.5 font-mono text-gray-500">#${item.id}${isCurrent ? ' ★' : ''}</td>
+            <td class="px-2 py-1.5"><span class="px-1.5 py-0.5 rounded-full text-xs ${sc}">${item.status}</span></td>
+            <td class="px-2 py-1.5 text-gray-700">${ass}</td>
+            <td class="px-2 py-1.5 text-gray-600">${ab}</td>
+            <td class="px-2 py-1.5 text-gray-600">${fe}</td>
+            <td class="px-2 py-1.5 ${item.dias_aberto > 30 ? 'text-red-600 font-semibold' : 'text-gray-600'}">${da}</td>
+        </tr>`;
+    }).join('');
+
+    return `<div>
+        <div class="text-sm font-semibold text-gray-700 mb-3">Histórico de Retiradas — <span class="text-gray-500 font-normal">${o.cliente || '—'}</span></div>
+        <div class="grid grid-cols-4 gap-3 mb-4">${cards}</div>
+        ${barChart}
+        <div class="overflow-auto max-h-60 rounded-lg border border-gray-200">
+            <table class="w-full text-xs">
+                <thead class="bg-gray-50 text-gray-600 sticky top-0">
+                    <tr>
+                        <th class="px-2 py-1.5 text-left font-semibold">OS</th>
+                        <th class="px-2 py-1.5 text-left font-semibold">Status</th>
+                        <th class="px-2 py-1.5 text-left font-semibold">Tipo</th>
+                        <th class="px-2 py-1.5 text-left font-semibold">Abertura</th>
+                        <th class="px-2 py-1.5 text-left font-semibold">Fechamento</th>
+                        <th class="px-2 py-1.5 text-left font-semibold">Dias</th>
+                    </tr>
+                </thead>
+                <tbody>${rows || '<tr><td colspan="6" class="px-2 py-4 text-center text-gray-400">Nenhuma OS encontrada</td></tr>'}</tbody>
+            </table>
+        </div>
+    </div>`;
 }
 
 window._retToggle = function(id) {

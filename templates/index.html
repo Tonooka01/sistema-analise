@@ -16,10 +16,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!user || user.is_admin || user.permissions === null) return;
     const perms = user.permissions;
 
-    const hasDashboard  = perms.includes('dashboard');
-    const hasBehavior   = perms.includes('behavior');
-    const hasOtherMods  = ['cashflow','dre','dre2','crescimento'].some(m => perms.includes(m));
-    const behaviorOnly  = hasBehavior && !hasDashboard && !hasOtherMods;
+    const hasDashboard   = perms.includes('dashboard');
+    const hasBehavior    = perms.includes('behavior');
+    const hasRetiradas   = perms.includes('retiradas');
+    const hasOtherMods   = ['cashflow','dre','dre2','crescimento'].some(m => perms.includes(m));
+    const behaviorOnly   = hasBehavior && !hasDashboard && !hasOtherMods && !hasRetiradas;
+    const retiradaOnly   = hasRetiradas && !hasDashboard && !hasOtherMods && !hasBehavior;
 
     // --- Botões de módulo (Cashflow, DRE, Gestão, Crescimento) ---
     const moduleMap = { cashflow: 'btnCashflow', dre: 'btnDRE', dre2: 'btnDRE2', crescimento: 'btnCrescimento' };
@@ -36,13 +38,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- Opção Retirada no seletor ---
+    if (!hasRetiradas) {
+        const retOpt = document.querySelector('#customAnalysisSelector option[value="retirada"]');
+        if (retOpt) retOpt.remove();
+    }
+
     // --- Análise de Comportamento ---
     if (!hasBehavior) {
-        // Esconde a opção no seletor
         const opt = document.getElementById('behaviorAnalysisOption');
         if (opt) opt.remove();
-        // Se também sem dashboard, esconde o wrapper do seletor
-        if (!hasDashboard) {
+        if (!hasDashboard && !hasRetiradas) {
             const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
             if (selWrap) selWrap.style.display = 'none';
         }
@@ -55,26 +61,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (tab && !perms.includes('behavior:' + tab)) link.style.display = 'none';
             });
         }
+    }
 
-        // Usuário SÓ behavior → auto-abre e esconde tudo mais
-        if (behaviorOnly) {
-            // Esconde seletor e conteúdo de contratos imediatamente (não espera 150ms)
-            const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
-            if (selWrap) selWrap.style.display = 'none';
-            const dashContent = document.getElementById('dashboard-content');
-            if (dashContent) dashContent.classList.add('hidden');
-            const mainCharts = document.getElementById('main-charts-area');
-            if (mainCharts) mainCharts.classList.add('hidden');
+    // --- Auto-navega quando acesso único ---
+    if (behaviorOnly || retiradaOnly) {
+        const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
+        if (selWrap) selWrap.style.display = 'none';
+        const dashContent = document.getElementById('dashboard-content');
+        if (dashContent) dashContent.classList.add('hidden');
+        const mainCharts = document.getElementById('main-charts-area');
+        if (mainCharts) mainCharts.classList.add('hidden');
 
-            // Navega automaticamente para Análise de Comportamento
-            setTimeout(() => {
-                const sel = document.getElementById('customAnalysisSelector');
-                if (sel) {
-                    sel.value = 'analise_comportamento';
-                    sel.dispatchEvent(new Event('change'));
-                }
-            }, 150);
-        }
+        const navTarget = retiradaOnly ? 'retirada' : 'analise_comportamento';
+        setTimeout(() => {
+            const sel = document.getElementById('customAnalysisSelector');
+            if (sel) { sel.value = navTarget; sel.dispatchEvent(new Event('change')); }
+        }, 150);
     }
 });
 </script>
