@@ -18,14 +18,14 @@ function initializeApp() {
     initializeGridStack();
     initializeEventListeners();
     
-    // Usuário behavior-only não precisa carregar Contratos por padrão
+    // Usuário behavior-only ou retiradas-only não precisa carregar Contratos por padrão
     const _cu = window._currentUser;
     const _p = _cu && !_cu.is_admin && _cu.permissions;
-    const _behaviorOnly = _p && _p.includes('behavior') &&
-        !_p.includes('dashboard') &&
-        !['cashflow','dre','dre2','crescimento'].some(m => _p.includes(m));
+    const _hasOnlySpecialMods = _p && !_p.includes('dashboard') &&
+        !['cashflow','dre','dre2','crescimento'].some(m => _p.includes(m)) &&
+        (_p.includes('behavior') || _p.includes('retiradas'));
 
-    if (!_behaviorOnly) {
+    if (!_hasOnlySpecialMods) {
         const defaultButton = dom.btnContratos;
         if (defaultButton) {
             setActiveControl(defaultButton);
