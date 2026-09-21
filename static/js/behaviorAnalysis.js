@@ -2506,8 +2506,7 @@ function _retornoRenderRight(reg) {
         <div class="font-semibold text-sm text-gray-700 mb-2">✉️ Mensagens prontas</div>
         <div class="flex flex-col gap-2">
           ${msgs.map((m, i) => `
-          <div class="bg-white border border-gray-200 rounded-lg p-3 hover:border-blue-300 transition cursor-pointer group"
-               onclick="navigator.clipboard.writeText(${JSON.stringify(m.msg)}).then(()=>{ const t=this.querySelector('.copy-ok'); t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'),1800); })">
+          <div class="bg-white border border-gray-200 rounded-lg p-3 hover:border-blue-300 transition cursor-pointer group ret-msg-card" data-msg-idx="${i}">
             <div class="flex items-center justify-between mb-1">
               <span class="text-xs font-semibold text-gray-600">${m.icon} ${m.label}</span>
               <span class="text-xs text-blue-500 group-hover:text-blue-700">Copiar</span>
@@ -2519,6 +2518,19 @@ function _retornoRenderRight(reg) {
       </div>
 
     </div>`;
+
+    // Guarda msgs no painel e adiciona listeners (evita aspas no onclick)
+    panel._retMsgs = msgs;
+    panel.querySelectorAll('.ret-msg-card').forEach(card => {
+        card.addEventListener('click', function() {
+            const idx = parseInt(this.dataset.msgIdx, 10);
+            const txt = panel._retMsgs[idx]?.msg || '';
+            navigator.clipboard.writeText(txt).then(() => {
+                const ok = this.querySelector('.copy-ok');
+                if (ok) { ok.classList.remove('hidden'); setTimeout(() => ok.classList.add('hidden'), 1800); }
+            });
+        });
+    });
 }
 
 function _retornoRenderList() {
@@ -3855,10 +3867,10 @@ function _retRenderMainDashboard(d) {
         }).join('');
     };
 
-    const _legend = `<div class="flex gap-3 text-xs text-gray-500 flex-shrink-0">
-        <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded bg-blue-400"></span>Total</span>
-        <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded bg-green-400"></span>Finalizadas</span>
-        <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded bg-orange-400"></span>Abertas</span>
+    const _legend = `<div class="flex gap-3 text-[13px] text-gray-700 font-medium flex-shrink-0">
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded bg-blue-400"></span>Total</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded bg-green-400"></span>Finalizadas</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded bg-orange-400"></span>Abertas</span>
     </div>`;
 
     let trendHtml = '';
