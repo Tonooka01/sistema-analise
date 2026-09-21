@@ -4578,7 +4578,7 @@ def api_ret_cliente_perfil():
         if ct_ids:
             ph2 = ','.join('?' * len(ct_ids))
             equip = conn.execute(
-                f"SELECT ID_contrato, Descricao_produto, N_serie FROM Equipamento WHERE CAST(ID_contrato AS TEXT) IN ({ph2}) LIMIT 30",
+                f"SELECT ID_contrato, Descricao_produto, Status_comodato, Quantidade FROM Equipamento WHERE CAST(ID_contrato AS TEXT) IN ({ph2}) LIMIT 30",
                 ct_ids
             ).fetchall()
 
@@ -4609,7 +4609,7 @@ def api_ret_cliente_perfil():
                 'inadimplente': r[7], 'parcela': r[8], 'documento': r[9],
             } for r in faturas],
             'equipamentos': [{
-                'contrato': r[0], 'descricao': r[1], 'serie': r[2],
+                'contrato': r[0], 'descricao': r[1], 'status': r[2], 'quantidade': r[3],
             } for r in equip],
         })
     except Exception as e:

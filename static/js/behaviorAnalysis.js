@@ -4378,13 +4378,15 @@ window._retClientePerfil = async function(nomeCliente) {
             const rows = _cpData.equipamentos.map(e => `<tr class="border-b border-gray-50 hover:bg-gray-50">
                 <td class="px-3 py-2 font-mono text-gray-400 text-xs">${e.contrato}</td>
                 <td class="px-3 py-2 text-xs text-gray-800">${e.descricao||'—'}</td>
-                <td class="px-3 py-2 text-xs text-gray-500 font-mono">${e.serie||'—'}</td>
+                <td class="px-3 py-2 text-xs text-gray-500">${e.quantidade||1}x</td>
+                <td class="px-3 py-2">${badge(e.status)}</td>
             </tr>`).join('');
             body.innerHTML = `<div class="text-xs text-gray-400 mb-2">${_cpData.equipamentos.length} equipamentos</div>
             <div class="overflow-x-auto"><table class="w-full text-left">
                 <thead><tr class="bg-gray-50 text-[11px] text-gray-500 font-semibold">
-                    <th class="px-3 py-2">Contrato</th><th class="px-3 py-2">Equipamento</th><th class="px-3 py-2">Nº Série</th>
-                </tr></thead><tbody>${rows||'<tr><td colspan="3" class="px-3 py-4 text-center text-gray-400">Nenhum equipamento</td></tr>'}</tbody>
+                    <th class="px-3 py-2">Contrato</th><th class="px-3 py-2">Equipamento</th>
+                    <th class="px-3 py-2">Qtd</th><th class="px-3 py-2">Status</th>
+                </tr></thead><tbody>${rows||'<tr><td colspan="4" class="px-3 py-4 text-center text-gray-400">Nenhum equipamento</td></tr>'}</tbody>
             </table></div>`;
         }
     };
