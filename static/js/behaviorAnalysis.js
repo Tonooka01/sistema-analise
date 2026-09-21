@@ -3987,15 +3987,9 @@ function _retRenderMainDashboard(d) {
     const _renderColabTable = (colab, nDays, mes) => {
         if (!colab.length) return '<div class="p-4 text-gray-400 text-sm">Nenhum técnico com OS neste mês.</div>';
         const days = Array.from({length: nDays}, (_, i) => i + 1);
-        // Cor distinta por coluna para fácil rastreamento visual
-        const _COL_COLORS = [
-            'text-blue-700','text-emerald-700','text-amber-700','text-rose-700',
-            'text-violet-700','text-cyan-700','text-orange-700','text-teal-700',
-        ];
-        const _BG_COLORS = [
-            'bg-blue-100','bg-emerald-100','bg-amber-100','bg-rose-100',
-            'bg-violet-100','bg-cyan-100','bg-orange-100','bg-teal-100',
-        ];
+        // Dois tons de azul alternando por coluna
+        const _COL_COLORS = ['text-blue-600', 'text-blue-900'];
+        const _BG_COLORS  = ['bg-blue-50',    'bg-blue-100'];
         const thDays = days.map((d,i) => {
             const bg = _BG_COLORS[i % _BG_COLORS.length];
             return `<th class="px-1 text-center text-[10px] font-bold min-w-[22px] ${bg} ${_COL_COLORS[i%_COL_COLORS.length]}">${String(d).padStart(2,'0')}</th>`;
