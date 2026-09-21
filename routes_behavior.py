@@ -3537,7 +3537,7 @@ def api_behavior_retorno():
                 {('WHERE ' + usr_cond.lstrip('AND ')) if usr_cond else ''}
                 GROUP BY contrato_id
             )
-            AND (A.snooze_ate IS NULL OR A.snooze_ate <= date('now'))
+            AND (A.snooze_ate IS NULL OR A.snooze_ate <= date('now', '+1 day'))
             ORDER BY A.snooze_ate ASC, A.data_registro ASC
             LIMIT ? OFFSET ?
         """, params + [limit, offset]).fetchall()
@@ -3549,7 +3549,7 @@ def api_behavior_retorno():
                 GROUP BY contrato_id
             ) sub
             JOIN Acompanhamento_Clientes A ON A.id = sub.mid
-            WHERE (A.snooze_ate IS NULL OR A.snooze_ate <= date('now'))
+            WHERE (A.snooze_ate IS NULL OR A.snooze_ate <= date('now', '+1 day'))
         """, params).fetchone()[0]
 
         usuarios = [r[0] for r in conn.execute(
