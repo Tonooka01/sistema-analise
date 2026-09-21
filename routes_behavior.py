@@ -3534,17 +3534,22 @@ def api_behavior_retorno():
             LEFT JOIN Clientes  cl ON cl.Raz_o_social = C.Cliente
             WHERE A.id IN (
                 SELECT MAX(id) FROM Acompanhamento_Clientes
-                WHERE (snooze_ate IS NULL OR snooze_ate <= date('now'))
-                {usr_cond}
+                {('WHERE ' + usr_cond.lstrip('AND ')) if usr_cond else ''}
                 GROUP BY contrato_id
             )
+            AND (A.snooze_ate IS NULL OR A.snooze_ate <= date('now'))
             ORDER BY A.snooze_ate ASC, A.data_registro ASC
             LIMIT ? OFFSET ?
         """, params + [limit, offset]).fetchall()
 
         total = conn.execute(f"""
-            SELECT COUNT(DISTINCT contrato_id) FROM Acompanhamento_Clientes A
-            WHERE (snooze_ate IS NULL OR snooze_ate <= date('now')) {usr_cond}
+            SELECT COUNT(*) FROM (
+                SELECT MAX(id) AS mid FROM Acompanhamento_Clientes
+                {('WHERE ' + usr_cond.lstrip('AND ')) if usr_cond else ''}
+                GROUP BY contrato_id
+            ) sub
+            JOIN Acompanhamento_Clientes A ON A.id = sub.mid
+            WHERE (A.snooze_ate IS NULL OR A.snooze_ate <= date('now'))
         """, params).fetchone()[0]
 
         usuarios = [r[0] for r in conn.execute(
