@@ -3860,7 +3860,7 @@ function _retRenderMainDashboard(d) {
                 <div class="w-full flex-1 flex items-end" style="gap:1px;overflow:hidden;">
                     <div class="flex-1 bg-blue-400 rounded-t opacity-80 hover:opacity-100 hover:bg-blue-500 transition-all ret-trend-bar" ${da} data-st="" style="height:${pctT}%;min-height:2px;" title="Total: ${m.total}"></div>
                     <div class="flex-1 bg-green-400 rounded-t opacity-80 hover:opacity-100 hover:bg-green-500 transition-all ret-trend-bar" ${da} data-st="Finalizada" style="height:${pctF}%;min-height:${m.finalizadas?'2px':'0'};" title="Finalizadas: ${m.finalizadas}"></div>
-                    <div class="flex-1 bg-orange-400 rounded-t opacity-80 hover:opacity-100 hover:bg-orange-500 transition-all ret-trend-bar" ${da} data-st="Aberta" style="height:${pctA}%;min-height:${abertas?'2px':'0'};" title="Abertas: ${abertas}"></div>
+                    <div class="flex-1 bg-orange-400 rounded-t opacity-80 hover:opacity-100 hover:bg-orange-500 transition-all ret-trend-bar" ${da} data-st="Aberta" style="height:${pctA}%;min-height:${abertas?'2px':'0'};" title="Abertas+Encaminhadas: ${abertas}"></div>
                 </div>
                 <span class="text-[11px] font-semibold text-gray-700 truncate w-full text-center leading-none mt-0.5 flex-shrink-0">${mm}/${yy.slice(2)}</span>
             </div>`;

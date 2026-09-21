@@ -3905,7 +3905,7 @@ def api_behavior_retiradas():
                    strftime('%Y-%m', o.Abertura) ym,
                    COUNT(*),
                    COUNT(CASE WHEN o.Status = 'Finalizada' THEN 1 END),
-                   COUNT(CASE WHEN o.Status = 'Aberta'     THEN 1 END)
+                   COUNT(CASE WHEN o.Status IN ('Aberta','Encaminhada') THEN 1 END)
             FROM OS o {trend_where}
             AND o.Abertura >= date('now','-12 months')
             GROUP BY o.Assunto, ym ORDER BY o.Assunto, ym
