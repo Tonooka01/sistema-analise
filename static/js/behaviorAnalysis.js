@@ -3843,14 +3843,14 @@ function _retRenderMainDashboard(d) {
             const pctA = Math.round((abertas       / maxT) * 100);
             const [yy, mm] = m.mes.split('-');
             const da = `data-assunto="${assunto.replace(/"/g,'&quot;')}" data-mes="${m.mes}"`;
-            return `<div class="flex flex-col items-center gap-0.5 flex-1 min-w-0 group cursor-pointer ret-trend-col" ${da} data-st="">
-                <span class="text-[8px] font-semibold text-gray-500 group-hover:text-blue-700">${m.total}</span>
-                <div class="w-full" style="height:150px;display:flex;align-items:flex-end;gap:1px;">
+            return `<div class="flex flex-col items-center flex-1 min-w-0 group cursor-pointer ret-trend-col" ${da} data-st="" style="height:100%;">
+                <span class="text-[8px] font-semibold text-gray-500 group-hover:text-blue-700 leading-none mb-0.5 flex-shrink-0">${m.total}</span>
+                <div class="w-full flex-1 flex items-end" style="gap:1px;overflow:hidden;">
                     <div class="flex-1 bg-blue-400 rounded-t opacity-80 hover:opacity-100 hover:bg-blue-500 transition-all ret-trend-bar" ${da} data-st="" style="height:${pctT}%;min-height:2px;" title="Total: ${m.total}"></div>
                     <div class="flex-1 bg-green-400 rounded-t opacity-80 hover:opacity-100 hover:bg-green-500 transition-all ret-trend-bar" ${da} data-st="Finalizada" style="height:${pctF}%;min-height:${m.finalizadas?'2px':'0'};" title="Finalizadas: ${m.finalizadas}"></div>
                     <div class="flex-1 bg-orange-400 rounded-t opacity-80 hover:opacity-100 hover:bg-orange-500 transition-all ret-trend-bar" ${da} data-st="Aberta" style="height:${pctA}%;min-height:${abertas?'2px':'0'};" title="Abertas: ${abertas}"></div>
                 </div>
-                <span class="text-[8px] text-gray-400 truncate w-full text-center">${mm}/${yy.slice(2)}</span>
+                <span class="text-[8px] text-gray-400 truncate w-full text-center leading-none mt-0.5 flex-shrink-0">${mm}/${yy.slice(2)}</span>
             </div>`;
         }).join('');
     };
@@ -3873,7 +3873,7 @@ function _retRenderMainDashboard(d) {
                 <span class="text-xs font-semibold text-gray-700">${titulo}${badge}</span>
                 ${_legend}
               </div>
-              <div class="flex items-end gap-0.5 px-0.5" style="height:160px;">${bars}</div>
+              <div class="flex items-stretch gap-0.5 px-0.5" style="height:160px;">${bars}</div>
             </div>`;
         }).join('');
         trendHtml = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">${cards}</div>`;
