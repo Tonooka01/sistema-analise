@@ -3833,7 +3833,7 @@ function _retRenderMainDashboard(d) {
         'CANCELAMENTO RETIRADA':                      'Cancelamento Retirada',
     };
 
-    const _buildBars = (meses) => {
+    const _buildBars = (meses, assunto) => {
         if (!meses || !meses.length) return '';
         const maxT = Math.max(...meses.map(m => m.total), 1);
         return meses.slice(-18).map(m => {
@@ -3842,13 +3842,13 @@ function _retRenderMainDashboard(d) {
             const pctF = Math.round((m.finalizadas / maxT) * 100);
             const pctA = Math.round((abertas       / maxT) * 100);
             const [yy, mm] = m.mes.split('-');
-            return `<div class="flex flex-col items-center gap-0.5 flex-1 min-w-0 group"
-                         title="${mm}/${yy.slice(2)}: ${m.total} total | ${m.finalizadas} finalizadas | ${abertas} abertas">
-                <span class="text-[8px] font-semibold text-gray-500">${m.total}</span>
+            const da = `data-assunto="${assunto.replace(/"/g,'&quot;')}" data-mes="${m.mes}"`;
+            return `<div class="flex flex-col items-center gap-0.5 flex-1 min-w-0 group cursor-pointer ret-trend-col" ${da} data-st="">
+                <span class="text-[8px] font-semibold text-gray-500 group-hover:text-blue-700">${m.total}</span>
                 <div class="w-full" style="height:70px;display:flex;align-items:flex-end;gap:1px;">
-                    <div class="flex-1 bg-blue-400 rounded-t opacity-80" style="height:${pctT}%;min-height:2px;"></div>
-                    <div class="flex-1 bg-green-400 rounded-t opacity-80" style="height:${pctF}%;min-height:${m.finalizadas?'2px':'0'};"></div>
-                    <div class="flex-1 bg-orange-400 rounded-t opacity-80" style="height:${pctA}%;min-height:${abertas?'2px':'0'};"></div>
+                    <div class="flex-1 bg-blue-400 rounded-t opacity-80 hover:opacity-100 hover:bg-blue-500 transition-all ret-trend-bar" ${da} data-st="" style="height:${pctT}%;min-height:2px;" title="Total: ${m.total}"></div>
+                    <div class="flex-1 bg-green-400 rounded-t opacity-80 hover:opacity-100 hover:bg-green-500 transition-all ret-trend-bar" ${da} data-st="Finalizada" style="height:${pctF}%;min-height:${m.finalizadas?'2px':'0'};" title="Finalizadas: ${m.finalizadas}"></div>
+                    <div class="flex-1 bg-orange-400 rounded-t opacity-80 hover:opacity-100 hover:bg-orange-500 transition-all ret-trend-bar" ${da} data-st="Aberta" style="height:${pctA}%;min-height:${abertas?'2px':'0'};" title="Abertas: ${abertas}"></div>
                 </div>
                 <span class="text-[8px] text-gray-400 truncate w-full text-center">${mm}/${yy.slice(2)}</span>
             </div>`;
@@ -3865,7 +3865,7 @@ function _retRenderMainDashboard(d) {
     if (tendencia && typeof tendencia === 'object' && !Array.isArray(tendencia)) {
         const cards = Object.entries(tendencia).map(([assunto, meses]) => {
             const titulo = _ASSUNTO_SHORT[assunto] || assunto;
-            const bars   = _buildBars(meses);
+            const bars   = _buildBars(meses, assunto);
             const totMes = meses.length ? meses[meses.length-1] : null;
             const badge  = totMes ? `<span class="text-xs text-gray-400 ml-2">${totMes.total} em ${totMes.mes.slice(5)}/${totMes.mes.slice(2,4)}</span>` : '';
             return `<div class="bg-white border border-gray-100 rounded-xl p-3">
@@ -4044,6 +4044,17 @@ function _retRenderMainDashboard(d) {
       ${colabHtml}
     </div>`;
 
+    // Delegated click nos bars do gráfico de tendência
+    el.querySelectorAll('.ret-trend-bar, .ret-trend-col').forEach(bar => {
+        bar.addEventListener('click', e => {
+            e.stopPropagation();
+            const assunto = bar.dataset.assunto;
+            const mes     = bar.dataset.mes;
+            const st      = bar.dataset.st;
+            if (assunto && mes) window._retTrendModal(assunto, mes, st);
+        });
+    });
+
     // Event listener para o seletor de mês da tabela de técnicos
     const mesSel = el.querySelector('#ret-colab-mes-sel');
     if (mesSel) {
@@ -4155,6 +4166,89 @@ window._retGoPage = function(p) {
     _retPage = p;
     _retExpanded.clear();
     _retLoad();
+};
+
+window._retTrendModal = async function(assunto, mes, statusFilter) {
+    // Remove modal anterior se existir
+    document.getElementById('ret-trend-modal')?.remove();
+
+    const [y, m] = mes.split('-');
+    const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
+    const mesLabel = `${m}/${y.slice(2)}`;
+    const statusLabel = statusFilter === 'Finalizada' ? 'Finalizadas' : statusFilter === 'Aberta' ? 'Abertas' : 'Todas';
+
+    const modal = document.createElement('div');
+    modal.id = 'ret-trend-modal';
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50';
+    modal.innerHTML = `
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[85vh] flex flex-col">
+          <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <div>
+              <div class="text-sm font-semibold text-gray-800">${assunto}</div>
+              <div class="text-xs text-gray-400">${mesLabel} — ${statusLabel}</div>
+            </div>
+            <button onclick="document.getElementById('ret-trend-modal').remove()"
+                    class="text-gray-400 hover:text-gray-700 text-xl font-bold leading-none">×</button>
+          </div>
+          <div id="ret-trend-modal-body" class="overflow-auto flex-1 p-4">
+            <div class="text-center text-gray-400 py-8">Carregando...</div>
+          </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+    try {
+        const q = new URLSearchParams({
+            assunto,
+            status:    statusFilter || '',
+            date_from: `${y}-${m}-01`,
+            date_to:   `${y}-${m}-${String(lastDay).padStart(2,'0')}`,
+            limit:     200,
+            page:      1,
+        });
+        const d = await fetch(`/api/behavior/retiradas?${q}`).then(r => r.json());
+        const body = document.getElementById('ret-trend-modal-body');
+        if (!body) return;
+        if (d.error) { body.innerHTML = `<div class="text-red-500">${d.error}</div>`; return; }
+        const ordens = d.ordens || [];
+        if (!ordens.length) { body.innerHTML = '<div class="text-center text-gray-400 py-8">Nenhuma OS encontrada.</div>'; return; }
+
+        const STATUS_CLS = {
+            Aberta:      'bg-red-100 text-red-700',
+            Encaminhada: 'bg-yellow-100 text-yellow-700',
+            Agendada:    'bg-blue-100 text-blue-700',
+            Finalizada:  'bg-green-100 text-green-700',
+        };
+        const rows = ordens.map(o => `
+            <tr class="border-b border-gray-50 hover:bg-gray-50 text-xs">
+                <td class="px-3 py-2 font-mono text-gray-500">${o.id}</td>
+                <td class="px-3 py-2 font-medium text-gray-800 max-w-[200px] truncate" title="${o.cliente}">${o.cliente||'—'}</td>
+                <td class="px-3 py-2">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_CLS[o.status]||'bg-gray-100 text-gray-600'}">${o.status||'—'}</span>
+                </td>
+                <td class="px-3 py-2 text-gray-600 truncate max-w-[160px]">${o.colaborador||'—'}</td>
+                <td class="px-3 py-2 text-gray-500">${o.cidade||'—'}</td>
+                <td class="px-3 py-2 text-gray-400 whitespace-nowrap">${(o.abertura||'').slice(0,10)}</td>
+            </tr>`).join('');
+        body.innerHTML = `
+            <div class="text-xs text-gray-400 mb-2">${ordens.length} ordens${d.total > ordens.length ? ` (de ${d.total})` : ''}</div>
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="bg-gray-50 text-xs text-gray-500 font-semibold">
+                        <th class="px-3 py-2">ID</th>
+                        <th class="px-3 py-2">Cliente</th>
+                        <th class="px-3 py-2">Status</th>
+                        <th class="px-3 py-2">Colaborador</th>
+                        <th class="px-3 py-2">Cidade</th>
+                        <th class="px-3 py-2">Abertura</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+    } catch(e) {
+        const body = document.getElementById('ret-trend-modal-body');
+        if (body) body.innerHTML = `<div class="text-red-500">Erro: ${e.message}</div>`;
+    }
 };
 
 window._retSort = function(col) {
