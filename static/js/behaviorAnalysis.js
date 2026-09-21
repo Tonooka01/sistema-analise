@@ -4222,7 +4222,12 @@ window._retTrendModal = async function(assunto, mes, statusFilter) {
         const rows = ordens.map(o => `
             <tr class="border-b border-gray-50 hover:bg-gray-50 text-xs">
                 <td class="px-3 py-2 font-mono text-gray-500">${o.id}</td>
-                <td class="px-3 py-2 font-medium text-gray-800 max-w-[200px] truncate" title="${o.cliente}">${o.cliente||'—'}</td>
+                <td class="px-3 py-2 max-w-[200px]">
+                    <span class="font-medium text-blue-700 hover:underline cursor-pointer truncate block" title="${o.cliente}"
+                          onclick="window._retClientePerfil('${(o.cliente||'').replace(/'/g,"\\'")}')">
+                        ${o.cliente||'—'}
+                    </span>
+                </td>
                 <td class="px-3 py-2">
                     <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_CLS[o.status]||'bg-gray-100 text-gray-600'}">${o.status||'—'}</span>
                 </td>
@@ -4248,6 +4253,154 @@ window._retTrendModal = async function(assunto, mes, statusFilter) {
     } catch(e) {
         const body = document.getElementById('ret-trend-modal-body');
         if (body) body.innerHTML = `<div class="text-red-500">Erro: ${e.message}</div>`;
+    }
+};
+
+window._retClientePerfil = async function(nomeCliente) {
+    document.getElementById('ret-cliente-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'ret-cliente-modal';
+    modal.className = 'fixed inset-0 z-[60] flex items-center justify-center bg-black/60';
+    modal.innerHTML = `
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col">
+          <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-gray-50 rounded-t-xl">
+            <div>
+              <div class="text-sm font-bold text-gray-800">${nomeCliente}</div>
+              <div class="text-xs text-gray-400 mt-0.5">Perfil do Cliente</div>
+            </div>
+            <button onclick="document.getElementById('ret-cliente-modal').remove()"
+                    class="text-gray-400 hover:text-gray-700 text-2xl font-bold leading-none">×</button>
+          </div>
+          <div class="flex border-b border-gray-100 px-5 gap-1 bg-white" id="ret-cp-tabs">
+            ${['ordens','contratos','atendimentos','faturas','equipamentos'].map((t,i)=>
+              `<button data-tab="${t}" class="ret-cp-tab px-3 py-2.5 text-xs font-semibold border-b-2 ${i===0?'border-blue-600 text-blue-700':'border-transparent text-gray-500 hover:text-blue-600'}">${
+                {ordens:'📋 OS',contratos:'📄 Contratos',atendimentos:'🎧 Atendimentos',faturas:'💰 Faturas',equipamentos:'📦 Equipamentos'}[t]
+              }</button>`).join('')}
+          </div>
+          <div id="ret-cp-body" class="overflow-auto flex-1 p-4 text-sm">
+            <div class="text-center text-gray-400 py-8">Carregando...</div>
+          </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+    // Tab switching
+    let _cpData = null;
+    const _cpRender = (tab) => {
+        const body = document.getElementById('ret-cp-body');
+        if (!body || !_cpData) return;
+        modal.querySelectorAll('.ret-cp-tab').forEach(b => {
+            const active = b.dataset.tab === tab;
+            b.className = `ret-cp-tab px-3 py-2.5 text-xs font-semibold border-b-2 ${active?'border-blue-600 text-blue-700':'border-transparent text-gray-500 hover:text-blue-600'}`;
+        });
+
+        const STATUS_CLS = { Aberta:'bg-red-100 text-red-700', Encaminhada:'bg-yellow-100 text-yellow-700',
+            Agendada:'bg-blue-100 text-blue-700', Finalizada:'bg-green-100 text-green-700',
+            Ativo:'bg-green-100 text-green-700', Cancelado:'bg-gray-100 text-gray-500',
+            Suspenso:'bg-orange-100 text-orange-700', Pago:'bg-green-100 text-green-700',
+            Aberto:'bg-red-100 text-red-700', Baixado:'bg-green-100 text-green-700' };
+        const badge = (s) => `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_CLS[s]||'bg-gray-100 text-gray-600'}">${s||'—'}</span>`;
+        const fmt = v => v ? v.slice(0,10) : '—';
+        const money = v => v != null ? `R$ ${parseFloat(v).toFixed(2).replace('.',',')}` : '—';
+
+        if (tab === 'ordens') {
+            const rows = _cpData.ordens.map(o => `<tr class="border-b border-gray-50 hover:bg-gray-50">
+                <td class="px-3 py-2 font-mono text-gray-400 text-xs">${o.id}</td>
+                <td class="px-3 py-2 text-xs max-w-[180px] truncate" title="${o.assunto}">${o.assunto||'—'}</td>
+                <td class="px-3 py-2">${badge(o.status)}</td>
+                <td class="px-3 py-2 text-xs text-gray-600">${o.colaborador||'—'}</td>
+                <td class="px-3 py-2 text-xs text-gray-500">${o.cidade||'—'}</td>
+                <td class="px-3 py-2 text-xs text-gray-400">${fmt(o.abertura)}</td>
+                <td class="px-3 py-2 text-xs text-gray-400">${fmt(o.agendamento)}</td>
+            </tr>`).join('');
+            body.innerHTML = `<div class="text-xs text-gray-400 mb-2">${_cpData.ordens.length} ordens</div>
+            <div class="overflow-x-auto"><table class="w-full text-left">
+                <thead><tr class="bg-gray-50 text-[11px] text-gray-500 font-semibold">
+                    <th class="px-3 py-2">ID</th><th class="px-3 py-2">Assunto</th><th class="px-3 py-2">Status</th>
+                    <th class="px-3 py-2">Colaborador</th><th class="px-3 py-2">Cidade</th>
+                    <th class="px-3 py-2">Abertura</th><th class="px-3 py-2">Agendamento</th>
+                </tr></thead><tbody>${rows||'<tr><td colspan="7" class="px-3 py-4 text-center text-gray-400">Nenhuma OS</td></tr>'}</tbody>
+            </table></div>`;
+        } else if (tab === 'contratos') {
+            const rows = _cpData.contratos.map(c => `<tr class="border-b border-gray-50 hover:bg-gray-50">
+                <td class="px-3 py-2 font-mono text-gray-400 text-xs">${c.id}</td>
+                <td class="px-3 py-2">${badge(c.status)}</td>
+                <td class="px-3 py-2">${badge(c.status_acesso)}</td>
+                <td class="px-3 py-2 text-xs max-w-[160px] truncate" title="${c.plano||''}">${c.plano||'—'}</td>
+                <td class="px-3 py-2 text-xs text-gray-500">${c.cidade||'—'}</td>
+                <td class="px-3 py-2 text-xs text-gray-500">${fmt(c.ativacao)}</td>
+                <td class="px-3 py-2 text-xs text-gray-400">${fmt(c.pago_ate)}</td>
+                <td class="px-3 py-2 text-xs text-gray-400">Dia ${c.vencimento_dia||'—'}</td>
+            </tr>`).join('');
+            body.innerHTML = `<div class="text-xs text-gray-400 mb-2">${_cpData.contratos.length} contratos</div>
+            <div class="overflow-x-auto"><table class="w-full text-left">
+                <thead><tr class="bg-gray-50 text-[11px] text-gray-500 font-semibold">
+                    <th class="px-3 py-2">ID</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">Acesso</th>
+                    <th class="px-3 py-2">Plano</th><th class="px-3 py-2">Cidade</th>
+                    <th class="px-3 py-2">Ativação</th><th class="px-3 py-2">Pago até</th><th class="px-3 py-2">Venc.</th>
+                </tr></thead><tbody>${rows||'<tr><td colspan="8" class="px-3 py-4 text-center text-gray-400">Nenhum contrato</td></tr>'}</tbody>
+            </table></div>`;
+        } else if (tab === 'atendimentos') {
+            const rows = _cpData.atendimentos.map(a => `<tr class="border-b border-gray-50 hover:bg-gray-50">
+                <td class="px-3 py-2 font-mono text-gray-400 text-xs">${a.id}</td>
+                <td class="px-3 py-2 text-xs max-w-[180px] truncate" title="${a.assunto||''}">${a.assunto||'—'}</td>
+                <td class="px-3 py-2">${badge(a.status)}</td>
+                <td class="px-3 py-2 text-xs text-gray-500">${a.departamento||'—'}</td>
+                <td class="px-3 py-2 text-xs text-gray-500">${a.responsavel||'—'}</td>
+                <td class="px-3 py-2 text-xs text-gray-400">${fmt(a.criado_em)}</td>
+            </tr>`).join('');
+            body.innerHTML = `<div class="text-xs text-gray-400 mb-2">${_cpData.atendimentos.length} atendimentos</div>
+            <div class="overflow-x-auto"><table class="w-full text-left">
+                <thead><tr class="bg-gray-50 text-[11px] text-gray-500 font-semibold">
+                    <th class="px-3 py-2">ID</th><th class="px-3 py-2">Assunto</th><th class="px-3 py-2">Status</th>
+                    <th class="px-3 py-2">Depto</th><th class="px-3 py-2">Responsável</th><th class="px-3 py-2">Data</th>
+                </tr></thead><tbody>${rows||'<tr><td colspan="6" class="px-3 py-4 text-center text-gray-400">Nenhum atendimento</td></tr>'}</tbody>
+            </table></div>`;
+        } else if (tab === 'faturas') {
+            const rows = _cpData.faturas.map(f => `<tr class="border-b border-gray-50 hover:bg-gray-50">
+                <td class="px-3 py-2 font-mono text-gray-400 text-xs">${f.id}</td>
+                <td class="px-3 py-2">${badge(f.status)}</td>
+                <td class="px-3 py-2 text-xs text-gray-500">${fmt(f.vencimento)}</td>
+                <td class="px-3 py-2 text-xs font-semibold ${parseFloat(f.valor||0)>0?'text-gray-800':'text-gray-400'}">${money(f.valor)}</td>
+                <td class="px-3 py-2 text-xs text-green-600">${f.recebido ? money(f.recebido) : '—'}</td>
+                <td class="px-3 py-2 text-xs text-gray-400">${fmt(f.pagamento)}</td>
+                <td class="px-3 py-2 text-xs">${f.inadimplente ? '<span class="text-red-500 font-semibold">Sim</span>' : '—'}</td>
+            </tr>`).join('');
+            body.innerHTML = `<div class="text-xs text-gray-400 mb-2">${_cpData.faturas.length} faturas</div>
+            <div class="overflow-x-auto"><table class="w-full text-left">
+                <thead><tr class="bg-gray-50 text-[11px] text-gray-500 font-semibold">
+                    <th class="px-3 py-2">ID</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">Vencimento</th>
+                    <th class="px-3 py-2">Valor</th><th class="px-3 py-2">Recebido</th>
+                    <th class="px-3 py-2">Pgto</th><th class="px-3 py-2">Inadimpl.</th>
+                </tr></thead><tbody>${rows||'<tr><td colspan="7" class="px-3 py-4 text-center text-gray-400">Nenhuma fatura</td></tr>'}</tbody>
+            </table></div>`;
+        } else if (tab === 'equipamentos') {
+            const rows = _cpData.equipamentos.map(e => `<tr class="border-b border-gray-50 hover:bg-gray-50">
+                <td class="px-3 py-2 font-mono text-gray-400 text-xs">${e.contrato}</td>
+                <td class="px-3 py-2 text-xs text-gray-800">${e.descricao||'—'}</td>
+                <td class="px-3 py-2 text-xs text-gray-500 font-mono">${e.serie||'—'}</td>
+            </tr>`).join('');
+            body.innerHTML = `<div class="text-xs text-gray-400 mb-2">${_cpData.equipamentos.length} equipamentos</div>
+            <div class="overflow-x-auto"><table class="w-full text-left">
+                <thead><tr class="bg-gray-50 text-[11px] text-gray-500 font-semibold">
+                    <th class="px-3 py-2">Contrato</th><th class="px-3 py-2">Equipamento</th><th class="px-3 py-2">Nº Série</th>
+                </tr></thead><tbody>${rows||'<tr><td colspan="3" class="px-3 py-4 text-center text-gray-400">Nenhum equipamento</td></tr>'}</tbody>
+            </table></div>`;
+        }
+    };
+
+    modal.querySelectorAll('.ret-cp-tab').forEach(btn => {
+        btn.addEventListener('click', () => _cpRender(btn.dataset.tab));
+    });
+
+    try {
+        const r = await fetch(`/api/behavior/retiradas/cliente-perfil?cliente=${encodeURIComponent(nomeCliente)}`).then(r => r.json());
+        if (r.error) { document.getElementById('ret-cp-body').innerHTML = `<div class="text-red-500 p-4">${r.error}</div>`; return; }
+        _cpData = r;
+        _cpRender('ordens');
+    } catch(e) {
+        const b = document.getElementById('ret-cp-body');
+        if (b) b.innerHTML = `<div class="text-red-500 p-4">Erro: ${e.message}</div>`;
     }
 };
 

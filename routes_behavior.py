@@ -4530,6 +4530,95 @@ def api_ret_arquivos_counts():
         return jsonify({'counts': {}})
 
 
+@behavior_bp.route('/retiradas/cliente-perfil')
+def api_ret_cliente_perfil():
+    """Retorna dados completos de um cliente: OS, contratos, atendimentos, faturas, equipamentos."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    nome = request.args.get('cliente', '').strip()
+    if not nome:
+        return jsonify({'error': 'Cliente não informado'}), 400
+    conn = None
+    try:
+        conn = current_app.config['GET_DB_CONNECTION']()
+        like = f'%{nome}%'
+
+        # Contratos
+        contratos = conn.execute("""
+            SELECT ID, Status_contrato, Status_acesso, Plano_de_venda, Descri_o,
+                   Data_ativa_o, Cidade, Bairro, Endere_o, Telefone_celular,
+                   Pago_at, Dia_fixo_do_vencimento, Filial
+            FROM Contratos WHERE Cliente LIKE ? ORDER BY ID DESC LIMIT 20
+        """, (like,)).fetchall()
+
+        # OS (todas, não só retirada)
+        os_rows = conn.execute("""
+            SELECT ID, Assunto, Status, Colaborador, Abertura, Agendamento,
+                   Cidade, Bairro, Mensagem, Protocolo, In_cio, Final
+            FROM OS WHERE Cliente LIKE ? ORDER BY Abertura DESC LIMIT 100
+        """, (like,)).fetchall()
+
+        # Atendimentos
+        atend = conn.execute("""
+            SELECT ID, Assunto, Descri_o_assunto, Novo_status, Criado_em,
+                   ltima_altera_o, Departamento, Respons_vel, Descri_o
+            FROM Atendimentos WHERE Cliente LIKE ? ORDER BY Criado_em DESC LIMIT 50
+        """, (like,)).fetchall()
+
+        # Faturas (Contas_a_Receber)
+        faturas = conn.execute("""
+            SELECT ID, Status, Emissao, Vencimento, Valor, Valor_recebido,
+                   Data_pagamento, Inadimpl_ncia, Parcela, Documento
+            FROM Contas_a_Receber WHERE Cliente LIKE ? ORDER BY Vencimento DESC LIMIT 60
+        """, (like,)).fetchall()
+
+        # Equipamentos (via contratos)
+        ct_ids = [str(r[0]) for r in contratos]
+        equip = []
+        if ct_ids:
+            ph2 = ','.join('?' * len(ct_ids))
+            equip = conn.execute(
+                f"SELECT ID_contrato, Descricao_produto, N_serie FROM Equipamento WHERE CAST(ID_contrato AS TEXT) IN ({ph2}) LIMIT 30",
+                ct_ids
+            ).fetchall()
+
+        def _c(v): return None if v in (None, '', '0000-00-00', '0000-00-00 00:00:00') else v
+
+        return jsonify({
+            'cliente': nome,
+            'contratos': [{
+                'id': r[0], 'status': r[1], 'status_acesso': r[2], 'plano': r[3],
+                'descricao': r[4], 'ativacao': _c(r[5]), 'cidade': r[6],
+                'bairro': r[7], 'endereco': r[8], 'telefone': r[9],
+                'pago_ate': _c(r[10]), 'vencimento_dia': r[11], 'filial': r[12],
+            } for r in contratos],
+            'ordens': [{
+                'id': r[0], 'assunto': r[1], 'status': r[2], 'colaborador': r[3],
+                'abertura': _c(r[4]), 'agendamento': _c(r[5]), 'cidade': r[6],
+                'bairro': r[7], 'mensagem': (r[8] or '')[:200], 'protocolo': r[9],
+                'inicio': _c(r[10]), 'final': _c(r[11]),
+            } for r in os_rows],
+            'atendimentos': [{
+                'id': r[0], 'assunto': r[1], 'tipo_assunto': r[2], 'status': r[3],
+                'criado_em': _c(r[4]), 'ultima_alt': _c(r[5]), 'departamento': r[6],
+                'responsavel': r[7], 'descricao': (r[8] or '')[:300],
+            } for r in atend],
+            'faturas': [{
+                'id': r[0], 'status': r[1], 'emissao': _c(r[2]), 'vencimento': _c(r[3]),
+                'valor': r[4], 'recebido': r[5], 'pagamento': _c(r[6]),
+                'inadimplente': r[7], 'parcela': r[8], 'documento': r[9],
+            } for r in faturas],
+            'equipamentos': [{
+                'contrato': r[0], 'descricao': r[1], 'serie': r[2],
+            } for r in equip],
+        })
+    except Exception as e:
+        logger.error(f"Erro cliente-perfil: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
 @behavior_bp.route('/retiradas/producao-tecnico')
 def api_ret_producao_tecnico():
     """Produção dia-a-dia por técnico para um mês específico."""
