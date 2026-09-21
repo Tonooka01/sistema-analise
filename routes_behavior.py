@@ -3808,6 +3808,49 @@ def api_behavior_retiradas():
 
         where = 'WHERE ' + ' AND '.join(conds)
 
+        min_visitas_f = int(request.args.get('min_visitas') or 0)
+        cached = {}
+        qualified = []
+        if min_visitas_f > 0:
+            conn.execute("""CREATE TABLE IF NOT EXISTS ret_visitas_cache
+                (os_id TEXT PRIMARY KEY, visitas INTEGER DEFAULT 0, updated_at TEXT)""")
+            conn.commit()
+
+            all_ids = [r[0] for r in conn.execute(
+                f"SELECT o.ID FROM OS o {where}", params).fetchall()]
+
+            if not all_ids:
+                return jsonify({
+                    'kpis': {'total':0,'abertas':0,'encaminhadas':0,'agendadas':0,
+                             'finalizadas':0,'sem_agendamento':0},
+                    'por_assunto':[], 'por_cidade':[], 'por_colaborador':[], 'tendencia':[],
+                    'ordens':[], 'total':0, 'page':page, 'pages':0,
+                    'visitas_map': {},
+                })
+
+            id_strs = [str(i) for i in all_ids]
+            ph_ids  = ','.join('?' * len(id_strs))
+            cached  = {r[0]: r[1] for r in conn.execute(
+                f"SELECT os_id, visitas FROM ret_visitas_cache WHERE os_id IN ({ph_ids})",
+                id_strs).fetchall()}
+
+            # Usa só o cache — sem chamar IXC aqui.
+            # Para atualizar, use o botão "🔄 Atualizar Visitas".
+            qualified = [i for i in all_ids if cached.get(str(i), 0) >= min_visitas_f]
+            if not qualified:
+                return jsonify({
+                    'kpis': {'total':0,'abertas':0,'encaminhadas':0,'agendadas':0,
+                             'finalizadas':0,'sem_agendamento':0},
+                    'por_assunto':[], 'por_cidade':[], 'por_colaborador':[], 'tendencia':[],
+                    'ordens':[], 'total':0, 'page':page, 'pages':0,
+                    'visitas_map': {}, 'visitas_sem_cache': len(all_ids) - len(cached),
+                })
+
+            ph_q = ','.join('?' * len(qualified))
+            conds.append(f"o.ID IN ({ph_q})")
+            params.extend(qualified)
+            where = 'WHERE ' + ' AND '.join(conds)
+
         kpi_row = conn.execute(f"""
             SELECT
                 COUNT(*) total,
@@ -4004,6 +4047,7 @@ def api_behavior_retiradas():
             'por_colaborador':  por_colab_fmt,
             'tendencia':        [{'mes': r[0], 'total': r[1], 'finalizadas': r[2]} for r in tendencia],
             'ordens':      [fmt(r) for r in rows],
+            'visitas_map': {str(i): cached.get(str(i), 0) for i in qualified} if min_visitas_f > 0 else {},
             'total':       total,
             'page':        page,
             'limit':       limit,
@@ -4422,7 +4466,138 @@ def api_ret_arquivos_counts():
                 k, n = fut.result()
                 counts[k] = n
 
+        # Salva no cache SQLite para uso pelo filtro server-side
+        try:
+            db = current_app.config['GET_DB_CONNECTION']()
+            db.execute("""CREATE TABLE IF NOT EXISTS ret_visitas_cache
+                (os_id TEXT PRIMARY KEY, visitas INTEGER DEFAULT 0, updated_at TEXT)""")
+            db.executemany(
+                "INSERT OR REPLACE INTO ret_visitas_cache VALUES(?,?,datetime('now'))",
+                list(counts.items()))
+            db.commit()
+            db.close()
+        except Exception as _ce:
+            logger.warning(f"Erro ao salvar visitas cache: {_ce}")
+
         return jsonify({'counts': counts})
     except Exception as e:
         logger.error(f"Erro arquivos-counts: {e}", exc_info=True)
         return jsonify({'counts': {}})
+
+
+@behavior_bp.route('/retiradas/sync-visitas', methods=['POST'])
+def api_ret_sync_visitas():
+    """Busca e salva visitas no cache SQLite para TODAS as OS que batem os filtros."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    conn = None
+    try:
+        conn = current_app.config['GET_DB_CONNECTION']()
+
+        # Reproduz a mesma lógica de filtro da rota /retiradas (sem min_visitas)
+        status_f  = request.args.get('status', '')
+        assunto_f = request.args.get('assunto', '')
+        filial_f  = request.args.get('filial', '')
+        cidade_f  = request.args.get('cidade', '')
+        bairro_f  = request.args.get('bairro', '')
+        colab_f   = request.args.get('colaborador', '')
+        equip_f   = request.args.get('equipamento', '').strip()
+        date_from = request.args.get('date_from', '')
+        date_to   = request.args.get('date_to', '')
+        search    = request.args.get('search', '').strip()
+
+        ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
+        conds  = [f"o.Assunto IN ({ph})"]
+        params = list(RETIRADA_ASSUNTOS)
+
+        if status_f:
+            status_list = [s.strip() for s in status_f.split(',') if s.strip()]
+            if len(status_list) == 1:
+                conds.append("o.Status = ?"); params.append(status_list[0])
+            elif status_list:
+                sph = ','.join('?' * len(status_list))
+                conds.append(f"o.Status IN ({sph})"); params.extend(status_list)
+        if assunto_f:
+            conds.append("o.Assunto = ?"); params.append(assunto_f)
+        if filial_f:
+            conds.append("o.Filial = ?"); params.append(filial_f)
+        if cidade_f:
+            conds.append("o.Cidade = ?"); params.append(cidade_f)
+        if bairro_f:
+            conds.append("o.Bairro = ?"); params.append(bairro_f)
+        if colab_f:
+            conds.append("o.Colaborador = ?"); params.append(colab_f)
+        if equip_f:
+            contratos_com_equip = [
+                str(r[0]) for r in conn.execute(
+                    "SELECT DISTINCT ID_contrato FROM Equipamento WHERE Descricao_produto = ?",
+                    (equip_f,)
+                ).fetchall()
+            ]
+            if contratos_com_equip:
+                ph_eq = ','.join('?' * len(contratos_com_equip))
+                conds.append(f"CAST(o.Contrato AS TEXT) IN ({ph_eq})")
+                params.extend(contratos_com_equip)
+            else:
+                conds.append("1=0")
+        if date_from:
+            conds.append("o.Abertura >= ?"); params.append(date_from)
+        if date_to:
+            conds.append("o.Abertura <= ?"); params.append(date_to + ' 23:59:59')
+        if search:
+            conds.append("(o.Cliente LIKE ? OR o.Endere_o LIKE ? OR o.Bairro LIKE ? OR o.Mensagem LIKE ?)")
+            s = f'%{search}%'
+            params.extend([s, s, s, s])
+
+        where = 'WHERE ' + ' AND '.join(conds)
+        all_ids = [r[0] for r in conn.execute(
+            f"SELECT o.ID FROM OS o {where}", params).fetchall()]
+        conn.close()
+        conn = None
+
+        if not all_ids:
+            return jsonify({'synced': 0, 'counts': {}})
+
+        token = _ret_get_token()
+        if not token:
+            return jsonify({'error': 'Sem token IXC'}), 500
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def _count_one(os_id):
+            try:
+                recs = _ixc_arquivos(os_id, token)
+                if not recs:
+                    return str(os_id), 0
+                dias = set()
+                for rec in recs:
+                    dt = (rec.get('data_envio') or rec.get('data') or '')[:10]
+                    if dt and dt != '0000-00-00':
+                        dias.add(dt)
+                return str(os_id), len(dias) if dias else len(recs)
+            except Exception:
+                return str(os_id), 0
+
+        counts = {}
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            futures = {ex.submit(_count_one, oid): oid for oid in all_ids}
+            for fut in as_completed(futures):
+                k, n = fut.result()
+                counts[k] = n
+
+        db = current_app.config['GET_DB_CONNECTION']()
+        db.execute("""CREATE TABLE IF NOT EXISTS ret_visitas_cache
+            (os_id TEXT PRIMARY KEY, visitas INTEGER DEFAULT 0, updated_at TEXT)""")
+        db.executemany(
+            "INSERT OR REPLACE INTO ret_visitas_cache VALUES(?,?,datetime('now'))",
+            [(k, v) for k, v in counts.items()])
+        db.commit()
+        db.close()
+
+        return jsonify({'synced': len(counts), 'counts': counts})
+    except Exception as e:
+        if conn:
+            try: conn.close()
+            except: pass
+        logger.error(f"Erro sync-visitas: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500

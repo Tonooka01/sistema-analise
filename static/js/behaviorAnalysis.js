@@ -3408,7 +3408,10 @@ function _retShell(f) {
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-xs text-gray-500 font-medium">Visitas (mín.)</label>
-          <input type="number" id="ret-f-min-visitas" min="0" placeholder="0" class="border border-gray-300 rounded px-2 py-1 text-sm w-20">
+          <div class="flex items-center gap-1">
+            <input type="number" id="ret-f-min-visitas" min="0" placeholder="0" class="border border-gray-300 rounded px-2 py-1 text-sm w-20">
+            <button id="ret-btn-sync-visitas" title="Atualizar cache de visitas (busca do IXC)" class="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 hover:bg-blue-100 border border-blue-300 text-blue-700 rounded whitespace-nowrap">🔄 Atualizar</button>
+          </div>
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-xs text-gray-500 font-medium">Busca</label>
@@ -3477,6 +3480,44 @@ function _retBindEvents(pane) {
         _retExpanded.clear();
         _retLoad();
     });
+    pane.querySelector('#ret-btn-sync-visitas')?.addEventListener('click', async () => {
+        const btn = pane.querySelector('#ret-btn-sync-visitas');
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="animate-spin inline-block">⏳</span> Buscando…';
+        try {
+            const q = new URLSearchParams({
+                status:      _retFilters.status,
+                assunto:     _retFilters.assunto,
+                filial:      _retFilters.filial,
+                cidade:      _retFilters.cidade,
+                bairro:      _retFilters.bairro,
+                colaborador: _retFilters.colaborador,
+                equipamento: _retFilters.equipamento,
+                date_from:   _retFilters.date_from,
+                date_to:     _retFilters.date_to,
+                search:      _retFilters.search,
+            });
+            const r = await fetch(`/api/behavior/retiradas/sync-visitas?${q}`, { method: 'POST' });
+            const d = await r.json();
+            if (d.error) {
+                alert('Erro ao sincronizar visitas: ' + d.error);
+            } else {
+                // Popula cache local
+                if (d.counts) {
+                    Object.entries(d.counts).forEach(([k, v]) => { _retVisitasCache[parseInt(k)] = v; });
+                }
+                btn.innerHTML = `✅ ${d.synced} sincronizadas`;
+                setTimeout(() => { btn.innerHTML = origHtml; btn.disabled = false; }, 3000);
+                _retLoad();
+                return;
+            }
+        } catch (e) {
+            alert('Erro de conexão ao sincronizar visitas');
+        }
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+    });
     pane.querySelector('#ret-btn-limpar')?.addEventListener('click', () => {
         pane.querySelectorAll('.ret-ms-cb').forEach(cb => cb.checked = false);
         _retUpdateStatusLabel();
@@ -3502,6 +3543,11 @@ async function _retLoad() {
 
     _retData  = d.ordens || [];
     _retTotal = d.total  || 0;
+
+    // Pré-popula cache com contagens vindas do servidor (evita re-fetch que mostraria 0)
+    if (d.visitas_map) {
+        Object.entries(d.visitas_map).forEach(([k, v]) => { _retVisitasCache[parseInt(k)] = v; });
+    }
 
     _retRenderKpis(d.kpis, d.por_assunto, d.por_cidade);
     _retRenderMainDashboard(d);
@@ -3679,17 +3725,12 @@ function _retRenderTable(wrap) {
 }
 
 function _retVisitasApply() {
-    const minV = parseInt(_retFilters.min_visitas) || 0;
     document.querySelectorAll('.ret-visitas-cell').forEach(cell => {
         const n = _retVisitasCache[cell.dataset.osid];
         if (n === undefined) return;
         cell.innerHTML = n > 0
             ? `<span class="text-blue-700 font-semibold">${n}</span>`
             : '<span class="text-gray-400">0</span>';
-        if (minV > 0) {
-            const tr = cell.closest('tr');
-            if (tr) tr.style.display = n >= minV ? '' : 'none';
-        }
     });
 }
 
