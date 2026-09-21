@@ -3845,7 +3845,7 @@ function _retRenderMainDashboard(d) {
             const da = `data-assunto="${assunto.replace(/"/g,'&quot;')}" data-mes="${m.mes}"`;
             return `<div class="flex flex-col items-center gap-0.5 flex-1 min-w-0 group cursor-pointer ret-trend-col" ${da} data-st="">
                 <span class="text-[8px] font-semibold text-gray-500 group-hover:text-blue-700">${m.total}</span>
-                <div class="w-full" style="height:70px;display:flex;align-items:flex-end;gap:1px;">
+                <div class="w-full" style="height:110px;display:flex;align-items:flex-end;gap:1px;">
                     <div class="flex-1 bg-blue-400 rounded-t opacity-80 hover:opacity-100 hover:bg-blue-500 transition-all ret-trend-bar" ${da} data-st="" style="height:${pctT}%;min-height:2px;" title="Total: ${m.total}"></div>
                     <div class="flex-1 bg-green-400 rounded-t opacity-80 hover:opacity-100 hover:bg-green-500 transition-all ret-trend-bar" ${da} data-st="Finalizada" style="height:${pctF}%;min-height:${m.finalizadas?'2px':'0'};" title="Finalizadas: ${m.finalizadas}"></div>
                     <div class="flex-1 bg-orange-400 rounded-t opacity-80 hover:opacity-100 hover:bg-orange-500 transition-all ret-trend-bar" ${da} data-st="Aberta" style="height:${pctA}%;min-height:${abertas?'2px':'0'};" title="Abertas: ${abertas}"></div>
@@ -3873,7 +3873,7 @@ function _retRenderMainDashboard(d) {
                 <span class="text-xs font-semibold text-gray-700">${titulo}${badge}</span>
                 ${_legend}
               </div>
-              <div class="flex items-end gap-0.5 px-0.5" style="height:80px;">${bars}</div>
+              <div class="flex items-end gap-0.5 px-0.5" style="height:120px;">${bars}</div>
             </div>`;
         }).join('');
         trendHtml = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">${cards}</div>`;
@@ -3975,12 +3975,30 @@ function _retRenderMainDashboard(d) {
     const _renderColabTable = (colab, nDays, mes) => {
         if (!colab.length) return '<div class="p-4 text-gray-400 text-sm">Nenhum técnico com OS neste mês.</div>';
         const days = Array.from({length: nDays}, (_, i) => i + 1);
-        const thDays = days.map(d => `<th class="px-1 text-center text-[10px] text-gray-400 font-medium min-w-[22px]">${String(d).padStart(2,'0')}</th>`).join('');
+        // Paleta cíclica de cores por coluna (dia)
+        const _COL_COLORS = [
+            'text-blue-600','text-indigo-600','text-violet-600','text-purple-600',
+            'text-fuchsia-600','text-pink-600','text-rose-600','text-red-600',
+            'text-orange-600','text-amber-600','text-yellow-600','text-lime-600',
+            'text-green-600','text-emerald-600','text-teal-600','text-cyan-600',
+        ];
+        const _BG_COLORS = [
+            'bg-blue-50','bg-indigo-50','bg-violet-50','bg-purple-50',
+            'bg-fuchsia-50','bg-pink-50','bg-rose-50','bg-red-50',
+            'bg-orange-50','bg-amber-50','bg-yellow-50','bg-lime-50',
+            'bg-green-50','bg-emerald-50','bg-teal-50','bg-cyan-50',
+        ];
+        const thDays = days.map((d,i) => {
+            const bg = _BG_COLORS[i % _BG_COLORS.length];
+            return `<th class="px-1 text-center text-[10px] font-bold min-w-[22px] ${bg} ${_COL_COLORS[i%_COL_COLORS.length]}">${String(d).padStart(2,'0')}</th>`;
+        }).join('');
         const rows = colab.map(x => {
-            const cells = days.map(d => {
+            const cells = days.map((d,i) => {
                 const n = x.dias[d] || 0;
+                const cls = _COL_COLORS[i % _COL_COLORS.length];
+                const bg  = n > 0 ? _BG_COLORS[i % _BG_COLORS.length] : '';
                 return n > 0
-                    ? `<td class="px-1 text-center text-[11px] font-semibold text-blue-700 tabular-nums">${n}</td>`
+                    ? `<td class="px-1 text-center text-[11px] font-bold tabular-nums ${cls} ${bg}">${n}</td>`
                     : `<td class="px-1 text-center text-[11px] text-gray-300">-</td>`;
             }).join('');
             return `<tr class="border-b border-gray-50 hover:bg-gray-50">
@@ -3990,9 +4008,13 @@ function _retRenderMainDashboard(d) {
             </tr>`;
         }).join('');
         const totals = days.map(d => colab.reduce((s, x) => s + (x.dias[d] || 0), 0));
-        const totalCells = totals.map(n => n > 0
-            ? `<td class="px-1 text-center text-[11px] font-bold text-gray-700 tabular-nums">${n}</td>`
-            : `<td class="px-1 text-center text-[11px] text-gray-300">-</td>`).join('');
+        const totalCells = totals.map((n, i) => {
+            const cls = _COL_COLORS[i % _COL_COLORS.length];
+            const bg  = n > 0 ? _BG_COLORS[i % _BG_COLORS.length] : '';
+            return n > 0
+                ? `<td class="px-1 text-center text-[11px] font-bold tabular-nums ${cls} ${bg}">${n}</td>`
+                : `<td class="px-1 text-center text-[11px] text-gray-300">-</td>`;
+        }).join('');
         const grandTotal = colab.reduce((s, x) => s + x.total, 0);
         return `<table class="text-left w-full" style="border-collapse:collapse;">
             <thead>
