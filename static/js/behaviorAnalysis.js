@@ -3975,19 +3975,9 @@ function _retRenderMainDashboard(d) {
     const _renderColabTable = (colab, nDays, mes) => {
         if (!colab.length) return '<div class="p-4 text-gray-400 text-sm">Nenhum técnico com OS neste mês.</div>';
         const days = Array.from({length: nDays}, (_, i) => i + 1);
-        // Paleta cíclica de cores por coluna (dia)
-        const _COL_COLORS = [
-            'text-blue-600','text-indigo-600','text-violet-600','text-purple-600',
-            'text-fuchsia-600','text-pink-600','text-rose-600','text-red-600',
-            'text-orange-600','text-amber-600','text-yellow-600','text-lime-600',
-            'text-green-600','text-emerald-600','text-teal-600','text-cyan-600',
-        ];
-        const _BG_COLORS = [
-            'bg-blue-50','bg-indigo-50','bg-violet-50','bg-purple-50',
-            'bg-fuchsia-50','bg-pink-50','bg-rose-50','bg-red-50',
-            'bg-orange-50','bg-amber-50','bg-yellow-50','bg-lime-50',
-            'bg-green-50','bg-emerald-50','bg-teal-50','bg-cyan-50',
-        ];
+        // Alternância clara/escura por coluna (zebra horizontal)
+        const _COL_COLORS = ['text-slate-600', 'text-slate-800'];
+        const _BG_COLORS  = ['bg-gray-50',     'bg-slate-100'];
         const thDays = days.map((d,i) => {
             const bg = _BG_COLORS[i % _BG_COLORS.length];
             return `<th class="px-1 text-center text-[10px] font-bold min-w-[22px] ${bg} ${_COL_COLORS[i%_COL_COLORS.length]}">${String(d).padStart(2,'0')}</th>`;
