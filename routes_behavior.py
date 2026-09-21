@@ -3749,6 +3749,9 @@ def api_behavior_retiradas():
     conn = None
     try:
         conn = current_app.config['GET_DB_CONNECTION']()
+        conn.execute("""CREATE TABLE IF NOT EXISTS ret_visitas_cache
+            (os_id TEXT PRIMARY KEY, visitas INTEGER DEFAULT 0, updated_at TEXT)""")
+        conn.commit()
 
         status_f  = request.args.get('status', '')
         assunto_f = request.args.get('assunto', '')
@@ -3812,10 +3815,6 @@ def api_behavior_retiradas():
         cached = {}
         qualified = []
         if min_visitas_f > 0:
-            conn.execute("""CREATE TABLE IF NOT EXISTS ret_visitas_cache
-                (os_id TEXT PRIMARY KEY, visitas INTEGER DEFAULT 0, updated_at TEXT)""")
-            conn.commit()
-
             all_ids = [r[0] for r in conn.execute(
                 f"SELECT o.ID FROM OS o {where}", params).fetchall()]
 
@@ -3924,6 +3923,7 @@ def api_behavior_retiradas():
             'agendamento':  'o.Agendamento',
             'colaborador':  'o.Colaborador',
             'status':       'o.Status',
+            'visitas':      'COALESCE(vc.visitas, 0)',
         }
 
         if sort_by in _SORT_COLS:
@@ -3958,6 +3958,7 @@ def api_behavior_retiradas():
             LEFT JOIN Atendimentos a ON a.ID = o.ID_Atendimento
             LEFT JOIN Contratos ct ON CAST(ct.ID AS TEXT) = CAST(o.Contrato AS TEXT)
             LEFT JOIN Clientes cl ON cl.Raz_o_social = COALESCE(ct.Cliente, o.Cliente)
+            LEFT JOIN ret_visitas_cache vc ON vc.os_id = CAST(o.ID AS TEXT)
             {where}
             ORDER BY {order_clause}
             LIMIT ? OFFSET ?

@@ -3541,6 +3541,39 @@ async function _retLoad() {
     const d = await fetch(`/api/behavior/retiradas?${q}`).then(r => r.json());
     if (d.error) { if(wrap) wrap.innerHTML = `<div class="p-4 text-red-600">Erro: ${d.error}</div>`; return; }
 
+    // Cache de visitas vazio mas filtro ativo → sincroniza automaticamente e recarrega
+    if (d.total === 0 && (d.visitas_sem_cache || 0) > 0 && _retFilters.min_visitas) {
+        if (wrap) wrap.innerHTML = '<div class="p-6 text-center text-blue-500">🔄 Sincronizando visitas do IXC, aguarde...</div>';
+        try {
+            const syncQ = new URLSearchParams({
+                status: _retFilters.status, assunto: _retFilters.assunto,
+                filial: _retFilters.filial, cidade: _retFilters.cidade,
+                bairro: _retFilters.bairro, colaborador: _retFilters.colaborador,
+                equipamento: _retFilters.equipamento, date_from: _retFilters.date_from,
+                date_to: _retFilters.date_to, search: _retFilters.search,
+            });
+            const sd = await fetch(`/api/behavior/retiradas/sync-visitas?${syncQ}`, { method: 'POST' }).then(r => r.json());
+            if (sd.counts) {
+                Object.entries(sd.counts).forEach(([k, v]) => { _retVisitasCache[parseInt(k)] = v; });
+            }
+            // Atualiza botão de sync se existir
+            const syncBtn = document.getElementById('ret-btn-sync-visitas');
+            if (syncBtn) { syncBtn.innerHTML = `✅ ${sd.synced || 0} sincronizadas`; setTimeout(() => { syncBtn.innerHTML = '🔄 Atualizar'; }, 3000); }
+        } catch(e) { /* ignora erro de sync silencioso */ }
+        // Recarrega com cache populado
+        const d2 = await fetch(`/api/behavior/retiradas?${q}`).then(r => r.json());
+        if (d2.error) { if(wrap) wrap.innerHTML = `<div class="p-4 text-red-600">Erro: ${d2.error}</div>`; return; }
+        _retData  = d2.ordens || [];
+        _retTotal = d2.total  || 0;
+        if (d2.visitas_map) Object.entries(d2.visitas_map).forEach(([k, v]) => { _retVisitasCache[parseInt(k)] = v; });
+        _retRenderKpis(d2.kpis, d2.por_assunto, d2.por_cidade);
+        _retRenderMainDashboard(d2);
+        _retRenderTable(wrap);
+        _retRenderPagination(pgDiv, d2.page, d2.pages, d2.total);
+        _retLoadVisitas();
+        return;
+    }
+
     _retData  = d.ordens || [];
     _retTotal = d.total  || 0;
 
@@ -3717,7 +3750,7 @@ function _retRenderTable(wrap) {
           ${_sortTh('agendamento', 'Agendamento')}
           ${_sortTh('tempo_aberto', 'Tempo Aberto')}
           <th class="px-3 py-2 font-semibold whitespace-nowrap">Equipamentos</th>
-          <th class="px-3 py-2 font-semibold whitespace-nowrap">Visitas</th>
+          ${_sortTh('visitas', 'Visitas')}
         </tr>
       </thead>
       <tbody>${rows}</tbody>
