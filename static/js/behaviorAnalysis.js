@@ -3263,6 +3263,7 @@ let _retExpanded  = new Set();
 let _retSortBy    = '';
 let _retSortDir   = 'desc';
 let _retTecnicosMap = {}; // { id: nome }
+let _retColabMes  = ''; // mês selecionado na tabela de produção (YYYY-MM)
 const _retTabLoaded   = {};
 const _retVisitasCache = {}; // { osId: count } — persiste entre re-renders
 
@@ -3823,35 +3824,59 @@ function _retRenderMainDashboard(d) {
     const porAssunto = d.por_assunto || [];
     const porCidade  = d.por_cidade  || [];
 
-    // ── Gráfico de tendência (barras agrupadas: total vs finalizadas por mês) ──
-    let trendHtml = '';
-    if (tendencia.length) {
-        const maxT = Math.max(...tendencia.map(m => m.total), 1);
-        const bars = tendencia.slice(-18).map(m => {
-            const pctT = Math.round((m.total / maxT) * 100);
+    // ── Gráficos de evolução: um por assunto, 3 barras (Total / Finalizadas / Abertas) ──
+    const _ASSUNTO_SHORT = {
+        'RETIRADA DE EQUIPAMENTO':                    'Retirada de Equipamento',
+        'INADIMPLENCIA RETIRADA':                     'Inadimplência Retirada',
+        'EQUIPAMENTO NÃO RETIRADO':                   'Equip. Não Retirado',
+        'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL':    'Ret. Ponto Adicional',
+        'CANCELAMENTO RETIRADA':                      'Cancelamento Retirada',
+    };
+
+    const _buildBars = (meses) => {
+        if (!meses || !meses.length) return '';
+        const maxT = Math.max(...meses.map(m => m.total), 1);
+        return meses.slice(-18).map(m => {
+            const abertas = m.abertas_status || 0;
+            const pctT = Math.round((m.total      / maxT) * 100);
             const pctF = Math.round((m.finalizadas / maxT) * 100);
+            const pctA = Math.round((abertas       / maxT) * 100);
             const [yy, mm] = m.mes.split('-');
-            const lbl = `${mm}/${yy.slice(2)}`;
-            return `<div class="flex flex-col items-center gap-0.5 flex-1 min-w-0 group" title="${m.mes}: ${m.total} OS, ${m.finalizadas} finalizadas">
-                <span class="text-[10px] font-semibold text-gray-600 group-hover:text-blue-700">${m.total}</span>
-                <div class="w-full relative" style="height:80px;display:flex;align-items:flex-end;gap:1px;">
-                    <div class="flex-1 bg-blue-400 rounded-t opacity-80 transition-all" style="height:${pctT}%;min-height:2px;" title="Total: ${m.total}"></div>
-                    <div class="flex-1 bg-green-400 rounded-t opacity-80 transition-all" style="height:${pctF}%;min-height:${m.finalizadas?'2px':'0'};" title="Finalizadas: ${m.finalizadas}"></div>
+            return `<div class="flex flex-col items-center gap-0.5 flex-1 min-w-0 group"
+                         title="${mm}/${yy.slice(2)}: ${m.total} total | ${m.finalizadas} finalizadas | ${abertas} abertas">
+                <span class="text-[8px] font-semibold text-gray-500">${m.total}</span>
+                <div class="w-full" style="height:70px;display:flex;align-items:flex-end;gap:1px;">
+                    <div class="flex-1 bg-blue-400 rounded-t opacity-80" style="height:${pctT}%;min-height:2px;"></div>
+                    <div class="flex-1 bg-green-400 rounded-t opacity-80" style="height:${pctF}%;min-height:${m.finalizadas?'2px':'0'};"></div>
+                    <div class="flex-1 bg-orange-400 rounded-t opacity-80" style="height:${pctA}%;min-height:${abertas?'2px':'0'};"></div>
                 </div>
-                <span class="text-[10px] text-gray-400 truncate w-full text-center">${lbl}</span>
+                <span class="text-[8px] text-gray-400 truncate w-full text-center">${mm}/${yy.slice(2)}</span>
             </div>`;
         }).join('');
-        trendHtml = `
-        <div class="bg-white border border-gray-100 rounded-xl p-4 mb-4">
-          <div class="flex items-center justify-between mb-3">
-            <span class="text-sm font-semibold text-gray-700">Evolução Mensal de OS</span>
-            <div class="flex gap-3 text-xs text-gray-500">
-              <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded bg-blue-400"></span> Total</span>
-              <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded bg-green-400"></span> Finalizadas</span>
-            </div>
-          </div>
-          <div class="flex items-end gap-1 px-1" style="height:100px;">${bars}</div>
-        </div>`;
+    };
+
+    const _legend = `<div class="flex gap-3 text-xs text-gray-500 flex-shrink-0">
+        <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded bg-blue-400"></span>Total</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded bg-green-400"></span>Finalizadas</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded bg-orange-400"></span>Abertas</span>
+    </div>`;
+
+    let trendHtml = '';
+    if (tendencia && typeof tendencia === 'object' && !Array.isArray(tendencia)) {
+        const cards = Object.entries(tendencia).map(([assunto, meses]) => {
+            const titulo = _ASSUNTO_SHORT[assunto] || assunto;
+            const bars   = _buildBars(meses);
+            const totMes = meses.length ? meses[meses.length-1] : null;
+            const badge  = totMes ? `<span class="text-xs text-gray-400 ml-2">${totMes.total} em ${totMes.mes.slice(5)}/${totMes.mes.slice(2,4)}</span>` : '';
+            return `<div class="bg-white border border-gray-100 rounded-xl p-3">
+              <div class="flex items-center justify-between mb-2 flex-wrap gap-1">
+                <span class="text-xs font-semibold text-gray-700">${titulo}${badge}</span>
+                ${_legend}
+              </div>
+              <div class="flex items-end gap-0.5 px-0.5" style="height:80px;">${bars}</div>
+            </div>`;
+        }).join('');
+        trendHtml = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">${cards}</div>`;
     }
 
     // ── Horizontal bars helper ──
@@ -3919,49 +3944,92 @@ function _retRenderMainDashboard(d) {
       </div>
     </div>`;
 
-    // ── Produção por técnico (4 cidades operacionais) ──
-    const porColab = d.por_colaborador || [];
+    // ── Produção por técnico: grid dia-a-dia ──
+    const porColab  = d.por_colaborador || [];
+    const numDays   = d.colab_num_days  || 31;
+    const colabMes  = d.colab_mes       || '';
+    if (!_retColabMes && colabMes) _retColabMes = colabMes;
+
+    // Gera opções dos últimos 13 meses
+    const _retMesOptions = (() => {
+        const opts = [];
+        const now = new Date();
+        for (let i = 0; i <= 12; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+            const mm = String(d.getMonth()+1).padStart(2,'0');
+            const yy = d.getFullYear();
+            opts.push({ val: ym, lbl: `${mm}/${yy}` });
+        }
+        return opts;
+    })();
+
+    const _retColabLabel = mes => {
+        const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+        if (!mes) return '';
+        const [y, m] = mes.split('-');
+        return meses[parseInt(m)-1] + ' ' + y;
+    };
+
     let colabHtml = '';
-    if (porColab.length) {
-        const maxC = Math.max(...porColab.map(x => x.total), 1);
-        const rows = porColab.map((x, i) => {
-            const pctFin = x.total ? Math.round(x.finalizadas / x.total * 100) : 0;
-            const pctBar = Math.round(x.total / maxC * 100);
-            const rank   = i < 3 ? ['🥇','🥈','🥉'][i] : `${i+1}º`;
-            return `<tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                <td class="py-2 px-3 text-xs text-gray-500 font-mono w-8 text-center">${rank}</td>
-                <td class="py-2 px-3">
-                    <div class="text-sm font-medium text-gray-800">${x.nome}</div>
-                    <div class="mt-1 w-full bg-gray-100 rounded-full h-1.5">
-                        <div class="bg-blue-400 h-1.5 rounded-full" style="width:${pctBar}%"></div>
-                    </div>
-                </td>
-                <td class="py-2 px-3 text-center text-sm font-bold text-gray-800 tabular-nums">${x.total}</td>
-                <td class="py-2 px-3 text-center text-sm font-semibold text-green-600 tabular-nums">${x.finalizadas}</td>
-                <td class="py-2 px-3 text-center text-sm text-red-500 tabular-nums">${x.pendentes}</td>
-                <td class="py-2 px-3 text-center">
-                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${pctFin >= 70 ? 'bg-green-100 text-green-700' : pctFin >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'}">${pctFin}%</span>
-                </td>
+    const _renderColabTable = (colab, nDays, mes) => {
+        if (!colab.length) return '<div class="p-4 text-gray-400 text-sm">Nenhum técnico com OS neste mês.</div>';
+        const days = Array.from({length: nDays}, (_, i) => i + 1);
+        const thDays = days.map(d => `<th class="px-1 text-center text-[10px] text-gray-400 font-medium min-w-[22px]">${String(d).padStart(2,'0')}</th>`).join('');
+        const rows = colab.map(x => {
+            const cells = days.map(d => {
+                const n = x.dias[d] || 0;
+                return n > 0
+                    ? `<td class="px-1 text-center text-[11px] font-semibold text-blue-700 tabular-nums">${n}</td>`
+                    : `<td class="px-1 text-center text-[11px] text-gray-300">-</td>`;
+            }).join('');
+            return `<tr class="border-b border-gray-50 hover:bg-gray-50">
+                <td class="py-1.5 px-3 text-xs font-medium text-gray-800 whitespace-nowrap sticky left-0 bg-white">${x.nome}</td>
+                ${cells}
+                <td class="py-1.5 px-2 text-center text-xs font-bold text-gray-900 tabular-nums">${x.total}</td>
             </tr>`;
         }).join('');
-        colabHtml = `
-        <div class="bg-white border border-gray-100 rounded-xl p-4 mt-4">
-          <div class="flex items-center justify-between mb-3">
-            <span class="text-sm font-semibold text-gray-700">Produção por Técnico <span class="text-xs font-normal text-gray-400 ml-1">(Dom Pedro · Presidente Dutra · Tuntum · São Domingos)</span></span>
-          </div>
-          <table class="w-full">
+        const totals = days.map(d => colab.reduce((s, x) => s + (x.dias[d] || 0), 0));
+        const totalCells = totals.map(n => n > 0
+            ? `<td class="px-1 text-center text-[11px] font-bold text-gray-700 tabular-nums">${n}</td>`
+            : `<td class="px-1 text-center text-[11px] text-gray-300">-</td>`).join('');
+        const grandTotal = colab.reduce((s, x) => s + x.total, 0);
+        return `<table class="text-left w-full" style="border-collapse:collapse;">
             <thead>
-              <tr class="border-b border-gray-100">
-                <th class="text-left text-xs text-gray-400 font-medium pb-2 px-3 w-8">#</th>
-                <th class="text-left text-xs text-gray-400 font-medium pb-2 px-3">Técnico</th>
-                <th class="text-center text-xs text-gray-400 font-medium pb-2 px-3">Total</th>
-                <th class="text-center text-xs text-gray-400 font-medium pb-2 px-3">Retiradas</th>
-                <th class="text-center text-xs text-gray-400 font-medium pb-2 px-3">Pendentes</th>
-                <th class="text-center text-xs text-gray-400 font-medium pb-2 px-3">Taxa</th>
+              <tr class="bg-gray-800 text-white">
+                <th class="py-1.5 px-3 text-xs font-semibold whitespace-nowrap sticky left-0 bg-gray-800 z-10">Técnico</th>
+                ${thDays}
+                <th class="px-2 text-center text-xs font-semibold">Total</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
-          </table>
+            <tfoot>
+              <tr class="bg-gray-50 border-t-2 border-gray-200">
+                <td class="py-1.5 px-3 text-xs font-bold text-gray-700 sticky left-0 bg-gray-50">Total</td>
+                ${totalCells}
+                <td class="px-2 text-center text-xs font-bold text-gray-900">${grandTotal}</td>
+              </tr>
+            </tfoot>
+          </table>`;
+    };
+
+    if (porColab.length || colabMes) {
+        const selOpts = _retMesOptions.map(o =>
+            `<option value="${o.val}" ${o.val === _retColabMes ? 'selected' : ''}>${o.lbl}</option>`
+        ).join('');
+        colabHtml = `
+        <div class="bg-white border border-gray-100 rounded-xl p-4 mt-4">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <span class="text-sm font-semibold text-gray-700">Produção por Técnico
+              <span class="text-xs font-normal text-gray-400 ml-1">(Dom Pedro · Presidente Dutra · Tuntum · São Domingos)</span>
+            </span>
+            <select id="ret-colab-mes-sel" class="border border-gray-300 rounded px-2 py-1 text-xs text-gray-700 bg-white">
+              ${selOpts}
+            </select>
+          </div>
+          <div id="ret-colab-table-wrap" class="overflow-x-auto">
+            ${_renderColabTable(porColab, numDays, _retColabMes)}
+          </div>
         </div>`;
     }
 
@@ -3975,6 +4043,23 @@ function _retRenderMainDashboard(d) {
       </div>
       ${colabHtml}
     </div>`;
+
+    // Event listener para o seletor de mês da tabela de técnicos
+    const mesSel = el.querySelector('#ret-colab-mes-sel');
+    if (mesSel) {
+        mesSel.addEventListener('change', async () => {
+            _retColabMes = mesSel.value;
+            const wrap = el.querySelector('#ret-colab-table-wrap');
+            if (wrap) wrap.innerHTML = '<div class="p-4 text-center text-gray-400">Carregando...</div>';
+            try {
+                const r = await fetch(`/api/behavior/retiradas/producao-tecnico?mes=${_retColabMes}`).then(r => r.json());
+                if (r.error) { wrap.innerHTML = `<div class="p-4 text-red-500">${r.error}</div>`; return; }
+                wrap.innerHTML = _renderColabTable(r.por_colaborador || [], r.num_days || 31, _retColabMes);
+            } catch(e) {
+                if (wrap) wrap.innerHTML = '<div class="p-4 text-red-500">Erro ao carregar</div>';
+            }
+        });
+    }
 }
 
 function _retRenderDashboard(d, o) {

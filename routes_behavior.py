@@ -3787,6 +3787,7 @@ def api_behavior_retiradas():
             conds.append("o.Bairro = ?"); params.append(bairro_f)
         if colab_f:
             conds.append("o.Colaborador = ?"); params.append(colab_f)
+        contratos_com_equip = []
         if equip_f:
             contratos_com_equip = [
                 str(r[0]) for r in conn.execute(
@@ -3877,35 +3878,76 @@ def api_behavior_retiradas():
         """, params).fetchall()
 
         _ph_cid = ','.join('?' * len(_CIDADES_OP))
-        por_colaborador = conn.execute(f"""
+
+        # Tendência: WHERE sem filtro de status para mostrar TODAS as OS abertas no mês
+        trend_conds  = [f"o.Assunto IN ({ph})"]
+        trend_params = list(RETIRADA_ASSUNTOS)
+        if assunto_f: trend_conds.append("o.Assunto = ?");     trend_params.append(assunto_f)
+        if filial_f:  trend_conds.append("o.Filial = ?");      trend_params.append(filial_f)
+        if cidade_f:  trend_conds.append("o.Cidade = ?");      trend_params.append(cidade_f)
+        if bairro_f:  trend_conds.append("o.Bairro = ?");      trend_params.append(bairro_f)
+        if colab_f:   trend_conds.append("o.Colaborador = ?"); trend_params.append(colab_f)
+        if equip_f and contratos_com_equip:
+            ph_eq2 = ','.join('?' * len(contratos_com_equip))
+            trend_conds.append(f"CAST(o.Contrato AS TEXT) IN ({ph_eq2})")
+            trend_params.extend(contratos_com_equip)
+        elif equip_f:
+            trend_conds.append("1=0")
+        trend_where = 'WHERE ' + ' AND '.join(trend_conds)
+
+        tend_rows = conn.execute(f"""
+            SELECT o.Assunto,
+                   strftime('%Y-%m', o.Abertura) ym,
+                   COUNT(*),
+                   COUNT(CASE WHEN o.Status = 'Finalizada' THEN 1 END),
+                   COUNT(CASE WHEN o.Status = 'Aberta'     THEN 1 END)
+            FROM OS o {trend_where}
+            AND o.Abertura >= date('now','-12 months')
+            GROUP BY o.Assunto, ym ORDER BY o.Assunto, ym
+        """, trend_params).fetchall()
+
+        # Agrupa por assunto
+        from collections import defaultdict as _dd
+        _tend_map = _dd(list)
+        for r in tend_rows:
+            _tend_map[r[0]].append({'mes': r[1], 'total': r[2], 'finalizadas': r[3], 'abertas_status': r[4]})
+        tendencia = dict(_tend_map)
+
+        # Produção por técnico: dia-a-dia do mês atual
+        from datetime import date as _date
+        import calendar as _cal
+        _today = _date.today()
+        _cur_ym = _today.strftime('%Y-%m')
+        _, _num_days = _cal.monthrange(_today.year, _today.month)
+
+        por_dia_rows = conn.execute(f"""
             SELECT o.Colaborador,
-                   COUNT(*) AS total,
-                   COUNT(CASE WHEN o.Status = 'Finalizada' THEN 1 END) AS finalizadas,
-                   COUNT(CASE WHEN o.Status IN ('Aberta','Encaminhada','Agendada') THEN 1 END) AS pendentes
-            FROM OS o {where}
+                   CAST(strftime('%d', o.Abertura) AS INTEGER) AS dia,
+                   COUNT(*) AS cnt
+            FROM OS o
+            WHERE o.Assunto IN ({ph})
             AND o.Cidade IN ({_ph_cid})
             AND o.Colaborador IS NOT NULL AND TRIM(o.Colaborador) != '' AND o.Colaborador != '0'
-            GROUP BY o.Colaborador
-            ORDER BY total DESC
-        """, params + list(_CIDADES_OP)).fetchall()
+            AND strftime('%Y-%m', o.Abertura) = ?
+            GROUP BY o.Colaborador, dia
+            ORDER BY o.Colaborador, dia
+        """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP) + [_cur_ym]).fetchall()
 
         _tec_map = _get_tecnicos_map()
-        por_colab_fmt = []
-        for r in por_colaborador:
+        _colab_dias = {}
+        for r in por_dia_rows:
             cid = str(r[0]).strip()
-            nome = _tec_map.get(cid) or _tec_map.get(cid.lstrip('0')) or f'#{cid}'
-            por_colab_fmt.append({
-                'id': cid, 'nome': nome,
-                'total': r[1], 'finalizadas': r[2], 'pendentes': r[3]
-            })
+            if cid not in _colab_dias:
+                nome = _tec_map.get(cid) or _tec_map.get(cid.lstrip('0')) or f'#{cid}'
+                _colab_dias[cid] = {'id': cid, 'nome': nome, 'dias': {}}
+            _colab_dias[cid]['dias'][r[1]] = r[2]
 
-        tendencia = conn.execute(f"""
-            SELECT strftime('%Y-%m', o.Abertura) ym, COUNT(*),
-                   COUNT(CASE WHEN o.Status = 'Finalizada' THEN 1 END)
-            FROM OS o {where}
-            AND o.Abertura >= date('now','-12 months')
-            GROUP BY ym ORDER BY ym
-        """, params).fetchall()
+        por_colab_fmt = sorted(
+            [{'id': v['id'], 'nome': v['nome'], 'dias': v['dias'],
+              'total': sum(v['dias'].values())}
+             for v in _colab_dias.values()],
+            key=lambda x: -x['total']
+        )
 
         total  = kpi_row[0] if kpi_row else 0
         offset = (page - 1) * limit
@@ -4046,7 +4088,9 @@ def api_behavior_retiradas():
             'por_assunto':      [{'assunto': r[0], 'total': r[1]} for r in por_assunto],
             'por_cidade':       [{'cidade': r[0] or '—', 'total': r[1]} for r in por_cidade],
             'por_colaborador':  por_colab_fmt,
-            'tendencia':        [{'mes': r[0], 'total': r[1], 'finalizadas': r[2]} for r in tendencia],
+            'colab_num_days':   _num_days,
+            'colab_mes':        _cur_ym,
+            'tendencia':        tendencia,
             'ordens':      [fmt(r) for r in rows],
             'visitas_map': {str(i): cached.get(str(i), 0) for i in qualified} if min_visitas_f > 0 else {},
             'total':       total,
@@ -4484,6 +4528,61 @@ def api_ret_arquivos_counts():
     except Exception as e:
         logger.error(f"Erro arquivos-counts: {e}", exc_info=True)
         return jsonify({'counts': {}})
+
+
+@behavior_bp.route('/retiradas/producao-tecnico')
+def api_ret_producao_tecnico():
+    """Produção dia-a-dia por técnico para um mês específico."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    import re as _re, calendar as _cal
+    mes = request.args.get('mes', '')
+    if not mes or not _re.match(r'^\d{4}-\d{2}$', mes):
+        from datetime import date as _d
+        mes = _d.today().strftime('%Y-%m')
+    conn = None
+    try:
+        conn = current_app.config['GET_DB_CONNECTION']()
+        ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
+        _CIDADES_OP = ('Dom Pedro', 'Presidente Dutra', 'Tuntum', 'São Domingos do Maranhão')
+        _ph_cid = ','.join('?' * len(_CIDADES_OP))
+        year, month = int(mes[:4]), int(mes[5:])
+        _, num_days = _cal.monthrange(year, month)
+
+        rows = conn.execute(f"""
+            SELECT o.Colaborador,
+                   CAST(strftime('%d', o.Abertura) AS INTEGER) AS dia,
+                   COUNT(*) AS cnt
+            FROM OS o
+            WHERE o.Assunto IN ({ph})
+            AND o.Cidade IN ({_ph_cid})
+            AND o.Colaborador IS NOT NULL AND TRIM(o.Colaborador) != '' AND o.Colaborador != '0'
+            AND strftime('%Y-%m', o.Abertura) = ?
+            GROUP BY o.Colaborador, dia
+            ORDER BY o.Colaborador, dia
+        """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP) + [mes]).fetchall()
+
+        _tec_map = _get_tecnicos_map()
+        _colab_dias = {}
+        for r in rows:
+            cid = str(r[0]).strip()
+            if cid not in _colab_dias:
+                nome = _tec_map.get(cid) or _tec_map.get(cid.lstrip('0')) or f'#{cid}'
+                _colab_dias[cid] = {'id': cid, 'nome': nome, 'dias': {}}
+            _colab_dias[cid]['dias'][r[1]] = r[2]
+
+        por_colab = sorted(
+            [{'id': v['id'], 'nome': v['nome'], 'dias': v['dias'],
+              'total': sum(v['dias'].values())}
+             for v in _colab_dias.values()],
+            key=lambda x: -x['total']
+        )
+        return jsonify({'por_colaborador': por_colab, 'num_days': num_days, 'mes': mes})
+    except Exception as e:
+        logger.error(f"Erro producao-tecnico: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
 
 
 @behavior_bp.route('/retiradas/sync-visitas', methods=['POST'])
