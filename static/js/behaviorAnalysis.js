@@ -3280,8 +3280,10 @@ const _retTabLoaded   = {};
 const _retVisitasCache = {}; // { osId: count } — persiste entre re-renders
 
 // Tabela dia×técnico compartilhada por Produção e Atividade
-function _renderColabTable(colab, nDays, mes) {
+// tableType: 'producao' | 'atividade'
+function _renderColabTable(colab, nDays, mes, tableType) {
     if (!colab.length) return '<div class="p-4 text-gray-400 text-sm">Nenhum técnico com OS neste mês.</div>';
+    const tbl = tableType || 'producao';
     const days = Array.from({length: nDays}, (_, i) => i + 1);
     const _COL_COLORS = ['text-blue-600', 'text-blue-900'];
     const _BG_COLORS  = ['bg-blue-50',    'bg-blue-100'];
@@ -3295,7 +3297,8 @@ function _renderColabTable(colab, nDays, mes) {
             const cls = _COL_COLORS[i % _COL_COLORS.length];
             const bg  = _BG_COLORS[i % _BG_COLORS.length];
             return n > 0
-                ? `<td class="px-1 text-center text-[11px] font-bold tabular-nums ${cls} ${bg}">${n}</td>`
+                ? `<td class="px-1 text-center text-[11px] font-bold tabular-nums ${cls} ${bg} cursor-pointer hover:ring-1 hover:ring-blue-400 hover:z-10 relative ret-colab-cell"
+                       data-colab="${x.id}" data-dia="${d}" data-mes="${mes}" data-tbl="${tbl}">${n}</td>`
                 : `<td class="px-1 text-center text-[11px] text-gray-400 ${bg}">-</td>`;
         }).join('');
         return `<tr class="border-b border-white hover:brightness-95">
@@ -3313,7 +3316,7 @@ function _renderColabTable(colab, nDays, mes) {
             : `<td class="px-1 text-center text-[11px] text-gray-400 ${bg}">-</td>`;
     }).join('');
     const grandTotal = colab.reduce((s, x) => s + x.total, 0);
-    return `<table class="text-left w-full" style="border-collapse:collapse;">
+    return `<table class="text-left w-full ret-colab-table" data-tbl="${tbl}" data-mes="${mes}" style="border-collapse:collapse;">
         <thead>
           <tr class="bg-gray-800 text-white">
             <th class="py-1.5 px-3 text-xs font-semibold whitespace-nowrap sticky left-0 bg-gray-800 z-10">Técnico</th>
@@ -3331,6 +3334,91 @@ function _renderColabTable(colab, nDays, mes) {
         </tfoot>
       </table>`;
 }
+
+// Modal compartilhado para células da tabela de técnicos
+window._retColabCellModal = async function(colab, dia, mes, tableType) {
+    document.getElementById('ret-colab-cell-modal')?.remove();
+    const endpoint = tableType === 'atividade'
+        ? `/api/behavior/retiradas/atividade-tecnico-os`
+        : `/api/behavior/retiradas/producao-tecnico-os`;
+    const tituloTbl = tableType === 'atividade' ? 'Atividade (fotos/arquivos IXC)' : 'Produção (OS abertas)';
+    const diaFmt = String(dia).padStart(2, '0');
+    const mesPartes = mes.split('-');
+    const dataLabel = `${diaFmt}/${mesPartes[1]}/${mesPartes[0]}`;
+
+    const modal = document.createElement('div');
+    modal.id = 'ret-colab-cell-modal';
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50';
+    modal.innerHTML = `
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col">
+          <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <div>
+              <div class="text-sm font-semibold text-gray-800" id="ret-ccm-titulo">Carregando...</div>
+              <div class="text-xs text-gray-400">${tituloTbl} · ${dataLabel}</div>
+            </div>
+            <button onclick="document.getElementById('ret-colab-cell-modal').remove()"
+                    class="text-gray-400 hover:text-gray-700 text-xl font-bold leading-none">×</button>
+          </div>
+          <div id="ret-ccm-body" class="overflow-auto flex-1 p-4">
+            <div class="text-center text-gray-400 py-8">Carregando...</div>
+          </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+    try {
+        const q = new URLSearchParams({ colab, mes, dia });
+        const d = await fetch(`${endpoint}?${q}`).then(r => r.json());
+        const tit = document.getElementById('ret-ccm-titulo');
+        const body = document.getElementById('ret-ccm-body');
+        if (!tit || !body) return;
+        if (d.error) { body.innerHTML = `<div class="text-red-500">${d.error}</div>`; return; }
+        if (tit) tit.textContent = d.tecnico || 'Técnico';
+        const ordens = d.ordens || [];
+        if (!ordens.length) {
+            body.innerHTML = '<div class="text-center text-gray-400 py-8">Nenhuma OS encontrada.</div>';
+            return;
+        }
+        const STATUS_CLS = {
+            Aberta:      'bg-red-100 text-red-700',
+            Encaminhada: 'bg-yellow-100 text-yellow-700',
+            Agendada:    'bg-blue-100 text-blue-700',
+            Finalizada:  'bg-green-100 text-green-700',
+        };
+        const rows = ordens.map(o => `
+            <tr class="border-b border-gray-50 hover:bg-gray-50 text-xs">
+                <td class="px-3 py-2 font-mono text-gray-500">${o.id}</td>
+                <td class="px-3 py-2 max-w-[200px]">
+                    <span class="font-medium text-blue-700 hover:underline cursor-pointer truncate block" title="${o.cliente||''}"
+                          onclick="window._retClientePerfil('${(o.cliente||'').replace(/'/g,"\\'")}')">
+                        ${o.cliente||'—'}
+                    </span>
+                </td>
+                <td class="px-3 py-2">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_CLS[o.status]||'bg-gray-100 text-gray-600'}">${o.status||'—'}</span>
+                </td>
+                <td class="px-3 py-2 text-gray-500">${o.cidade||'—'}</td>
+                <td class="px-3 py-2 text-gray-400 whitespace-nowrap">${(o.abertura||'').slice(0,10)}</td>
+            </tr>`).join('');
+        body.innerHTML = `
+            <div class="text-xs text-gray-400 mb-2">${ordens.length} ordem${ordens.length !== 1 ? 's' : ''}</div>
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="bg-gray-50 text-xs text-gray-500 font-semibold">
+                        <th class="px-3 py-2">ID</th>
+                        <th class="px-3 py-2">Cliente</th>
+                        <th class="px-3 py-2">Status</th>
+                        <th class="px-3 py-2">Cidade</th>
+                        <th class="px-3 py-2">Abertura</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+    } catch(e) {
+        const body = document.getElementById('ret-ccm-body');
+        if (body) body.innerHTML = '<div class="text-red-500">Erro ao carregar OS.</div>';
+    }
+};
 
 // Carrega e renderiza a tabela de atividade diária (fotos/arquivos IXC) por técnico
 async function _retLoadAtividadeTecnico(mes, container) {
@@ -3360,7 +3448,7 @@ async function _retLoadAtividadeTecnico(mes, container) {
               <span class="text-xs font-normal text-gray-400 ml-1">(fotos/arquivos enviados no IXC · clique 🔄 Atualizar para sincronizar)</span>
             </span>
           </div>
-          <div class="overflow-x-auto">${_renderColabTable(colab, numDays, mesSel)}</div>
+          <div class="overflow-x-auto">${_renderColabTable(colab, numDays, mesSel, 'atividade')}</div>
         </div>`;
     } catch(e) {
         wrap.innerHTML = '';
@@ -4130,7 +4218,7 @@ function _retRenderMainDashboard(d) {
             </select>
           </div>
           <div id="ret-colab-table-wrap" class="overflow-x-auto">
-            ${_renderColabTable(porColab, numDays, _retColabMes)}
+            ${_renderColabTable(porColab, numDays, _retColabMes, 'producao')}
           </div>
         </div>`;
     }
@@ -4171,7 +4259,7 @@ function _retRenderMainDashboard(d) {
             try {
                 const r = await fetch(`/api/behavior/retiradas/producao-tecnico?mes=${_retColabMes}`).then(r => r.json());
                 if (r.error) { wrap.innerHTML = `<div class="p-4 text-red-500">${r.error}</div>`; return; }
-                wrap.innerHTML = _renderColabTable(r.por_colaborador || [], r.num_days || 31, _retColabMes);
+                wrap.innerHTML = _renderColabTable(r.por_colaborador || [], r.num_days || 31, _retColabMes, 'producao');
             } catch(e) {
                 if (wrap) wrap.innerHTML = '<div class="p-4 text-red-500">Erro ao carregar</div>';
             }
@@ -4979,3 +5067,11 @@ window._acompDelete = async function(id) {
         alert('Erro ao excluir: ' + err.message);
     }
 };
+
+// Delegated click para células clicáveis das tabelas de técnicos (produção e atividade)
+document.addEventListener('click', e => {
+    const cell = e.target.closest('.ret-colab-cell');
+    if (!cell) return;
+    const { colab, dia, mes, tbl } = cell.dataset;
+    if (colab && dia && mes) window._retColabCellModal(colab, dia, mes, tbl || 'producao');
+});

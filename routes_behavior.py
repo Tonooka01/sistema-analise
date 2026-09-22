@@ -4679,6 +4679,95 @@ def api_ret_producao_tecnico():
         if conn: conn.close()
 
 
+@behavior_bp.route('/retiradas/producao-tecnico-os')
+def api_ret_producao_tecnico_os():
+    """OS de um técnico em um dia específico (Abertura)."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    colab = request.args.get('colab', '').strip()
+    mes   = request.args.get('mes', '').strip()
+    dia   = request.args.get('dia', '').strip()
+    if not colab or not mes or not dia:
+        return jsonify({'error': 'Parâmetros faltando'}), 400
+    conn = None
+    try:
+        conn = current_app.config['GET_DB_CONNECTION']()
+        dia_fmt = dia.zfill(2)
+        data_exata = f"{mes}-{dia_fmt}"
+        rows = conn.execute("""
+            SELECT o.ID, o.Cliente, o.Status, o.Bairro, o.Cidade,
+                   o.Assunto, o.Abertura, o.Mensagem
+            FROM OS o
+            WHERE o.Colaborador = ?
+            AND strftime('%Y-%m-%d', o.Abertura) = ?
+            ORDER BY o.Abertura
+        """, (colab, data_exata)).fetchall()
+        _tec_map = _get_tecnicos_map()
+        nome_tec = _tec_map.get(str(colab)) or f'#{colab}'
+        ordens = [{'id': r[0], 'cliente': r[1], 'status': r[2], 'bairro': r[3],
+                   'cidade': r[4], 'assunto': r[5], 'abertura': r[6], 'mensagem': r[7]}
+                  for r in rows]
+        return jsonify({'ordens': ordens, 'tecnico': nome_tec, 'data': data_exata})
+    except Exception as e:
+        logger.error(f"Erro producao-tecnico-os: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
+@behavior_bp.route('/retiradas/atividade-tecnico-os')
+def api_ret_atividade_tecnico_os():
+    """OS com atividade (fotos/arquivos) de um técnico em um dia específico."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    import json as _json
+    colab = request.args.get('colab', '').strip()
+    mes   = request.args.get('mes', '').strip()
+    dia   = request.args.get('dia', '').strip()
+    if not colab or not mes or not dia:
+        return jsonify({'error': 'Parâmetros faltando'}), 400
+    conn = None
+    try:
+        conn = current_app.config['GET_DB_CONNECTION']()
+        dia_fmt  = dia.zfill(2)
+        data_exata = f"{mes}-{dia_fmt}"
+        # Busca os_ids do cache cuja lista de datas inclui data_exata para esse colaborador
+        cache_rows = conn.execute(
+            "SELECT os_id, datas FROM ret_atividade_cache WHERE colaborador = ?",
+            (colab,)
+        ).fetchall()
+        os_ids_com_ativ = []
+        for os_id, datas_json in cache_rows:
+            try:
+                datas = _json.loads(datas_json or '[]')
+                if data_exata in datas:
+                    os_ids_com_ativ.append(str(os_id))
+            except Exception:
+                continue
+        if not os_ids_com_ativ:
+            _tec_map = _get_tecnicos_map()
+            return jsonify({'ordens': [], 'tecnico': _tec_map.get(str(colab)) or f'#{colab}',
+                            'data': data_exata})
+        ph = ','.join('?' * len(os_ids_com_ativ))
+        rows = conn.execute(f"""
+            SELECT o.ID, o.Cliente, o.Status, o.Bairro, o.Cidade,
+                   o.Assunto, o.Abertura, o.Mensagem
+            FROM OS o WHERE CAST(o.ID AS TEXT) IN ({ph})
+            ORDER BY o.Cliente
+        """, os_ids_com_ativ).fetchall()
+        _tec_map = _get_tecnicos_map()
+        nome_tec = _tec_map.get(str(colab)) or f'#{colab}'
+        ordens = [{'id': r[0], 'cliente': r[1], 'status': r[2], 'bairro': r[3],
+                   'cidade': r[4], 'assunto': r[5], 'abertura': r[6], 'mensagem': r[7]}
+                  for r in rows]
+        return jsonify({'ordens': ordens, 'tecnico': nome_tec, 'data': data_exata})
+    except Exception as e:
+        logger.error(f"Erro atividade-tecnico-os: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
 @behavior_bp.route('/retiradas/atividade-tecnico')
 def api_ret_atividade_tecnico():
     """Atividade dia-a-dia por técnico (fotos/arquivos IXC) para um mês, do cache."""
