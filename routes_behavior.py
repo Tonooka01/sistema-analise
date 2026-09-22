@@ -4645,15 +4645,22 @@ def api_ret_producao_tecnico():
 
         rows = conn.execute(f"""
             SELECT o.Colaborador,
-                   CAST(strftime('%d', o.Fechamento) AS INTEGER) AS dia,
+                   CAST(strftime('%d',
+                       CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                                 AND o.Fechamento NOT LIKE '0000%'
+                            THEN o.Fechamento ELSE o.Final END
+                   ) AS INTEGER) AS dia,
                    COUNT(*) AS cnt
             FROM OS o
             WHERE o.Assunto IN ({ph})
             AND o.Cidade IN ({_ph_cid})
             AND o.Status = 'Finalizada'
-            AND o.Fechamento IS NOT NULL AND o.Fechamento != ''
             AND o.Colaborador IS NOT NULL AND TRIM(o.Colaborador) != '' AND o.Colaborador != '0'
-            AND strftime('%Y-%m', o.Fechamento) = ?
+            AND strftime('%Y-%m',
+                CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                          AND o.Fechamento NOT LIKE '0000%'
+                     THEN o.Fechamento ELSE o.Final END
+            ) = ?
             GROUP BY o.Colaborador, dia
             ORDER BY o.Colaborador, dia
         """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP) + [mes]).fetchall()
@@ -4698,12 +4705,19 @@ def api_ret_producao_tecnico_os():
         data_exata = f"{mes}-{dia_fmt}"
         rows = conn.execute("""
             SELECT o.ID, o.Cliente, o.Status, o.Bairro, o.Cidade,
-                   o.Assunto, o.Abertura, o.Fechamento
+                   o.Assunto, o.Abertura,
+                   CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                             AND o.Fechamento NOT LIKE '0000%'
+                        THEN o.Fechamento ELSE o.Final END AS data_fin
             FROM OS o
             WHERE o.Colaborador = ?
             AND o.Status = 'Finalizada'
-            AND strftime('%Y-%m-%d', o.Fechamento) = ?
-            ORDER BY o.Fechamento
+            AND strftime('%Y-%m-%d',
+                CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                          AND o.Fechamento NOT LIKE '0000%'
+                     THEN o.Fechamento ELSE o.Final END
+            ) = ?
+            ORDER BY data_fin
         """, (colab, data_exata)).fetchall()
         _tec_map = _get_tecnicos_map()
         nome_tec = _tec_map.get(str(colab)) or f'#{colab}'
@@ -4804,8 +4818,11 @@ def api_ret_atividade_tecnico():
             WHERE o.Assunto IN ({ph_ass})
             AND o.Cidade IN ({ph_cid})
             AND o.Status = 'Finalizada'
-            AND o.Fechamento IS NOT NULL AND o.Fechamento != ''
-            AND strftime('%Y-%m', o.Fechamento) = ?
+            AND strftime('%Y-%m',
+                CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                          AND o.Fechamento NOT LIKE '0000%'
+                     THEN o.Fechamento ELSE o.Final END
+            ) = ?
         """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP) + [mes]).fetchall()
         colab_com_fin = {str(r[0]).strip() for r in fin_rows if r[0]}
 
