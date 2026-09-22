@@ -4794,11 +4794,29 @@ def api_ret_atividade_tecnico():
             "SELECT os_id, colaborador, datas FROM ret_atividade_cache"
         ).fetchall()
 
+        # Técnicos com pelo menos uma OS Finalizada no mês (mesmo critério da tabela de Produção)
+        _CIDADES_OP = ('Dom Pedro', 'Presidente Dutra', 'Tuntum', 'São Domingos do Maranhão')
+        ph_ass = ','.join('?' * len(RETIRADA_ASSUNTOS))
+        ph_cid = ','.join('?' * len(_CIDADES_OP))
+        fin_rows = conn.execute(f"""
+            SELECT DISTINCT o.Colaborador
+            FROM OS o
+            WHERE o.Assunto IN ({ph_ass})
+            AND o.Cidade IN ({ph_cid})
+            AND o.Status = 'Finalizada'
+            AND o.Fechamento IS NOT NULL AND o.Fechamento != ''
+            AND strftime('%Y-%m', o.Fechamento) = ?
+        """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP) + [mes]).fetchall()
+        colab_com_fin = {str(r[0]).strip() for r in fin_rows if r[0]}
+
         _tec_map = _get_tecnicos_map()
         _colab_dias = {}
         for os_id, cid, datas_json in rows:
             if not cid or cid == '0':
                 continue
+            cid = str(cid).strip()
+            if cid not in colab_com_fin:
+                continue  # só exibe técnicos com finalizada no mês
             try:
                 datas = _json.loads(datas_json or '[]')
             except Exception:
@@ -4806,7 +4824,6 @@ def api_ret_atividade_tecnico():
             dias_mes = [int(d[8:10]) for d in datas if d.startswith(prefix)]
             if not dias_mes:
                 continue
-            cid = str(cid).strip()
             if cid not in _colab_dias:
                 nome = _tec_map.get(cid) or f'#{cid}'
                 _colab_dias[cid] = {'id': cid, 'nome': nome, 'dias': {}}
