@@ -3638,16 +3638,21 @@ function _retBindEvents(pane) {
                 if (d.counts) {
                     Object.entries(d.counts).forEach(([k, v]) => { _retVisitasCache[parseInt(k)] = v; });
                 }
-                const ativExtra = d.synced_atividade && d.synced_atividade > d.synced
-                    ? ` · histórico: ${d.synced_atividade}` : '';
-                btn.innerHTML = `✅ ${d.synced} sincronizadas${ativExtra}`;
-                setTimeout(() => { btn.innerHTML = origHtml; btn.disabled = false; }, 3000);
+                const bgCount = d.atividade_bg || 0;
+                const bgMsg   = bgCount > 0 ? ` · 🔄 histórico: ${bgCount} em bg` : '';
+                btn.innerHTML = `✅ ${d.synced} sincronizadas${bgMsg}`;
+                setTimeout(() => { btn.innerHTML = origHtml; btn.disabled = false; }, bgCount > 0 ? 8000 : 3000);
                 // Mostra atividade de hoje por técnico
                 if (d.atividade_hoje && Object.keys(d.atividade_hoje).length > 0) {
                     _retMostrarAtividadeHoje(d.atividade_hoje, pane);
                 }
                 // Recarrega tabela de atividade diária com dados frescos do cache
                 _retLoadAtividadeTecnico(_retColabMes, pane);
+                // Se há sync em background, recarrega a tabela de atividade em 20s e 60s
+                if (bgCount > 0) {
+                    setTimeout(() => _retLoadAtividadeTecnico(_retColabMes, pane), 20000);
+                    setTimeout(() => _retLoadAtividadeTecnico(_retColabMes, pane), 60000);
+                }
                 _retLoad();
                 return;
             }

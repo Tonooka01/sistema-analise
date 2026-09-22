@@ -4736,16 +4736,55 @@ def api_ret_atividade_tecnico():
         if conn: conn.close()
 
 
+def _atividade_bg_sync(app, bg_ids, ativ_colab_map, token):
+    """Thread de background: salva atividade IXC para OS do historico amplo."""
+    import json as _json
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    try:
+        with app.app_context():
+            def _fetch_dates(os_id):
+                try:
+                    recs = _ixc_arquivos(os_id, token)
+                    dias = set()
+                    for rec in (recs or []):
+                        dt = (rec.get('data_envio') or rec.get('data') or '')[:10]
+                        if dt and dt != '0000-00-00':
+                            dias.add(dt)
+                    return str(os_id), dias
+                except Exception:
+                    return str(os_id), set()
+
+            rows = []
+            with ThreadPoolExecutor(max_workers=6) as ex:
+                futures = {ex.submit(_fetch_dates, oid): oid for oid in bg_ids}
+                for fut in as_completed(futures):
+                    k, dias = fut.result()
+                    rows.append((k, ativ_colab_map.get(k, ''), _json.dumps(sorted(dias))))
+
+            db = app.config['GET_DB_CONNECTION']()
+            db.execute("""CREATE TABLE IF NOT EXISTS ret_atividade_cache
+                (os_id TEXT PRIMARY KEY, colaborador TEXT, datas TEXT, updated_at TEXT)""")
+            db.executemany(
+                "INSERT OR REPLACE INTO ret_atividade_cache VALUES(?,?,?,datetime('now'))",
+                rows)
+            db.commit()
+            db.close()
+            logger.info(f"BG atividade sync concluido: {len(rows)} OS")
+    except Exception as e:
+        logger.error(f"BG atividade sync erro: {e}", exc_info=True)
+
+
 @behavior_bp.route('/retiradas/sync-visitas', methods=['POST'])
 def api_ret_sync_visitas():
-    """Busca e salva visitas no cache SQLite para TODAS as OS que batem os filtros."""
+    """Busca e salva visitas no cache SQLite para as OS que batem os filtros.
+    A parte de atividade historica (12 meses) roda em background para nao causar timeout."""
     if not current_user.is_authenticated:
         return jsonify({'error': 'Não autenticado'}), 401
     conn = None
     try:
         conn = current_app.config['GET_DB_CONNECTION']()
 
-        # Reproduz a mesma lógica de filtro da rota /retiradas (sem min_visitas)
+        # Filtros da UI (para visitas)
         status_f  = request.args.get('status', '')
         assunto_f = request.args.get('assunto', '')
         filial_f  = request.args.get('filial', '')
@@ -4804,8 +4843,7 @@ def api_ret_sync_visitas():
         os_rows = conn.execute(
             f"SELECT o.ID, o.Colaborador FROM OS o {where}", params).fetchall()
 
-        # Broader query for atividade cache: last 12 months, sem filtros de data/status/pesquisa
-        # Garante historico completo independente dos filtros da UI
+        # Query ampla para atividade (12 meses, sem filtros de data/status/pesquisa)
         ativ_ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
         ativ_conds  = [f"o.Assunto IN ({ativ_ph})", "o.Abertura >= date('now', '-12 months')"]
         ativ_params = list(RETIRADA_ASSUNTOS)
@@ -4819,23 +4857,32 @@ def api_ret_sync_visitas():
         ativ_rows = conn.execute(
             f"SELECT o.ID, o.Colaborador FROM OS o {ativ_where}", ativ_params).fetchall()
 
+        # Quais OS do historico ja estao frescos no cache (atualizados ha menos de 7 dias)
+        conn.execute("""CREATE TABLE IF NOT EXISTS ret_atividade_cache
+            (os_id TEXT PRIMARY KEY, colaborador TEXT, datas TEXT, updated_at TEXT)""")
+        fresh_set = set(
+            r[0] for r in conn.execute(
+                "SELECT os_id FROM ret_atividade_cache WHERE updated_at >= datetime('now', '-7 days')"
+            ).fetchall()
+        )
+
         conn.close()
         conn = None
 
-        all_ids    = [r[0] for r in os_rows]
-        colab_map  = {str(r[0]): str(r[1] or '') for r in os_rows}  # os_id → colaborador_id
-
-        # Merge broader atividade rows (não sobrescreve entradas do set filtrado)
+        visitas_set    = set(str(r[0]) for r in os_rows)
+        colab_map      = {str(r[0]): str(r[1] or '') for r in os_rows}
         ativ_colab_map = {str(r[0]): str(r[1] or '') for r in ativ_rows}
-        ativ_colab_map.update(colab_map)
-        ativ_ids = list(ativ_colab_map.keys())
+        ativ_colab_map.update(colab_map)  # filtrado tem prioridade
 
-        # OS que precisam ser buscadas no IXC = union de visitas (filtradas) + atividade (amplo)
-        visitas_set = set(str(i) for i in all_ids)
-        combined_ids = list(set(ativ_ids) | visitas_set)
+        # IDs a buscar agora (sync): apenas OS filtradas pelo usuario
+        sync_ids = list(visitas_set)
+        # IDs a buscar em background: OS do historico amplo nao frescas e nao no sync
+        bg_ids   = [oid for oid in ativ_colab_map if oid not in visitas_set
+                    and oid not in fresh_set]
 
-        if not combined_ids:
-            return jsonify({'synced': 0, 'counts': {}, 'atividade_hoje': {}})
+        if not sync_ids and not bg_ids:
+            return jsonify({'synced': 0, 'counts': {}, 'atividade_hoje': {},
+                            'atividade_bg': 0})
 
         token = _ret_get_token()
         if not token:
@@ -4843,6 +4890,7 @@ def api_ret_sync_visitas():
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
         from datetime import date as _date
+        import json as _json
         _today = _date.today().isoformat()
 
         def _count_one(os_id):
@@ -4859,11 +4907,11 @@ def api_ret_sync_visitas():
             except Exception:
                 return str(os_id), 0, set()
 
-        import json as _json
+        # Busca sincrona: apenas OS filtradas
         counts    = {}
-        datas_map = {}  # os_id → set of dates with activity
+        datas_map = {}
         with ThreadPoolExecutor(max_workers=8) as ex:
-            futures = {ex.submit(_count_one, oid): oid for oid in combined_ids}
+            futures = {ex.submit(_count_one, oid): oid for oid in sync_ids}
             for fut in as_completed(futures):
                 k, n, dias = fut.result()
                 counts[k]    = n
@@ -4876,34 +4924,43 @@ def api_ret_sync_visitas():
             (os_id TEXT PRIMARY KEY, visitas INTEGER DEFAULT 0, updated_at TEXT)""")
         db.execute("""CREATE TABLE IF NOT EXISTS ret_atividade_cache
             (os_id TEXT PRIMARY KEY, colaborador TEXT, datas TEXT, updated_at TEXT)""")
-        # Visitas: apenas OS do set filtrado
         db.executemany(
             "INSERT OR REPLACE INTO ret_visitas_cache VALUES(?,?,datetime('now'))",
             [(k, counts.get(k, 0)) for k in visitas_set])
-        # Atividade: todos os OS (set amplo dos últimos 12 meses)
         db.executemany(
             "INSERT OR REPLACE INTO ret_atividade_cache VALUES(?,?,?,datetime('now'))",
-            [(k, ativ_colab_map.get(k, colab_map.get(k, '')),
-              _json.dumps(sorted(datas_map.get(k, set()))))
-             for k in ativ_ids])
+            [(k, colab_map.get(k, ''), _json.dumps(sorted(datas_map.get(k, set()))))
+             for k in visitas_set if k in datas_map])
         db.commit()
+        db.close()
 
-        # Atividade hoje por técnico (para resposta imediata)
+        # Atividade hoje (apenas das OS ja buscadas)
         from collections import defaultdict as _dd
         _ativ_colab = _dd(int)
-        for oid in ativ_ids:
-            dias = datas_map.get(oid, set())
+        for oid, dias in datas_map.items():
             if _today in dias:
-                cid  = ativ_colab_map.get(oid, '')
+                cid  = colab_map.get(oid, '')
                 nome = tec_map.get(cid, cid) if cid else '—'
                 _ativ_colab[nome] += 1
         atividade_hoje = dict(_ativ_colab)
 
-        db.close()
+        # Dispara sync de historico em background (nao bloqueia resposta)
+        import threading
+        if bg_ids:
+            app_obj = current_app._get_current_object()
+            threading.Thread(
+                target=_atividade_bg_sync,
+                args=(app_obj, bg_ids, ativ_colab_map, token),
+                daemon=True
+            ).start()
 
-        return jsonify({'synced': len(visitas_set), 'synced_atividade': len(ativ_ids),
-                        'counts': {k: counts.get(k, 0) for k in visitas_set},
-                        'atividade_hoje': atividade_hoje})
+        return jsonify({
+            'synced': len(visitas_set),
+            'synced_atividade': len(bg_ids),
+            'counts': counts,
+            'atividade_hoje': atividade_hoje,
+            'atividade_bg': len(bg_ids),
+        })
     except Exception as e:
         if conn:
             try: conn.close()
