@@ -4679,6 +4679,63 @@ def api_ret_producao_tecnico():
         if conn: conn.close()
 
 
+@behavior_bp.route('/retiradas/atividade-tecnico')
+def api_ret_atividade_tecnico():
+    """Atividade dia-a-dia por técnico (fotos/arquivos IXC) para um mês, do cache."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    import re as _re, calendar as _cal, json as _json
+    mes = request.args.get('mes', '')
+    if not mes or not _re.match(r'^\d{4}-\d{2}$', mes):
+        from datetime import date as _d
+        mes = _d.today().strftime('%Y-%m')
+    conn = None
+    try:
+        conn = current_app.config['GET_DB_CONNECTION']()
+        conn.execute("""CREATE TABLE IF NOT EXISTS ret_atividade_cache
+            (os_id TEXT PRIMARY KEY, colaborador TEXT, datas TEXT, updated_at TEXT)""")
+        year, month = int(mes[:4]), int(mes[5:])
+        _, num_days = _cal.monthrange(year, month)
+        prefix = mes + '-'
+
+        rows = conn.execute(
+            "SELECT os_id, colaborador, datas FROM ret_atividade_cache"
+        ).fetchall()
+
+        _tec_map = _get_tecnicos_map()
+        _colab_dias = {}
+        for os_id, cid, datas_json in rows:
+            if not cid or cid == '0':
+                continue
+            try:
+                datas = _json.loads(datas_json or '[]')
+            except Exception:
+                continue
+            dias_mes = [int(d[8:10]) for d in datas if d.startswith(prefix)]
+            if not dias_mes:
+                continue
+            cid = str(cid).strip()
+            if cid not in _colab_dias:
+                nome = _tec_map.get(cid) or f'#{cid}'
+                _colab_dias[cid] = {'id': cid, 'nome': nome, 'dias': {}}
+            for dia in dias_mes:
+                _colab_dias[cid]['dias'][dia] = _colab_dias[cid]['dias'].get(dia, 0) + 1
+
+        por_colab = sorted(
+            [{'id': v['id'], 'nome': v['nome'], 'dias': v['dias'],
+              'total': sum(v['dias'].values())}
+             for v in _colab_dias.values()],
+            key=lambda x: -x['total']
+        )
+        return jsonify({'por_colaborador': por_colab, 'num_days': num_days, 'mes': mes,
+                        'cache_updated': bool(rows)})
+    except Exception as e:
+        logger.error(f"Erro atividade-tecnico: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
 @behavior_bp.route('/retiradas/sync-visitas', methods=['POST'])
 def api_ret_sync_visitas():
     """Busca e salva visitas no cache SQLite para TODAS as OS que batem os filtros."""
@@ -4767,46 +4824,54 @@ def api_ret_sync_visitas():
             try:
                 recs = _ixc_arquivos(os_id, token)
                 if not recs:
-                    return str(os_id), 0, False
+                    return str(os_id), 0, set()
                 dias = set()
-                has_today = False
                 for rec in recs:
                     dt = (rec.get('data_envio') or rec.get('data') or '')[:10]
                     if dt and dt != '0000-00-00':
                         dias.add(dt)
-                        if dt == _today:
-                            has_today = True
-                return str(os_id), len(dias) if dias else len(recs), has_today
+                return str(os_id), len(dias) if dias else len(recs), dias
             except Exception:
-                return str(os_id), 0, False
+                return str(os_id), 0, set()
 
-        counts      = {}
-        ativ_os_ids = []  # OS com atividade hoje
+        import json as _json
+        counts    = {}
+        datas_map = {}  # os_id → set of dates with activity
         with ThreadPoolExecutor(max_workers=8) as ex:
             futures = {ex.submit(_count_one, oid): oid for oid in all_ids}
             for fut in as_completed(futures):
-                k, n, today = fut.result()
-                counts[k] = n
-                if today:
-                    ativ_os_ids.append(k)
+                k, n, dias = fut.result()
+                counts[k]    = n
+                datas_map[k] = dias
 
-        # Agrupa atividade de hoje por técnico (nome)
         tec_map = _get_tecnicos_map()
-        from collections import defaultdict as _dd
-        _ativ_colab = _dd(list)
-        for oid in ativ_os_ids:
-            cid  = colab_map.get(oid, '')
-            nome = tec_map.get(cid, cid) if cid else '—'
-            _ativ_colab[nome].append(oid)
-        atividade_hoje = {k: len(v) for k, v in _ativ_colab.items()}
 
         db = current_app.config['GET_DB_CONNECTION']()
         db.execute("""CREATE TABLE IF NOT EXISTS ret_visitas_cache
             (os_id TEXT PRIMARY KEY, visitas INTEGER DEFAULT 0, updated_at TEXT)""")
+        db.execute("""CREATE TABLE IF NOT EXISTS ret_atividade_cache
+            (os_id TEXT PRIMARY KEY, colaborador TEXT, datas TEXT, updated_at TEXT)""")
         db.executemany(
             "INSERT OR REPLACE INTO ret_visitas_cache VALUES(?,?,datetime('now'))",
             [(k, v) for k, v in counts.items()])
+        db.executemany(
+            "INSERT OR REPLACE INTO ret_atividade_cache VALUES(?,?,?,datetime('now'))",
+            [(k, colab_map.get(k,''), _json.dumps(sorted(datas_map.get(k, set()))))
+             for k in counts])
         db.commit()
+
+        # Atividade hoje por técnico (para resposta imediata)
+        from collections import defaultdict as _dd
+        from datetime import date as _date
+        _today = _date.today().isoformat()
+        _ativ_colab = _dd(int)
+        for oid, dias in datas_map.items():
+            if _today in dias:
+                cid  = colab_map.get(oid, '')
+                nome = tec_map.get(cid, cid) if cid else '—'
+                _ativ_colab[nome] += 1
+        atividade_hoje = dict(_ativ_colab)
+
         db.close()
 
         return jsonify({'synced': len(counts), 'counts': counts,

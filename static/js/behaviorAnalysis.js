@@ -3279,6 +3279,41 @@ let _retColabMes  = ''; // mês selecionado na tabela de produção (YYYY-MM)
 const _retTabLoaded   = {};
 const _retVisitasCache = {}; // { osId: count } — persiste entre re-renders
 
+// Carrega e renderiza a tabela de atividade diária (fotos/arquivos IXC) por técnico
+async function _retLoadAtividadeTecnico(mes, container) {
+    const wrap = (container || document).querySelector('#ret-atividade-tecnico-wrap');
+    if (!wrap) return;
+    const m = mes || new Date().toISOString().slice(0,7);
+    wrap.innerHTML = `<div class="text-xs text-gray-400 px-2 py-1">Carregando atividade diária...</div>`;
+    try {
+        const d = await fetch(`/api/behavior/retiradas/atividade-tecnico?mes=${m}`).then(r => r.json());
+        if (d.error) { wrap.innerHTML = ''; return; }
+        const colab    = d.por_colaborador || [];
+        const numDays  = d.num_days || 30;
+        const mesSel   = d.mes || m;
+        if (!colab.length) {
+            wrap.innerHTML = `<div class="bg-white border border-gray-100 rounded-xl p-4 mt-2">
+              <div class="text-sm font-semibold text-gray-700 mb-2">Atividade Diária por Técnico
+                <span class="text-xs font-normal text-gray-400 ml-1">(fotos/arquivos enviados no IXC)</span>
+              </div>
+              <div class="text-xs text-gray-400 py-2">Nenhuma atividade no cache — clique em 🔄 Atualizar para buscar do IXC.</div>
+            </div>`;
+            return;
+        }
+        wrap.innerHTML = `
+        <div class="bg-white border border-gray-100 rounded-xl p-4 mt-2">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <span class="text-sm font-semibold text-gray-700">Atividade Diária por Técnico
+              <span class="text-xs font-normal text-gray-400 ml-1">(fotos/arquivos enviados no IXC · clique 🔄 Atualizar para sincronizar)</span>
+            </span>
+          </div>
+          <div class="overflow-x-auto">${_renderColabTable(colab, numDays, mesSel)}</div>
+        </div>`;
+    } catch(e) {
+        wrap.innerHTML = '';
+    }
+}
+
 // Exibe painel de atividade de hoje (arquivos/fotos enviadas) por técnico
 function _retMostrarAtividadeHoje(atividade, pane) {
     const container = pane || document.getElementById('tab-content-retiradas');
@@ -3556,6 +3591,8 @@ function _retBindEvents(pane) {
                 if (d.atividade_hoje && Object.keys(d.atividade_hoje).length > 0) {
                     _retMostrarAtividadeHoje(d.atividade_hoje, pane);
                 }
+                // Recarrega tabela de atividade diária com dados frescos do cache
+                _retLoadAtividadeTecnico(_retColabMes, pane);
                 _retLoad();
                 return;
             }
@@ -4100,7 +4137,11 @@ function _retRenderMainDashboard(d) {
         ${cidadeHtml}
       </div>
       ${colabHtml}
+      <div id="ret-atividade-tecnico-wrap" class="mt-2"></div>
     </div>`;
+
+    // Carrega tabela de atividade diária (cache de fotos/arquivos IXC)
+    _retLoadAtividadeTecnico(_retColabMes, el);
 
     // Delegated click nos bars do gráfico de tendência
     el.querySelectorAll('.ret-trend-bar, .ret-trend-col').forEach(bar => {
