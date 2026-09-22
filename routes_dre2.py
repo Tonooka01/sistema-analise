@@ -963,6 +963,7 @@ def api_dre2_dfc_anual():
                    SUM(SaldoPeriodo)                 AS saldo_periodo,
                    MAX(SaldoAcumulado)               AS saldo_acumulado
             FROM GC_DFC_Mensal
+            WHERE Ano <= CAST(strftime('%Y', 'now') AS INTEGER)
             GROUP BY Ano ORDER BY Ano
         """).fetchall()
         return jsonify({'anos': [dict(r) for r in rows]})
