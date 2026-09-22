@@ -4624,6 +4624,42 @@ def api_ret_cliente_perfil():
         if conn: conn.close()
 
 
+@behavior_bp.route('/retiradas/debug-colab')
+def api_ret_debug_colab():
+    """Debug temporário: mostra OS do mês por colaborador com status e datas reais."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    mes = request.args.get('mes', '2026-09')
+    conn = None
+    try:
+        conn = current_app.config['GET_DB_CONNECTION']()
+        _CIDADES_OP = ('Dom Pedro', 'Presidente Dutra', 'Tuntum', 'São Domingos do Maranhão')
+        ph_cid = ','.join('?' * len(_CIDADES_OP))
+        ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
+        rows = conn.execute(f"""
+            SELECT o.Colaborador, o.Status,
+                   o.Abertura, o.Fechamento, o.Final,
+                   COUNT(*) as cnt
+            FROM OS o
+            WHERE o.Assunto IN ({ph})
+            AND o.Cidade IN ({ph_cid})
+            AND strftime('%Y-%m', o.Abertura) = ?
+            AND o.Colaborador IS NOT NULL AND TRIM(o.Colaborador) != '' AND o.Colaborador != '0'
+            GROUP BY o.Colaborador, o.Status
+            ORDER BY o.Colaborador
+        """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP) + [mes]).fetchall()
+        result = [{'colab': str(r[0]), 'status': r[1], 'abertura_ex': r[2],
+                   'fechamento_ex': r[3], 'final_ex': r[4], 'cnt': r[5]} for r in rows]
+        total_fin = sum(r['cnt'] for r in result if r['status'] == 'Finalizada')
+        total_all = sum(r['cnt'] for r in result)
+        return jsonify({'mes': mes, 'total_todos': total_all, 'total_finalizada': total_fin,
+                        'code_version': 'new_finalizada_v2', 'rows': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
 @behavior_bp.route('/retiradas/producao-tecnico')
 def api_ret_producao_tecnico():
     """Produção dia-a-dia por técnico para um mês específico."""
