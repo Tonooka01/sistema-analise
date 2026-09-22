@@ -3341,7 +3341,7 @@ window._retColabCellModal = async function(colab, dia, mes, tableType) {
     const endpoint = tableType === 'atividade'
         ? `/api/behavior/retiradas/atividade-tecnico-os`
         : `/api/behavior/retiradas/producao-tecnico-os`;
-    const tituloTbl = tableType === 'atividade' ? 'Atividade (fotos/arquivos IXC)' : 'Produção (OS abertas)';
+    const tituloTbl = tableType === 'atividade' ? 'Atividade (fotos/arquivos IXC)' : 'Produção (OS finalizadas)';
     const diaFmt = String(dia).padStart(2, '0');
     const mesPartes = mes.split('-');
     const dataLabel = `${diaFmt}/${mesPartes[1]}/${mesPartes[0]}`;
@@ -3385,6 +3385,8 @@ window._retColabCellModal = async function(colab, dia, mes, tableType) {
             Agendada:    'bg-blue-100 text-blue-700',
             Finalizada:  'bg-green-100 text-green-700',
         };
+        const dataCol  = tableType === 'atividade' ? 'abertura' : 'fechamento';
+        const dataLabel2 = tableType === 'atividade' ? 'Abertura' : 'Finalização';
         const rows = ordens.map(o => `
             <tr class="border-b border-gray-50 hover:bg-gray-50 text-xs">
                 <td class="px-3 py-2 font-mono text-gray-500">${o.id}</td>
@@ -3398,7 +3400,7 @@ window._retColabCellModal = async function(colab, dia, mes, tableType) {
                     <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_CLS[o.status]||'bg-gray-100 text-gray-600'}">${o.status||'—'}</span>
                 </td>
                 <td class="px-3 py-2 text-gray-500">${o.cidade||'—'}</td>
-                <td class="px-3 py-2 text-gray-400 whitespace-nowrap">${(o.abertura||'').slice(0,10)}</td>
+                <td class="px-3 py-2 text-gray-400 whitespace-nowrap">${(o[dataCol]||'').slice(0,10)}</td>
             </tr>`).join('');
         body.innerHTML = `
             <div class="text-xs text-gray-400 mb-2">${ordens.length} ordem${ordens.length !== 1 ? 's' : ''}</div>
@@ -3409,7 +3411,7 @@ window._retColabCellModal = async function(colab, dia, mes, tableType) {
                         <th class="px-3 py-2">Cliente</th>
                         <th class="px-3 py-2">Status</th>
                         <th class="px-3 py-2">Cidade</th>
-                        <th class="px-3 py-2">Abertura</th>
+                        <th class="px-3 py-2">${dataLabel2}</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>

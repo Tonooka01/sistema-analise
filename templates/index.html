@@ -38,22 +38,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Opção Retirada no seletor ---
-    if (!hasRetiradas) {
-        const retOpt = document.querySelector('#customAnalysisSelector option[value="retirada"]');
-        if (retOpt) retOpt.remove();
+    // --- Filtra o seletor: sem dashboard, só mostra o que o usuário tem acesso ---
+    if (!hasDashboard) {
+        document.querySelectorAll('#customAnalysisSelector option').forEach(opt => {
+            if (!opt.value) return; // mantém o placeholder desabilitado
+            if (opt.value === 'retirada' && hasRetiradas) return;
+            if (opt.value === 'analise_comportamento' && hasBehavior) return;
+            opt.remove();
+        });
     }
 
-    // --- Análise de Comportamento ---
-    if (!hasBehavior) {
-        const opt = document.getElementById('behaviorAnalysisOption');
-        if (opt) opt.remove();
-        if (!hasDashboard && !hasRetiradas) {
-            const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
-            if (selWrap) selWrap.style.display = 'none';
-        }
-    } else {
-        // Filtra abas específicas (behavior:tab_name)
+    // --- Análise de Comportamento: filtra abas internas ---
+    if (hasBehavior) {
         const btabPerms = perms.filter(p => p.startsWith('behavior:'));
         if (btabPerms.length > 0) {
             document.querySelectorAll('#behavior-analysis-tabs .tab-link').forEach(link => {
@@ -63,8 +59,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Esconde seletor inteiro se não sobrou nada útil ---
+    if (!hasDashboard && !hasBehavior && !hasRetiradas) {
+        const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
+        if (selWrap) selWrap.style.display = 'none';
+    }
+
     // --- Auto-navega quando acesso único ---
-    if (behaviorOnly || retiradaOnly) {
+    const behaviorOnlyNow = hasBehavior && !hasDashboard && !hasRetiradas;
+    const retiradaOnlyNow = hasRetiradas && !hasDashboard && !hasBehavior;
+    if (behaviorOnlyNow || retiradaOnlyNow) {
         const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
         if (selWrap) selWrap.style.display = 'none';
         const dashContent = document.getElementById('dashboard-content');
@@ -72,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const mainCharts = document.getElementById('main-charts-area');
         if (mainCharts) mainCharts.classList.add('hidden');
 
-        const navTarget = retiradaOnly ? 'retirada' : 'analise_comportamento';
+        const navTarget = retiradaOnlyNow ? 'retirada' : 'analise_comportamento';
         setTimeout(() => {
             const sel = document.getElementById('customAnalysisSelector');
             if (sel) { sel.value = navTarget; sel.dispatchEvent(new Event('change')); }
