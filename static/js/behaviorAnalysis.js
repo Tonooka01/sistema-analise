@@ -3279,6 +3279,59 @@ let _retColabMes  = ''; // mês selecionado na tabela de produção (YYYY-MM)
 const _retTabLoaded   = {};
 const _retVisitasCache = {}; // { osId: count } — persiste entre re-renders
 
+// Tabela dia×técnico compartilhada por Produção e Atividade
+function _renderColabTable(colab, nDays, mes) {
+    if (!colab.length) return '<div class="p-4 text-gray-400 text-sm">Nenhum técnico com OS neste mês.</div>';
+    const days = Array.from({length: nDays}, (_, i) => i + 1);
+    const _COL_COLORS = ['text-blue-600', 'text-blue-900'];
+    const _BG_COLORS  = ['bg-blue-50',    'bg-blue-100'];
+    const thDays = days.map((d,i) => {
+        const bg = _BG_COLORS[i % _BG_COLORS.length];
+        return `<th class="px-1 text-center text-[10px] font-bold min-w-[22px] ${bg} ${_COL_COLORS[i%_COL_COLORS.length]}">${String(d).padStart(2,'0')}</th>`;
+    }).join('');
+    const rows = colab.map(x => {
+        const cells = days.map((d,i) => {
+            const n = x.dias[d] || 0;
+            const cls = _COL_COLORS[i % _COL_COLORS.length];
+            const bg  = _BG_COLORS[i % _BG_COLORS.length];
+            return n > 0
+                ? `<td class="px-1 text-center text-[11px] font-bold tabular-nums ${cls} ${bg}">${n}</td>`
+                : `<td class="px-1 text-center text-[11px] text-gray-400 ${bg}">-</td>`;
+        }).join('');
+        return `<tr class="border-b border-white hover:brightness-95">
+            <td class="py-1.5 px-3 text-xs font-medium text-gray-800 whitespace-nowrap sticky left-0 bg-white">${x.nome}</td>
+            ${cells}
+            <td class="py-1.5 px-2 text-center text-xs font-bold text-gray-900 tabular-nums">${x.total}</td>
+        </tr>`;
+    }).join('');
+    const totals = days.map(d => colab.reduce((s, x) => s + (x.dias[d] || 0), 0));
+    const totalCells = totals.map((n, i) => {
+        const cls = _COL_COLORS[i % _COL_COLORS.length];
+        const bg  = _BG_COLORS[i % _BG_COLORS.length];
+        return n > 0
+            ? `<td class="px-1 text-center text-[11px] font-bold tabular-nums ${cls} ${bg}">${n}</td>`
+            : `<td class="px-1 text-center text-[11px] text-gray-400 ${bg}">-</td>`;
+    }).join('');
+    const grandTotal = colab.reduce((s, x) => s + x.total, 0);
+    return `<table class="text-left w-full" style="border-collapse:collapse;">
+        <thead>
+          <tr class="bg-gray-800 text-white">
+            <th class="py-1.5 px-3 text-xs font-semibold whitespace-nowrap sticky left-0 bg-gray-800 z-10">Técnico</th>
+            ${thDays}
+            <th class="px-2 text-center text-xs font-semibold">Total</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr class="bg-gray-50 border-t-2 border-gray-200">
+            <td class="py-1.5 px-3 text-xs font-bold text-gray-700 sticky left-0 bg-gray-50">Total</td>
+            ${totalCells}
+            <td class="px-2 text-center text-xs font-bold text-gray-900">${grandTotal}</td>
+          </tr>
+        </tfoot>
+      </table>`;
+}
+
 // Carrega e renderiza a tabela de atividade diária (fotos/arquivos IXC) por técnico
 async function _retLoadAtividadeTecnico(mes, container) {
     const wrap = (container || document).querySelector('#ret-atividade-tecnico-wrap');
@@ -3585,7 +3638,9 @@ function _retBindEvents(pane) {
                 if (d.counts) {
                     Object.entries(d.counts).forEach(([k, v]) => { _retVisitasCache[parseInt(k)] = v; });
                 }
-                btn.innerHTML = `✅ ${d.synced} sincronizadas`;
+                const ativExtra = d.synced_atividade && d.synced_atividade > d.synced
+                    ? ` · histórico: ${d.synced_atividade}` : '';
+                btn.innerHTML = `✅ ${d.synced} sincronizadas${ativExtra}`;
                 setTimeout(() => { btn.innerHTML = origHtml; btn.disabled = false; }, 3000);
                 // Mostra atividade de hoje por técnico
                 if (d.atividade_hoje && Object.keys(d.atividade_hoje).length > 0) {
@@ -4055,59 +4110,6 @@ function _retRenderMainDashboard(d) {
     };
 
     let colabHtml = '';
-    const _renderColabTable = (colab, nDays, mes) => {
-        if (!colab.length) return '<div class="p-4 text-gray-400 text-sm">Nenhum técnico com OS neste mês.</div>';
-        const days = Array.from({length: nDays}, (_, i) => i + 1);
-        // Dois tons de azul alternando por coluna
-        const _COL_COLORS = ['text-blue-600', 'text-blue-900'];
-        const _BG_COLORS  = ['bg-blue-50',    'bg-blue-100'];
-        const thDays = days.map((d,i) => {
-            const bg = _BG_COLORS[i % _BG_COLORS.length];
-            return `<th class="px-1 text-center text-[10px] font-bold min-w-[22px] ${bg} ${_COL_COLORS[i%_COL_COLORS.length]}">${String(d).padStart(2,'0')}</th>`;
-        }).join('');
-        const rows = colab.map(x => {
-            const cells = days.map((d,i) => {
-                const n = x.dias[d] || 0;
-                const cls = _COL_COLORS[i % _COL_COLORS.length];
-                const bg  = _BG_COLORS[i % _BG_COLORS.length];
-                return n > 0
-                    ? `<td class="px-1 text-center text-[11px] font-bold tabular-nums ${cls} ${bg}">${n}</td>`
-                    : `<td class="px-1 text-center text-[11px] text-gray-400 ${bg}">-</td>`;
-            }).join('');
-            return `<tr class="border-b border-white hover:brightness-95">
-                <td class="py-1.5 px-3 text-xs font-medium text-gray-800 whitespace-nowrap sticky left-0 bg-white">${x.nome}</td>
-                ${cells}
-                <td class="py-1.5 px-2 text-center text-xs font-bold text-gray-900 tabular-nums">${x.total}</td>
-            </tr>`;
-        }).join('');
-        const totals = days.map(d => colab.reduce((s, x) => s + (x.dias[d] || 0), 0));
-        const totalCells = totals.map((n, i) => {
-            const cls = _COL_COLORS[i % _COL_COLORS.length];
-            const bg  = _BG_COLORS[i % _BG_COLORS.length];
-            return n > 0
-                ? `<td class="px-1 text-center text-[11px] font-bold tabular-nums ${cls} ${bg}">${n}</td>`
-                : `<td class="px-1 text-center text-[11px] text-gray-400 ${bg}">-</td>`;
-        }).join('');
-        const grandTotal = colab.reduce((s, x) => s + x.total, 0);
-        return `<table class="text-left w-full" style="border-collapse:collapse;">
-            <thead>
-              <tr class="bg-gray-800 text-white">
-                <th class="py-1.5 px-3 text-xs font-semibold whitespace-nowrap sticky left-0 bg-gray-800 z-10">Técnico</th>
-                ${thDays}
-                <th class="px-2 text-center text-xs font-semibold">Total</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-            <tfoot>
-              <tr class="bg-gray-50 border-t-2 border-gray-200">
-                <td class="py-1.5 px-3 text-xs font-bold text-gray-700 sticky left-0 bg-gray-50">Total</td>
-                ${totalCells}
-                <td class="px-2 text-center text-xs font-bold text-gray-900">${grandTotal}</td>
-              </tr>
-            </tfoot>
-          </table>`;
-    };
-
     if (porColab.length || colabMes) {
         const selOpts = _retMesOptions.map(o =>
             `<option value="${o.val}" ${o.val === _retColabMes ? 'selected' : ''}>${o.lbl}</option>`

@@ -4803,14 +4803,39 @@ def api_ret_sync_visitas():
         where = 'WHERE ' + ' AND '.join(conds)
         os_rows = conn.execute(
             f"SELECT o.ID, o.Colaborador FROM OS o {where}", params).fetchall()
+
+        # Broader query for atividade cache: last 12 months, sem filtros de data/status/pesquisa
+        # Garante historico completo independente dos filtros da UI
+        ativ_ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
+        ativ_conds  = [f"o.Assunto IN ({ativ_ph})", "o.Abertura >= date('now', '-12 months')"]
+        ativ_params = list(RETIRADA_ASSUNTOS)
+        if assunto_f:
+            ativ_conds.append("o.Assunto = ?"); ativ_params.append(assunto_f)
+        if filial_f:
+            ativ_conds.append("o.Filial = ?"); ativ_params.append(filial_f)
+        if colab_f:
+            ativ_conds.append("o.Colaborador = ?"); ativ_params.append(colab_f)
+        ativ_where = 'WHERE ' + ' AND '.join(ativ_conds)
+        ativ_rows = conn.execute(
+            f"SELECT o.ID, o.Colaborador FROM OS o {ativ_where}", ativ_params).fetchall()
+
         conn.close()
         conn = None
 
-        if not os_rows:
-            return jsonify({'synced': 0, 'counts': {}, 'atividade_hoje': {}})
-
         all_ids    = [r[0] for r in os_rows]
         colab_map  = {str(r[0]): str(r[1] or '') for r in os_rows}  # os_id → colaborador_id
+
+        # Merge broader atividade rows (não sobrescreve entradas do set filtrado)
+        ativ_colab_map = {str(r[0]): str(r[1] or '') for r in ativ_rows}
+        ativ_colab_map.update(colab_map)
+        ativ_ids = list(ativ_colab_map.keys())
+
+        # OS que precisam ser buscadas no IXC = union de visitas (filtradas) + atividade (amplo)
+        visitas_set = set(str(i) for i in all_ids)
+        combined_ids = list(set(ativ_ids) | visitas_set)
+
+        if not combined_ids:
+            return jsonify({'synced': 0, 'counts': {}, 'atividade_hoje': {}})
 
         token = _ret_get_token()
         if not token:
@@ -4838,7 +4863,7 @@ def api_ret_sync_visitas():
         counts    = {}
         datas_map = {}  # os_id → set of dates with activity
         with ThreadPoolExecutor(max_workers=8) as ex:
-            futures = {ex.submit(_count_one, oid): oid for oid in all_ids}
+            futures = {ex.submit(_count_one, oid): oid for oid in combined_ids}
             for fut in as_completed(futures):
                 k, n, dias = fut.result()
                 counts[k]    = n
@@ -4851,30 +4876,33 @@ def api_ret_sync_visitas():
             (os_id TEXT PRIMARY KEY, visitas INTEGER DEFAULT 0, updated_at TEXT)""")
         db.execute("""CREATE TABLE IF NOT EXISTS ret_atividade_cache
             (os_id TEXT PRIMARY KEY, colaborador TEXT, datas TEXT, updated_at TEXT)""")
+        # Visitas: apenas OS do set filtrado
         db.executemany(
             "INSERT OR REPLACE INTO ret_visitas_cache VALUES(?,?,datetime('now'))",
-            [(k, v) for k, v in counts.items()])
+            [(k, counts.get(k, 0)) for k in visitas_set])
+        # Atividade: todos os OS (set amplo dos últimos 12 meses)
         db.executemany(
             "INSERT OR REPLACE INTO ret_atividade_cache VALUES(?,?,?,datetime('now'))",
-            [(k, colab_map.get(k,''), _json.dumps(sorted(datas_map.get(k, set()))))
-             for k in counts])
+            [(k, ativ_colab_map.get(k, colab_map.get(k, '')),
+              _json.dumps(sorted(datas_map.get(k, set()))))
+             for k in ativ_ids])
         db.commit()
 
         # Atividade hoje por técnico (para resposta imediata)
         from collections import defaultdict as _dd
-        from datetime import date as _date
-        _today = _date.today().isoformat()
         _ativ_colab = _dd(int)
-        for oid, dias in datas_map.items():
+        for oid in ativ_ids:
+            dias = datas_map.get(oid, set())
             if _today in dias:
-                cid  = colab_map.get(oid, '')
+                cid  = ativ_colab_map.get(oid, '')
                 nome = tec_map.get(cid, cid) if cid else '—'
                 _ativ_colab[nome] += 1
         atividade_hoje = dict(_ativ_colab)
 
         db.close()
 
-        return jsonify({'synced': len(counts), 'counts': counts,
+        return jsonify({'synced': len(visitas_set), 'synced_atividade': len(ativ_ids),
+                        'counts': {k: counts.get(k, 0) for k in visitas_set},
                         'atividade_hoje': atividade_hoje})
     except Exception as e:
         if conn:
