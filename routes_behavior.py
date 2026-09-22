@@ -4710,7 +4710,7 @@ def api_ret_producao_tecnico_os():
                              AND o.Fechamento NOT LIKE '0000%'
                         THEN o.Fechamento ELSE o.Final END AS data_fin
             FROM OS o
-            WHERE o.Colaborador = ?
+            WHERE CAST(o.Colaborador AS TEXT) = ?
             AND o.Status = 'Finalizada'
             AND strftime('%Y-%m-%d',
                 CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
