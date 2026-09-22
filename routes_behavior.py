@@ -3000,7 +3000,7 @@ def api_behavior_payment_profile():
                              AND COALESCE(PH.fat_vencidas_hoje, 0) = 0
                              THEN 'Nunca atrasou'
                         WHEN COALESCE(PH.total_atrasos, 0) = 0
-                             AND COALESCE(PH.fat_vencidas_hoje, 0) > 0
+                             AND COALESCE(PH.fat_vencidas_hoje, 0) = 1
                              THEN 'Atrasou pela 1ª vez'
                         WHEN COALESCE(PH.total_pagas, 0) > 0
                              AND COALESCE(PH.total_atrasos, 0) * 1.0 / PH.total_pagas >= 0.5
@@ -4744,40 +4744,61 @@ def api_ret_sync_visitas():
             params.extend([s, s, s, s])
 
         where = 'WHERE ' + ' AND '.join(conds)
-        all_ids = [r[0] for r in conn.execute(
-            f"SELECT o.ID FROM OS o {where}", params).fetchall()]
+        os_rows = conn.execute(
+            f"SELECT o.ID, o.Colaborador FROM OS o {where}", params).fetchall()
         conn.close()
         conn = None
 
-        if not all_ids:
-            return jsonify({'synced': 0, 'counts': {}})
+        if not os_rows:
+            return jsonify({'synced': 0, 'counts': {}, 'atividade_hoje': {}})
+
+        all_ids    = [r[0] for r in os_rows]
+        colab_map  = {str(r[0]): str(r[1] or '') for r in os_rows}  # os_id → colaborador_id
 
         token = _ret_get_token()
         if not token:
             return jsonify({'error': 'Sem token IXC'}), 500
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
+        from datetime import date as _date
+        _today = _date.today().isoformat()
 
         def _count_one(os_id):
             try:
                 recs = _ixc_arquivos(os_id, token)
                 if not recs:
-                    return str(os_id), 0
+                    return str(os_id), 0, False
                 dias = set()
+                has_today = False
                 for rec in recs:
                     dt = (rec.get('data_envio') or rec.get('data') or '')[:10]
                     if dt and dt != '0000-00-00':
                         dias.add(dt)
-                return str(os_id), len(dias) if dias else len(recs)
+                        if dt == _today:
+                            has_today = True
+                return str(os_id), len(dias) if dias else len(recs), has_today
             except Exception:
-                return str(os_id), 0
+                return str(os_id), 0, False
 
-        counts = {}
+        counts      = {}
+        ativ_os_ids = []  # OS com atividade hoje
         with ThreadPoolExecutor(max_workers=8) as ex:
             futures = {ex.submit(_count_one, oid): oid for oid in all_ids}
             for fut in as_completed(futures):
-                k, n = fut.result()
+                k, n, today = fut.result()
                 counts[k] = n
+                if today:
+                    ativ_os_ids.append(k)
+
+        # Agrupa atividade de hoje por técnico (nome)
+        tec_map = _get_tecnicos_map()
+        from collections import defaultdict as _dd
+        _ativ_colab = _dd(list)
+        for oid in ativ_os_ids:
+            cid  = colab_map.get(oid, '')
+            nome = tec_map.get(cid, cid) if cid else '—'
+            _ativ_colab[nome].append(oid)
+        atividade_hoje = {k: len(v) for k, v in _ativ_colab.items()}
 
         db = current_app.config['GET_DB_CONNECTION']()
         db.execute("""CREATE TABLE IF NOT EXISTS ret_visitas_cache
@@ -4788,7 +4809,8 @@ def api_ret_sync_visitas():
         db.commit()
         db.close()
 
-        return jsonify({'synced': len(counts), 'counts': counts})
+        return jsonify({'synced': len(counts), 'counts': counts,
+                        'atividade_hoje': atividade_hoje})
     except Exception as e:
         if conn:
             try: conn.close()

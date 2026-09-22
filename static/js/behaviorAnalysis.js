@@ -3279,6 +3279,36 @@ let _retColabMes  = ''; // mês selecionado na tabela de produção (YYYY-MM)
 const _retTabLoaded   = {};
 const _retVisitasCache = {}; // { osId: count } — persiste entre re-renders
 
+// Exibe painel de atividade de hoje (arquivos/fotos enviadas) por técnico
+function _retMostrarAtividadeHoje(atividade, pane) {
+    const container = pane || document.getElementById('tab-content-retiradas');
+    if (!container) return;
+    let panel = container.querySelector('#ret-atividade-hoje-panel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'ret-atividade-hoje-panel';
+        panel.className = 'bg-white border border-blue-200 rounded-xl p-4 mt-4 mx-2';
+        // Insere antes do primeiro filho do conteúdo principal
+        const main = container.querySelector('#ret-results-wrap') || container;
+        main.parentNode?.insertBefore(panel, main);
+    }
+    const hoje = new Date().toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit'});
+    const sorted = Object.entries(atividade).sort((a, b) => b[1] - a[1]);
+    panel.innerHTML = `
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-sm font-semibold text-blue-700">📸 Atividade Hoje (${hoje}) — fotos/arquivos enviados no IXC</span>
+        <button onclick="this.closest('#ret-atividade-hoje-panel').remove()" class="ml-auto text-xs text-gray-400 hover:text-gray-600">✕</button>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        ${sorted.map(([nome, cnt]) => `
+          <div class="flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+            <span class="text-xs font-semibold text-blue-800">${nome}</span>
+            <span class="text-xs bg-blue-600 text-white rounded-full px-1.5 py-0.5 font-bold">${cnt} OS</span>
+          </div>`).join('')}
+        ${sorted.length === 0 ? '<span class="text-xs text-gray-400">Nenhuma atividade registrada hoje</span>' : ''}
+      </div>`;
+}
+
 const _retNomeTecnico = (id) => _retTecnicosMap[String(id)] || String(id || '—');
 
 const _RET_STATUS_CLS = {
@@ -3522,6 +3552,10 @@ function _retBindEvents(pane) {
                 }
                 btn.innerHTML = `✅ ${d.synced} sincronizadas`;
                 setTimeout(() => { btn.innerHTML = origHtml; btn.disabled = false; }, 3000);
+                // Mostra atividade de hoje por técnico
+                if (d.atividade_hoje && Object.keys(d.atividade_hoje).length > 0) {
+                    _retMostrarAtividadeHoje(d.atividade_hoje, pane);
+                }
                 _retLoad();
                 return;
             }
