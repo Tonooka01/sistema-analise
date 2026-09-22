@@ -123,7 +123,7 @@ ${isAdmin ? `
   <button class="d2-tab" data-tab="lancamentos">📋 Lançamentos</button>
   <button class="d2-tab" data-tab="metricas">📊 Métricas</button>
   <button class="d2-tab" data-tab="dre_anual">📊 DRE Estruturado</button>
-  <button class="d2-tab" data-tab="dfc_anual">💹 DFC Anual</button>
+  <button class="d2-tab" data-tab="dfc_anual">💵 DFC Estruturado</button>
   <button class="d2-tab" data-tab="capex_opex">📉 CAPEX vs OPEX</button>
 </div>
 
@@ -688,49 +688,58 @@ async function _renderDfcAnual(root) {
         const yPos  = k => anos.map(a => `<td class="r pos">${R(a[k] || 0)}</td>`).join('');
         const ySig  = k => anos.map(a => { const v=a[k]||0; return `<td class="r ${v>=0?'pos':'neg'}">${R(v)}</td>`; }).join('');
 
-        const HDR = (label, bg='#1e3a5f', fg='#fff') =>
-            `<tr class="nv" style="background:${bg};"><td colspan="${anos.length+2}" style="color:${fg};font-weight:700;padding:.5rem .7rem;font-size:.8rem;">${label}</td></tr>`;
-        const ROW = (num, label, vals, tot) =>
-            `<tr><td><span style="color:#64748b;font-size:.72rem;margin-right:.4rem;">${num}</span>${label}</td>${vals}<td class="r" style="font-weight:700;">${R(tot)}</td></tr>`;
-        const TOTROW = (label, vals, tot, bg, fg='#fff') =>
-            `<tr class="nv" style="background:${bg};font-weight:800;"><td style="color:${fg};padding:.5rem .7rem;">${label}</td>${vals}<td class="r" style="color:${fg};">${R(tot)}</td></tr>`;
+        const HDR = (label, bg='#f1f5f9', fg='#475569') =>
+            `<tr style="background:${bg};"><td colspan="${anos.length+2}" style="color:${fg};font-weight:700;padding:.5rem .7rem;font-size:.8rem;">${label}</td></tr>`;
+        const ROW = (label, vals, tot, indent=true) =>
+            `<tr><td style="${indent?'padding-left:1.6rem;':''}">&nbsp;&nbsp;– ${label}</td>${vals}<td class="r" style="font-weight:600;">${R(tot)}</td></tr>`;
+        const TOTROW = (label, vals, tot, bg, fg) =>
+            `<tr style="background:${bg};font-weight:800;border-top:2px solid ${fg}33;">
+               <td style="color:${fg};padding:.5rem .7rem;">► ${label}</td>${vals}
+               <td class="r" style="color:${fg};">${R(tot)}</td>
+             </tr>`;
+        const ent_tot = T('entradas');
+        const pct_s = k => anos.map(a => {
+            const p = ent_tot ? ((a[k]||0)/ent_tot*100).toFixed(1)+'%' : '';
+            return `<td class="r" style="color:#94a3b8;font-size:.7rem;">${p}</td>`;
+        }).join('');
 
         root.innerHTML = `
 <div class="d2-card" style="overflow-x:auto;">
-  <div class="d2-ctitle">💹 FLUXO DE CAIXA ANUAL | Regime de Caixa <span style="font-size:.72rem;font-weight:400;color:#94a3b8;">— Fonte: Excel importado · Entradas: Data Pagamento | Saídas: Data Confirmação</span></div>
+  <div class="d2-ctitle">💵 DEMONSTRAÇÃO DE FLUXO DE CAIXA (DFC) — MÉTODO DIRETO <span style="font-size:.72rem;font-weight:400;color:#94a3b8;">| Regime de Caixa · Entradas: Data Pagamento | Saídas: Data Confirmação</span></div>
   <table>
     <thead>
       <tr style="background:#0f2d5e;">
-        <th style="color:#fff;min-width:260px;">DESCRIÇÃO</th>
+        <th style="color:#fff;min-width:280px;">DESCRIÇÃO</th>
         ${yCols}
-        <th class="r" style="color:#fff;background:#1e3a5f;">TOTAL</th>
+        <th class="r" style="color:#fff;background:#1e3a5f;">TOTAL<br><span style="font-size:.64rem;font-weight:400;color:#94a3b8;">2022–${anos[anos.length-1]?.Ano||''}</span></th>
       </tr>
     </thead>
     <tbody>
-      ${HDR('⬆ ENTRADAS', '#166534', '#dcfce7')}
-      <tr><td style="padding-left:1rem;font-weight:700;color:#10b981;">Entradas de Caixa</td>${yPos('entradas')}<td class="r pos" style="font-weight:800;">${R(T('entradas'))}</td></tr>
-      ${HDR('⬇ SAÍDAS POR CATEGORIA', '#1e3a5f', '#e0e7ff')}
-      ${ROW('1.',  'Custos Diretos (CMV)',             yNeg('cmv'),           T('cmv'))}
-      ${ROW('2.',  'Pessoal',                          yNeg('pessoal'),       T('pessoal'))}
-      ${ROW('3.',  'Encargos Trabalhistas',             yNeg('enc_trabalh'),   T('enc_trabalh'))}
-      ${ROW('4.',  'Marketing e Publicidade',           yNeg('marketing'),     T('marketing'))}
-      ${ROW('5.',  'Infraestrutura',                    yNeg('infraestrutura'),T('infraestrutura'))}
-      ${ROW('6.',  'Tecnologia e Conectividade',        yNeg('tecnologia'),    T('tecnologia'))}
-      ${ROW('7.',  'Frota e Combustível',               yNeg('frota'),         T('frota'))}
-      ${ROW('8.',  'Despesas Administrativas',          yNeg('desp_admin'),    T('desp_admin'))}
-      ${ROW('9.',  'Atendimento ao Cliente',            yNeg('atendimento'),   T('atendimento'))}
-      ${ROW('10.', 'Impostos e Taxas',                  yNeg('impostos'),      T('impostos'))}
-      ${ROW('11.', 'IRPJ / CSLL',                      yNeg('irpj_csll'),     T('irpj_csll'))}
-      ${ROW('12.', 'Despesas Financeiras',              yNeg('desp_fin'),      T('desp_fin'))}
-      ${ROW('13.', 'Outros / Extraordinários',          yNeg('outros'),        T('outros'))}
-      ${TOTROW('TOTAL SAÍDAS', anos.map(a=>`<td class="r neg" style="color:#fecaca;">${R(a.total_saidas||0)}</td>`).join(''), T('total_saidas'), '#7f1d1d', '#fecaca')}
-      ${HDR('RESULTADO', '#374151', '#f9fafb')}
-      <tr><td style="padding-left:1rem;">Saldo do Período</td>${ySig('saldo_periodo')}<td class="r ${T('saldo_periodo')>=0?'pos':'neg'}" style="font-weight:700;">${R(T('saldo_periodo'))}</td></tr>
-      <tr style="background:#fffbeb;font-weight:800;">
-        <td style="color:#92400e;padding:.5rem .7rem;">SALDO ACUMULADO (fim do ano)</td>
-        ${anos.map(a=>`<td class="r" style="color:#92400e;">${R(a.saldo_acumulado||0)}</td>`).join('')}
-        <td class="r" style="color:#92400e;">${R(anos[anos.length-1]?.saldo_acumulado||0)}</td>
+      ${TOTROW('ENTRADAS DE CAIXA (Valor Recebido)', yPos('entradas'), T('entradas'), '#d1fae5', '#065f46')}
+      ${HDR('SAÍDAS OPERACIONAIS')}
+      ${ROW('Custos Diretos (CMV)',            yNeg('cmv'),            T('cmv'))}
+      ${ROW('Pessoal + Pró-labore',            yNeg('pessoal'),        T('pessoal'))}
+      ${ROW('Encargos Trabalhistas',           yNeg('enc_trabalh'),    T('enc_trabalh'))}
+      ${ROW('Marketing e Publicidade',         yNeg('marketing'),      T('marketing'))}
+      ${ROW('Infraestrutura',                  yNeg('infraestrutura'), T('infraestrutura'))}
+      ${ROW('Tecnologia e Conectividade',      yNeg('tecnologia'),     T('tecnologia'))}
+      ${ROW('Frota e Combustível',             yNeg('frota'),          T('frota'))}
+      ${ROW('Atendimento ao Cliente',          yNeg('atendimento'),    T('atendimento'))}
+      ${ROW('Despesas Administrativas',        yNeg('desp_admin'),     T('desp_admin'))}
+      ${HDR('IMPOSTOS E TRIBUTOS')}
+      ${ROW('Impostos sobre Vendas e Taxas',   yNeg('impostos'),       T('impostos'))}
+      ${T('irpj_csll') ? ROW('IRPJ / CSLL', yNeg('irpj_csll'), T('irpj_csll')) : ''}
+      ${HDR('SAÍDAS FINANCEIRAS')}
+      ${ROW('Despesas Financeiras',            yNeg('desp_fin'),       T('desp_fin'))}
+      ${ROW('Outros / Extraordinários',        yNeg('outros'),         T('outros'))}
+      ${TOTROW('TOTAL DE SAÍDAS', anos.map(a=>`<td class="r neg">${R(a.total_saidas||0)}</td>`).join(''), T('total_saidas'), '#fee2e2', '#dc2626')}
+      ${TOTROW('SALDO LÍQUIDO DO PERÍODO', ySig('saldo_periodo'), T('saldo_periodo'), '#dbeafe', '#1e40af')}
+      <tr style="background:#dbeafe;">
+        <td style="padding:.0rem .7rem .4rem 1.3rem;color:#94a3b8;font-size:.68rem;font-style:italic;">% da Receita de Caixa</td>
+        ${pct_s('saldo_periodo')}
+        <td class="r" style="color:#94a3b8;font-size:.7rem;padding-bottom:.4rem;">${ent_tot ? ((T('saldo_periodo')/ent_tot)*100).toFixed(1)+'%' : ''}</td>
       </tr>
+      ${TOTROW('SALDO ACUMULADO', anos.map(a=>`<td class="r" style="color:#92400e;">${R(a.saldo_acumulado||0)}</td>`).join(''), anos[anos.length-1]?.saldo_acumulado||0, '#fef3c7', '#92400e')}
     </tbody>
   </table>
 </div>`;
@@ -752,8 +761,8 @@ async function _renderCapexOpex(root) {
 
         const yCols = anos.map(a => `<th class="r" style="color:#fff;">${a}<br><span style="font-size:.64rem;font-weight:400;color:#94a3b8;">(Jan–Dez)</span></th>`).join('');
 
-        const HDR = (label, bg, fg='#fff') =>
-            `<tr class="nv" style="background:${bg};"><td colspan="${anos.length+3}" style="color:${fg};font-weight:700;padding:.55rem .8rem;font-size:.84rem;">${label}</td></tr>`;
+        const HDR = (label, bg, fg='#475569') =>
+            `<tr style="background:${bg};"><td colspan="${anos.length+3}" style="color:${fg};font-weight:700;padding:.55rem .8rem;font-size:.84rem;">${label}</td></tr>`;
 
         const CAT_ROW = (item, fg='#1e293b') =>
             `<tr>
@@ -763,8 +772,8 @@ async function _renderCapexOpex(root) {
                <td class="r" style="color:#64748b;font-size:.72rem;">${item.pct.toFixed(1)}%</td>
              </tr>`;
 
-        const TOT_ROW = (label, tdata, bg, fg='#fff') =>
-            `<tr style="background:${bg};font-weight:800;">
+        const TOT_ROW = (label, tdata, bg, fg) =>
+            `<tr style="background:${bg};font-weight:800;border-top:2px solid ${fg}33;">
                <td style="color:${fg};padding:.5rem .8rem;">${label}</td>
                ${anos.map(a => `<td class="r" style="color:${fg};">${Rv(tdata.vals[a])}</td>`).join('')}
                <td class="r" style="color:${fg};">${Rv(tdata.total)}</td>
@@ -785,16 +794,16 @@ async function _renderCapexOpex(root) {
       </tr>
     </thead>
     <tbody>
-      ${HDR('CAPEX — INVESTIMENTOS', '#166534', '#dcfce7')}
+      ${HDR('CAPEX — INVESTIMENTOS', '#dcfce7', '#166534')}
       ${(capex||[]).map(item => CAT_ROW(item, '#166534')).join('')}
-      ${total_capex ? TOT_ROW('TOTAL CAPEX', total_capex, '#14532d', '#dcfce7') : ''}
+      ${total_capex ? TOT_ROW('TOTAL CAPEX', total_capex, '#d1fae5', '#166534') : ''}
 
-      ${HDR('OPEX — DESPESAS OPERACIONAIS', '#312e81', '#e0e7ff')}
+      ${HDR('OPEX — DESPESAS OPERACIONAIS', '#ede9fe', '#4c1d95')}
       ${(opex||[]).map(item => CAT_ROW(item, '#1e1b4b')).join('')}
-      ${total_opex ? TOT_ROW('TOTAL OPEX', total_opex, '#1e1b4b', '#e0e7ff') : ''}
+      ${total_opex ? TOT_ROW('TOTAL OPEX', total_opex, '#ddd6fe', '#4c1d95') : ''}
 
-      ${HDR('TOTAL GERAL (CAPEX + OPEX)', '#1f2937', '#f9fafb')}
-      ${total_geral ? TOT_ROW('TOTAL GERAL', total_geral, '#374151', '#f1f5f9') : ''}
+      ${HDR('TOTAL GERAL (CAPEX + OPEX)', '#f1f5f9', '#334155')}
+      ${total_geral ? TOT_ROW('TOTAL GERAL', total_geral, '#e2e8f0', '#334155') : ''}
       ${rb_lancamentos && rb_lancamentos.total ? `<tr style="background:#f8fafc;">
         <td style="padding-left:1rem;color:#374151;font-size:.82rem;">📋 Receita Bruta (Lançamentos)</td>
         ${anos.map(a => `<td class="r" style="color:#374151;">${Rv(rb_lancamentos.vals[a])}</td>`).join('')}
