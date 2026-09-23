@@ -175,6 +175,16 @@ def api_crescimento_dados():
             if r['mes']:
                 neg_by_m[r['mes']] = r['n']
 
+        # ── Contratos ativos reais (status IXC) ──────────────────────────────
+        try:
+            cli_ativo_ixc = conn.execute("""
+                SELECT COUNT(*) FROM Contratos
+                WHERE Status_contrato = 'Ativo'
+            """).fetchone()[0] or 0
+        except Exception as _e:
+            logger.error("crescimento/dados clientes_ativo_ixc: %s", _e, exc_info=True)
+            cli_ativo_ixc = 0
+
         conn.close()
 
         historico = []
@@ -261,15 +271,6 @@ def api_crescimento_dados():
                 'churn':     round(max(0, avg_churn)),
                 'neg':       round(max(0, avg_neg)),
             })
-
-        # ── Contratos ativos reais (status IXC) ──────────────────────────────
-        try:
-            cli_ativo_ixc = conn.execute("""
-                SELECT COUNT(*) FROM Contratos
-                WHERE Status_contrato NOT IN ('Inativo','Cancelado','Desistente','Negativado','Pendente')
-            """).fetchone()[0] or 0
-        except Exception:
-            cli_ativo_ixc = 0
 
         return jsonify({'historico': historico, 'projecao': projecao,
                         'periodo_stats': periodo_stats,
