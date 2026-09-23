@@ -133,6 +133,27 @@ function _shell() {
         </div>`).join('')}
     </div>
 
+    <!-- Faturamento Anual -->
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;margin-bottom:1rem;">
+        <p style="font-size:.7rem;font-weight:700;color:#6b7280;margin:0 0 .2rem;text-transform:uppercase;letter-spacing:.06em;">Faturamento Anual (R$)</p>
+        <p style="font-size:.67rem;color:#94a3b8;margin:0 0 .4rem;line-height:1.4;">Total real recebido por ano — São Domingos do Maranhão, Dom Pedro, Presidente Dutra e Tuntum. Clique em um ano para ver o detalhamento mensal.</p>
+        <div style="position:relative;height:360px;cursor:pointer;">
+            <canvas id="cgChartAnual"></canvas>
+        </div>
+    </div>
+
+    <!-- Modal de detalhe anual -->
+    <div id="cgAnualModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
+        <div style="background:#fff;border-radius:.75rem;width:min(920px,95vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;">
+                <h3 id="cgAnualModalTitle" style="margin:0;font-size:1rem;font-weight:700;color:#111827;">Faturamento</h3>
+                <button onclick="document.getElementById('cgAnualModal').style.display='none'"
+                        style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:#6b7280;line-height:1;">×</button>
+            </div>
+            <div id="cgAnualModalBody" style="overflow-y:auto;padding:1rem 1.25rem;"></div>
+        </div>
+    </div>
+
     <!-- Separador Mapa -->
     <div style="border-top:2px solid #e5e7eb;margin-bottom:1.25rem;padding-top:1.25rem;">
         <div style="display:flex;align-items:center;flex-wrap:wrap;gap:.75rem;">
@@ -509,6 +530,151 @@ function _renderCharts(d) {
             leg.textContent = parts.join('  ·  ');
         }
     });
+
+    // ── Gráfico de Faturamento Anual ─────────────────────────────────────────
+    const anualCanvas = document.getElementById('cgChartAnual');
+    const anualData   = d.faturamento_anual || [];
+    if (anualCanvas && anualData.length) {
+        if (_charts._anual) { _charts._anual.destroy(); _charts._anual = null; }
+        const anoAtual = new Date().getFullYear().toString();
+        const colors = anualData.map(r =>
+            r.ano === anoAtual ? '#93c5fd' : '#3b82f6'
+        );
+        const _barLabelsPlugin = {
+            id: 'barLabels',
+            afterDatasetsDraw(chart) {
+                const { ctx, data } = chart;
+                ctx.save();
+                ctx.font = 'bold 11px Inter, sans-serif';
+                ctx.fillStyle = '#374151';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                chart.getDatasetMeta(0).data.forEach((bar, i) => {
+                    const v = data.datasets[0].data[i];
+                    const label = `R$ ${(v / 1_000_000).toFixed(2)}M`;
+                    ctx.fillText(label, bar.x, bar.y - 3);
+                });
+                ctx.restore();
+            },
+        };
+
+        _charts._anual = new Chart(anualCanvas, {
+            type: 'bar',
+            data: {
+                labels: anualData.map(r => r.ano === anoAtual ? r.ano + ' *' : r.ano),
+                datasets: [{
+                    label: 'Faturamento Real (R$)',
+                    data: anualData.map(r => r.total),
+                    backgroundColor: colors,
+                    borderRadius: 4,
+                    borderSkipped: false,
+                    minBarLength: 28,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 24 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: true,
+                        callbacks: {
+                            label: ctx => ` R$ ${(ctx.parsed.y / 1_000_000).toFixed(2)}M`,
+                        },
+                    },
+                    datalabels: { display: false },
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            font: { size: 10 },
+                            callback: v => `R$ ${(v / 1_000_000).toFixed(1)}M`,
+                        },
+                    },
+                },
+                onClick(e, elements) {
+                    if (!elements.length) return;
+                    const ano = anualData[elements[0].index]?.ano;
+                    if (ano) _openAnualDetalhe(ano);
+                },
+            },
+            plugins: [_barLabelsPlugin],
+        });
+    }
+}
+
+function _openAnualDetalhe(ano) {
+    const modal = document.getElementById('cgAnualModal');
+    const title = document.getElementById('cgAnualModalTitle');
+    const body  = document.getElementById('cgAnualModalBody');
+    if (!modal) return;
+
+    title.textContent = `Faturamento ${ano} — por Mês e Cidade`;
+    body.innerHTML = '<p style="color:#6b7280;font-size:.85rem;">Carregando…</p>';
+    modal.style.display = 'flex';
+
+    const fmtBRL = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+    fetch(`${API}/api/crescimento/faturamento_detalhe?ano=${ano}`)
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) { body.innerHTML = `<p style="color:red;">${d.error}</p>`; return; }
+            const cidades = d.cidades || [];
+            const meses   = d.meses   || [];
+
+            // Cabeçalho da tabela
+            let html = `
+            <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+                <thead>
+                    <tr style="background:#f3f4f6;">
+                        <th style="padding:.5rem .75rem;text-align:left;color:#374151;font-weight:700;border-bottom:2px solid #e5e7eb;">Mês</th>
+                        ${cidades.map(c => `<th style="padding:.5rem .75rem;text-align:right;color:#374151;font-weight:700;border-bottom:2px solid #e5e7eb;">${c}</th>`).join('')}
+                        <th style="padding:.5rem .75rem;text-align:right;color:#1d4ed8;font-weight:700;border-bottom:2px solid #e5e7eb;">Total</th>
+                        <th style="padding:.5rem .75rem;text-align:right;color:#6b7280;font-weight:700;border-bottom:2px solid #e5e7eb;">Qtd</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+            let totalGeral = 0, qtdGeral = 0;
+            const cidadeTotais = {};
+            cidades.forEach(c => { cidadeTotais[c] = 0; });
+
+            meses.forEach((m, i) => {
+                const [ano, mesNum] = m.mes.split('-');
+                const mesLabel = MESES_PT[parseInt(mesNum, 10) - 1] || m.mes;
+                const bg = i % 2 === 0 ? '#fff' : '#f9fafb';
+                html += `<tr style="background:${bg};">
+                    <td style="padding:.45rem .75rem;color:#374151;font-weight:600;">${mesLabel}</td>
+                    ${cidades.map(c => {
+                        const v = m.cidades[c]?.total || 0;
+                        cidadeTotais[c] += v;
+                        return `<td style="padding:.45rem .75rem;text-align:right;color:#6b7280;">${v > 0 ? fmtBRL(v) : '—'}</td>`;
+                    }).join('')}
+                    <td style="padding:.45rem .75rem;text-align:right;font-weight:700;color:#1d4ed8;">${fmtBRL(m.total)}</td>
+                    <td style="padding:.45rem .75rem;text-align:right;color:#9ca3af;">${m.qtd}</td>
+                </tr>`;
+                totalGeral += m.total;
+                qtdGeral   += m.qtd;
+            });
+
+            // Linha de totais
+            html += `<tr style="background:#eff6ff;border-top:2px solid #bfdbfe;">
+                <td style="padding:.5rem .75rem;font-weight:700;color:#1e3a5f;">TOTAL</td>
+                ${cidades.map(c => `<td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#1e3a5f;">${fmtBRL(cidadeTotais[c])}</td>`).join('')}
+                <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#1d4ed8;font-size:.9rem;">${fmtBRL(totalGeral)}</td>
+                <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#374151;">${qtdGeral}</td>
+            </tr>`;
+
+            html += '</tbody></table>';
+            body.innerHTML = html;
+        })
+        .catch(e => {
+            body.innerHTML = `<p style="color:red;">Erro: ${e.message}</p>`;
+        });
 }
 
 function _renderKpis(d) {

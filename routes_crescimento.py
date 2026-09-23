@@ -186,6 +186,26 @@ def api_crescimento_dados():
             logger.error("crescimento/dados clientes_ativo_ixc: %s", _e, exc_info=True)
             cli_ativo_ixc = 0
 
+        # ── Faturamento real anual (apenas as 4 cidades principais) ─────────
+        CIDADES_PRINCIPAIS = ('São Domingos do Maranhão', 'Dom Pedro', 'Presidente Dutra', 'Tuntum')
+        faturamento_anual = []
+        try:
+            ph = ','.join(['?'] * len(CIDADES_PRINCIPAIS))
+            for r in conn.execute(f"""
+                SELECT STRFTIME('%Y', Data_pagamento) AS ano,
+                       SUM(Valor_recebido)            AS total
+                FROM Contas_a_Receber
+                WHERE Status = 'Recebido'
+                  AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
+                  AND Cidade IN ({ph})
+                GROUP BY ano
+                ORDER BY ano
+            """, CIDADES_PRINCIPAIS):
+                if r['ano']:
+                    faturamento_anual.append({'ano': r['ano'], 'total': float(r['total'] or 0)})
+        except Exception as _e:
+            logger.error("crescimento/dados faturamento_anual: %s", _e, exc_info=True)
+
         conn.close()
 
         historico = []
@@ -275,11 +295,67 @@ def api_crescimento_dados():
 
         return jsonify({'historico': historico, 'projecao': projecao,
                         'periodo_stats': periodo_stats,
-                        'clientes_ativo_ixc': cli_ativo_ixc})
+                        'clientes_ativo_ixc': cli_ativo_ixc,
+                        'faturamento_anual': faturamento_anual})
 
     except sqlite3.Error as e:
         logger.error("crescimento/dados: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+@crescimento_bp.route('/faturamento_detalhe')
+@login_required
+def api_faturamento_detalhe():
+    """Retorna recebimentos mês a mês para um ano específico (4 cidades principais)."""
+    ano = request.args.get('ano', '').strip()
+    if not ano or not ano.isdigit():
+        return jsonify({'error': 'Ano inválido'}), 400
+
+    CIDADES = ('São Domingos do Maranhão', 'Dom Pedro', 'Presidente Dutra', 'Tuntum')
+    conn = get_db()
+    try:
+        ph = ','.join(['?'] * len(CIDADES))
+        rows = conn.execute(f"""
+            SELECT
+                STRFTIME('%Y-%m', Data_pagamento)  AS mes,
+                Cidade,
+                COUNT(*)                           AS qtd,
+                SUM(Valor_recebido)                AS total
+            FROM Contas_a_Receber
+            WHERE Status = 'Recebido'
+              AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
+              AND STRFTIME('%Y', Data_pagamento) = ?
+              AND Cidade IN ({ph})
+            GROUP BY mes, Cidade
+            ORDER BY mes, Cidade
+        """, (ano, *CIDADES)).fetchall()
+
+        total_geral = sum(r['total'] or 0 for r in rows)
+
+        # Agrupa por mês com subtotais por cidade
+        meses = {}
+        for r in rows:
+            m = r['mes']
+            if m not in meses:
+                meses[m] = {'mes': m, 'cidades': {}, 'total': 0, 'qtd': 0}
+            meses[m]['cidades'][r['Cidade']] = {
+                'total': float(r['total'] or 0),
+                'qtd':   int(r['qtd'] or 0),
+            }
+            meses[m]['total'] += float(r['total'] or 0)
+            meses[m]['qtd']   += int(r['qtd'] or 0)
+
+        return jsonify({
+            'ano':         ano,
+            'cidades':     list(CIDADES),
+            'meses':       list(meses.values()),
+            'total_geral': total_geral,
+        })
+    except Exception as e:
+        logger.error("crescimento/faturamento_detalhe: %s", e, exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
 
 @crescimento_bp.route('/mapa')
