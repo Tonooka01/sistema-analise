@@ -142,6 +142,27 @@ function _shell() {
         </div>
     </div>
 
+    <!-- Faturamento Anual por Vencimento -->
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;margin-bottom:1rem;">
+        <p style="font-size:.7rem;font-weight:700;color:#6b7280;margin:0 0 .2rem;text-transform:uppercase;letter-spacing:.06em;">Faturamento por Competência / Vencimento (R$)</p>
+        <p style="font-size:.67rem;color:#94a3b8;margin:0 0 .4rem;line-height:1.4;">Total recebido agrupado pelo mês de vencimento da fatura — São Domingos do Maranhão, Dom Pedro, Presidente Dutra e Tuntum. Clique em um ano para ver o detalhamento mensal.</p>
+        <div style="position:relative;height:360px;cursor:pointer;">
+            <canvas id="cgChartAnualVenc"></canvas>
+        </div>
+    </div>
+
+    <!-- Modal de detalhe anual por vencimento -->
+    <div id="cgAnualVencModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
+        <div style="background:#fff;border-radius:.75rem;width:min(920px,95vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;">
+                <h3 id="cgAnualVencModalTitle" style="margin:0;font-size:1rem;font-weight:700;color:#111827;">Faturamento por Vencimento</h3>
+                <button onclick="document.getElementById('cgAnualVencModal').style.display='none'"
+                        style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:#6b7280;line-height:1;">×</button>
+            </div>
+            <div id="cgAnualVencModalBody" style="overflow-y:auto;padding:1rem 1.25rem;"></div>
+        </div>
+    </div>
+
     <!-- Modal de detalhe anual -->
     <div id="cgAnualModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
         <div style="background:#fff;border-radius:.75rem;width:min(920px,95vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
@@ -532,11 +553,11 @@ function _renderCharts(d) {
     });
 
     // ── Gráfico de Faturamento Anual ─────────────────────────────────────────
+    const anoAtual = new Date().getFullYear().toString();
     const anualCanvas = document.getElementById('cgChartAnual');
     const anualData   = d.faturamento_anual || [];
     if (anualCanvas && anualData.length) {
         if (_charts._anual) { _charts._anual.destroy(); _charts._anual = null; }
-        const anoAtual = new Date().getFullYear().toString();
         const colors = anualData.map(r =>
             r.ano === anoAtual ? '#93c5fd' : '#3b82f6'
         );
@@ -604,6 +625,146 @@ function _renderCharts(d) {
             plugins: [_barLabelsPlugin],
         });
     }
+
+    // ── Gráfico de Faturamento por Vencimento ────────────────────────────────
+    const vencCanvas = document.getElementById('cgChartAnualVenc');
+    const vencData   = d.faturamento_anual_venc || [];
+    if (vencCanvas && vencData.length) {
+        if (_charts._anualVenc) { _charts._anualVenc.destroy(); _charts._anualVenc = null; }
+        const vencColors = vencData.map(r =>
+            r.ano === anoAtual ? '#6ee7b7' : '#10b981'
+        );
+        const _barLabelsPluginVenc = {
+            id: 'barLabelsVenc',
+            afterDatasetsDraw(chart) {
+                const { ctx, data } = chart;
+                ctx.save();
+                ctx.font = 'bold 11px Inter, sans-serif';
+                ctx.fillStyle = '#374151';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                chart.getDatasetMeta(0).data.forEach((bar, i) => {
+                    const v = data.datasets[0].data[i];
+                    ctx.fillText(`R$ ${(v / 1_000_000).toFixed(2)}M`, bar.x, bar.y - 3);
+                });
+                ctx.restore();
+            },
+        };
+        _charts._anualVenc = new Chart(vencCanvas, {
+            type: 'bar',
+            data: {
+                labels: vencData.map(r => r.ano === anoAtual ? r.ano + ' *' : r.ano),
+                datasets: [{
+                    label: 'Faturamento por Vencimento (R$)',
+                    data: vencData.map(r => r.total),
+                    backgroundColor: vencColors,
+                    borderRadius: 4,
+                    borderSkipped: false,
+                    minBarLength: 28,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 24 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: true,
+                        callbacks: {
+                            label: ctx => ` R$ ${(ctx.parsed.y / 1_000_000).toFixed(2)}M`,
+                        },
+                    },
+                    datalabels: { display: false },
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            font: { size: 10 },
+                            callback: v => `R$ ${(v / 1_000_000).toFixed(1)}M`,
+                        },
+                    },
+                },
+                onClick(e, elements) {
+                    if (!elements.length) return;
+                    const ano = vencData[elements[0].index]?.ano;
+                    if (ano) _openAnualVencDetalhe(ano);
+                },
+            },
+            plugins: [_barLabelsPluginVenc],
+        });
+    }
+}
+
+function _openAnualVencDetalhe(ano) {
+    const modal = document.getElementById('cgAnualVencModal');
+    const title = document.getElementById('cgAnualVencModalTitle');
+    const body  = document.getElementById('cgAnualVencModalBody');
+    if (!modal) return;
+
+    title.textContent = `Faturamento por Vencimento ${ano} — por Mês e Cidade`;
+    body.innerHTML = '<p style="color:#6b7280;font-size:.85rem;">Carregando…</p>';
+    modal.style.display = 'flex';
+
+    const fmtBRL = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+    fetch(`${API}/api/crescimento/faturamento_venc_detalhe?ano=${ano}`)
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) { body.innerHTML = `<p style="color:red;">${d.error}</p>`; return; }
+            const cidades = d.cidades || [];
+            const meses   = d.meses   || [];
+
+            let html = `
+            <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+                <thead>
+                    <tr style="background:#f0fdf4;">
+                        <th style="padding:.5rem .75rem;text-align:left;color:#374151;font-weight:700;border-bottom:2px solid #bbf7d0;">Mês</th>
+                        ${cidades.map(c => `<th style="padding:.5rem .75rem;text-align:right;color:#374151;font-weight:700;border-bottom:2px solid #bbf7d0;">${c}</th>`).join('')}
+                        <th style="padding:.5rem .75rem;text-align:right;color:#059669;font-weight:700;border-bottom:2px solid #bbf7d0;">Total</th>
+                        <th style="padding:.5rem .75rem;text-align:right;color:#6b7280;font-weight:700;border-bottom:2px solid #bbf7d0;">Qtd</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+            let totalGeral = 0, qtdGeral = 0;
+            const cidadeTotais = {};
+            cidades.forEach(c => { cidadeTotais[c] = 0; });
+
+            meses.forEach((m, i) => {
+                const mesNum = m.mes.split('-')[1];
+                const mesLabel = MESES_PT[parseInt(mesNum, 10) - 1] || m.mes;
+                const bg = i % 2 === 0 ? '#fff' : '#f9fafb';
+                html += `<tr data-mes="${m.mes}" data-bg="${bg}" style="background:${bg};cursor:pointer;" title="Ver boletos de ${mesLabel}">
+                    <td style="padding:.45rem .75rem;color:#374151;font-weight:600;">${mesLabel} <span style="color:#9ca3af;font-size:.72rem;">↗</span></td>
+                    ${cidades.map(c => {
+                        const v = m.cidades[c]?.total || 0;
+                        cidadeTotais[c] += v;
+                        return `<td style="padding:.45rem .75rem;text-align:right;color:#6b7280;">${v > 0 ? fmtBRL(v) : '—'}</td>`;
+                    }).join('')}
+                    <td style="padding:.45rem .75rem;text-align:right;font-weight:700;color:#059669;">${fmtBRL(m.total)}</td>
+                    <td style="padding:.45rem .75rem;text-align:right;color:#9ca3af;">${m.qtd}</td>
+                </tr>`;
+                totalGeral += m.total;
+                qtdGeral   += m.qtd;
+            });
+
+            html += `<tr style="background:#f0fdf4;border-top:2px solid #bbf7d0;">
+                <td style="padding:.5rem .75rem;font-weight:700;color:#065f46;">TOTAL</td>
+                ${cidades.map(c => `<td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#065f46;">${fmtBRL(cidadeTotais[c])}</td>`).join('')}
+                <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#059669;font-size:.9rem;">${fmtBRL(totalGeral)}</td>
+                <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#374151;">${qtdGeral}</td>
+            </tr>`;
+
+            html += '</tbody></table>';
+            body.innerHTML = html;
+            window._cgBoletosState['venc'] = { html, title: title.textContent };
+            _attachBoletosRowHandlers('venc');
+        })
+        .catch(e => { body.innerHTML = `<p style="color:red;">Erro: ${e.message}</p>`; });
 }
 
 function _openAnualDetalhe(ano) {
@@ -644,11 +805,11 @@ function _openAnualDetalhe(ano) {
             cidades.forEach(c => { cidadeTotais[c] = 0; });
 
             meses.forEach((m, i) => {
-                const [ano, mesNum] = m.mes.split('-');
+                const [_a, mesNum] = m.mes.split('-');
                 const mesLabel = MESES_PT[parseInt(mesNum, 10) - 1] || m.mes;
                 const bg = i % 2 === 0 ? '#fff' : '#f9fafb';
-                html += `<tr style="background:${bg};">
-                    <td style="padding:.45rem .75rem;color:#374151;font-weight:600;">${mesLabel}</td>
+                html += `<tr data-mes="${m.mes}" data-bg="${bg}" style="background:${bg};cursor:pointer;" title="Ver boletos de ${mesLabel}">
+                    <td style="padding:.45rem .75rem;color:#374151;font-weight:600;">${mesLabel} <span style="color:#9ca3af;font-size:.72rem;">↗</span></td>
                     ${cidades.map(c => {
                         const v = m.cidades[c]?.total || 0;
                         cidadeTotais[c] += v;
@@ -671,10 +832,111 @@ function _openAnualDetalhe(ano) {
 
             html += '</tbody></table>';
             body.innerHTML = html;
+            window._cgBoletosState['pgto'] = { html, title: title.textContent };
+            _attachBoletosRowHandlers('pgto');
         })
         .catch(e => {
             body.innerHTML = `<p style="color:red;">Erro: ${e.message}</p>`;
         });
+}
+
+// ── Boletos drill-down ────────────────────────────────────────────────────────
+
+window._cgBoletosState = window._cgBoletosState || {};
+
+window._cgBoletosBack = function(tipo) {
+    const s = window._cgBoletosState[tipo];
+    if (!s) return;
+    const bodyId  = tipo === 'venc' ? 'cgAnualVencModalBody' : 'cgAnualModalBody';
+    const titleId = tipo === 'venc' ? 'cgAnualVencModalTitle' : 'cgAnualModalTitle';
+    const body    = document.getElementById(bodyId);
+    const titleEl = document.getElementById(titleId);
+    if (body)    body.innerHTML       = s.html;
+    if (titleEl) titleEl.textContent  = s.title;
+    _attachBoletosRowHandlers(tipo);
+};
+
+function _attachBoletosRowHandlers(tipo) {
+    const bodyId = tipo === 'venc' ? 'cgAnualVencModalBody' : 'cgAnualModalBody';
+    const body   = document.getElementById(bodyId);
+    if (!body) return;
+    const hoverBg = tipo === 'venc' ? '#d1fae5' : '#dbeafe';
+    body.querySelectorAll('tr[data-mes]').forEach(tr => {
+        const origBg = tr.dataset.bg || '#fff';
+        tr.addEventListener('mouseover', () => { tr.style.backgroundColor = hoverBg; });
+        tr.addEventListener('mouseout',  () => { tr.style.backgroundColor = origBg; });
+        tr.addEventListener('click', () => _openBoletosForMes(tr.dataset.mes, tipo));
+    });
+}
+
+function _openBoletosForMes(mes, tipo) {
+    const bodyId  = tipo === 'venc' ? 'cgAnualVencModalBody' : 'cgAnualModalBody';
+    const titleId = tipo === 'venc' ? 'cgAnualVencModalTitle' : 'cgAnualModalTitle';
+    const body    = document.getElementById(bodyId);
+    const titleEl = document.getElementById(titleId);
+    if (!body || !titleEl) return;
+
+    const ano    = mes.split('-')[0];
+    const mesNum = mes.split('-')[1];
+    const MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const mesLabel = MESES_PT[parseInt(mesNum, 10) - 1] || mes;
+    const savedTitle = (window._cgBoletosState[tipo]?.title || '').split(' — ')[0];
+
+    body.innerHTML = '<p style="color:#6b7280;font-size:.85rem;">Carregando boletos…</p>';
+    titleEl.textContent = `${savedTitle} › ${mesLabel}`;
+
+    const fmtBRL      = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const accent      = tipo === 'venc' ? '#059669' : '#1d4ed8';
+    const accentBg    = tipo === 'venc' ? '#f0fdf4' : '#eff6ff';
+    const accentBd    = tipo === 'venc' ? '#bbf7d0' : '#bfdbfe';
+
+    fetch(`${API}/api/crescimento/boletos?ano=${ano}&mes=${mesNum}&tipo=${tipo}`)
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) { body.innerHTML = `<p style="color:red;">${d.error}</p>`; return; }
+            const boletos = d.boletos || [];
+            const total   = boletos.reduce((s, b) => s + (b.Valor_recebido || 0), 0);
+
+            let html = `
+                <div style="margin-bottom:.75rem;display:flex;align-items:center;gap:1rem;">
+                    <button onclick="window._cgBoletosBack('${tipo}')"
+                        style="padding:.38rem .85rem;background:${accentBg};border:1px solid ${accentBd};color:${accent};border-radius:6px;cursor:pointer;font-size:.82rem;font-weight:600;">
+                        ← Voltar
+                    </button>
+                    <span style="font-size:.83rem;color:#6b7280;">${boletos.length} boleto${boletos.length !== 1 ? 's' : ''} · ${fmtBRL(total)}</span>
+                </div>
+                <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:.81rem;">
+                    <thead>
+                        <tr style="background:${accentBg};">
+                            <th style="padding:.45rem .7rem;text-align:left;border-bottom:2px solid ${accentBd};color:#374151;font-weight:700;">Cliente</th>
+                            <th style="padding:.45rem .7rem;text-align:left;border-bottom:2px solid ${accentBd};color:#374151;font-weight:700;">Cidade</th>
+                            <th style="padding:.45rem .7rem;text-align:right;border-bottom:2px solid ${accentBd};color:#374151;font-weight:700;">Vencimento</th>
+                            <th style="padding:.45rem .7rem;text-align:right;border-bottom:2px solid ${accentBd};color:#374151;font-weight:700;">Dt. Pgto</th>
+                            <th style="padding:.45rem .7rem;text-align:right;border-bottom:2px solid ${accentBd};color:${accent};font-weight:700;">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${boletos.map((b, i) => `
+                            <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'};">
+                                <td style="padding:.38rem .7rem;color:#374151;">${b.Cliente || '—'}</td>
+                                <td style="padding:.38rem .7rem;color:#6b7280;font-size:.78rem;">${b.Cidade || '—'}</td>
+                                <td style="padding:.38rem .7rem;text-align:right;color:#6b7280;font-variant-numeric:tabular-nums;">${b.Vencimento || '—'}</td>
+                                <td style="padding:.38rem .7rem;text-align:right;color:#6b7280;font-variant-numeric:tabular-nums;">${b.Data_pagamento || '—'}</td>
+                                <td style="padding:.38rem .7rem;text-align:right;font-weight:600;color:${accent};font-variant-numeric:tabular-nums;">${fmtBRL(b.Valor_recebido || 0)}</td>
+                            </tr>`).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background:${accentBg};border-top:2px solid ${accentBd};">
+                            <td colspan="4" style="padding:.45rem .7rem;font-weight:700;color:#374151;">TOTAL (${boletos.length})</td>
+                            <td style="padding:.45rem .7rem;text-align:right;font-weight:700;color:${accent};font-variant-numeric:tabular-nums;">${fmtBRL(total)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+                </div>`;
+            body.innerHTML = html;
+        })
+        .catch(e => { body.innerHTML = `<p style="color:red;">Erro: ${e.message}</p>`; });
 }
 
 function _renderKpis(d) {
