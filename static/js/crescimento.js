@@ -573,7 +573,7 @@ function _renderKpis(d) {
             delta: null,
             icon:  '🟢',
             color: '#059669',
-            desc:  'Contratos com Status=Ativo na tabela Contratos (igual ao número exibido no IXC). Inclui clientes inadimplentes que ainda não foram cancelados. A diferença para "Clientes Ativos" indica quantos estão ativos mas em atraso no pagamento.',
+            desc:  'Contratos com Status_contrato=Ativo e Status_acesso=Ativo na tabela Contratos (igual ao número exibido no IXC). A diferença para "Clientes Ativos" indica quantos estão com acesso ativo mas em atraso no pagamento.',
         },
         {
             label: 'Crescimento Mensal',

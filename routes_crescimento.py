@@ -180,6 +180,7 @@ def api_crescimento_dados():
             cli_ativo_ixc = conn.execute("""
                 SELECT COUNT(*) FROM Contratos
                 WHERE Status_contrato = 'Ativo'
+                  AND Status_acesso = 'Ativo'
             """).fetchone()[0] or 0
         except Exception as _e:
             logger.error("crescimento/dados clientes_ativo_ixc: %s", _e, exc_info=True)
