@@ -40,6 +40,22 @@
             justify-content: center;
             gap: 1.5rem;
             padding: 1.5rem;
+            overflow: hidden;
+        }
+
+        /* Webcam canvas background */
+        #wcDisplay {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        /* Content above canvas */
+        .login-wrapper, .footer {
+            position: relative;
+            z-index: 1;
         }
 
         /* Wrapper */
@@ -50,12 +66,13 @@
 
         /* Card dois painéis */
         .card {
-            background: var(--card-bg);
+            background: rgba(24,24,27,0.92);
             border: 1px solid var(--card-border);
             border-radius: 16px;
             overflow: hidden;
             display: grid;
             grid-template-columns: 1fr;
+            backdrop-filter: blur(12px);
         }
         @media (min-width: 700px) {
             .card { grid-template-columns: 1fr 1fr; }
@@ -146,7 +163,7 @@
         /* Painel direito — decorativo */
         .deco-panel {
             display: none;
-            background: var(--panel-bg);
+            background: rgba(17,17,19,0.7);
             position: relative;
             overflow: hidden;
             min-height: 340px;
@@ -175,14 +192,14 @@
                 linear-gradient(var(--card-border) 1px, transparent 1px),
                 linear-gradient(90deg, var(--card-border) 1px, transparent 1px);
             background-size: 28px 28px;
-            opacity: .5;
+            opacity: .3;
         }
         /* Gradiente central */
         .deco-panel::after {
             content: '';
             position: absolute;
             inset: 0;
-            background: radial-gradient(ellipse at 50% 50%, rgba(9,9,11,.2) 0%, var(--panel-bg) 80%);
+            background: radial-gradient(ellipse at 50% 50%, rgba(9,9,11,.1) 0%, rgba(17,17,19,0.5) 80%);
         }
 
         .deco-logo {
@@ -224,6 +241,11 @@
     </style>
 </head>
 <body>
+
+    <!-- Webcam pixel grid background -->
+    <canvas id="wcDisplay"></canvas>
+    <video id="wcVideo" style="display:none;" playsinline muted></video>
+    <canvas id="wcProc" style="display:none;"></canvas>
 
     <div class="login-wrapper">
         <div class="card">
@@ -273,6 +295,150 @@
     </div>
 
     <p class="footer">Acesso restrito · NetVale Telecom · © 2026</p>
+
+<script>
+(function () {
+    var COLS = 64, ROWS = 48;
+    var MAX_ELEV = 15, SENSITIVITY = 0.4, SMOOTHING = 0.1, GAP = 0.1;
+    var BG = '#09090b';
+
+    var dispCanvas = document.getElementById('wcDisplay');
+    var procCanvas = document.getElementById('wcProc');
+    var video      = document.getElementById('wcVideo');
+
+    var prevFrame = null;
+    var pixels = [];
+    for (var r = 0; r < ROWS; r++) {
+        pixels[r] = [];
+        for (var c = 0; c < COLS; c++) {
+            pixels[r][c] = { r: 20, g: 20, b: 20, motion: 0, target: 0, current: 0 };
+        }
+    }
+
+    function render() {
+        var procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
+        var dispCtx = dispCanvas.getContext('2d');
+        if (!procCtx || !dispCtx || video.readyState < 2) {
+            requestAnimationFrame(render); return;
+        }
+
+        procCanvas.width  = COLS;
+        procCanvas.height = ROWS;
+        procCtx.save();
+        procCtx.scale(-1, 1);
+        procCtx.drawImage(video, -COLS, 0, COLS, ROWS);
+        procCtx.restore();
+
+        var img  = procCtx.getImageData(0, 0, COLS, ROWS);
+        var cur  = img.data;
+        var prev = prevFrame;
+
+        for (var row = 0; row < ROWS; row++) {
+            for (var col = 0; col < COLS; col++) {
+                var idx = (row * COLS + col) * 4;
+                var pr = cur[idx], pg = cur[idx+1], pb = cur[idx+2];
+                var px = pixels[row][col];
+
+                var motion = 0;
+                if (prev) {
+                    var diff = Math.abs(pr - prev[idx]) + Math.abs(pg - prev[idx+1]) + Math.abs(pb - prev[idx+2]);
+                    motion = Math.min(1, diff / 255 / SENSITIVITY);
+                }
+                px.motion = px.motion * 0.7 + motion * 0.3;
+
+                // Darken heavily so background stays subtle
+                px.r = Math.round(pr * 0.25);
+                px.g = Math.round(pg * 0.25);
+                px.b = Math.round(pb * 0.25);
+
+                px.target  = px.motion * MAX_ELEV;
+                px.current += (px.target - px.current) * SMOOTHING;
+            }
+        }
+        prevFrame = new Uint8ClampedArray(cur);
+
+        var dpr = window.devicePixelRatio || 1;
+        var W = dispCanvas.clientWidth;
+        var H = dispCanvas.clientHeight;
+        dispCanvas.width  = W * dpr;
+        dispCanvas.height = H * dpr;
+        dispCtx.scale(dpr, dpr);
+
+        dispCtx.fillStyle = BG;
+        dispCtx.fillRect(0, 0, W, H);
+
+        var cell  = Math.max(W / COLS, H / ROWS);
+        var gap   = cell * GAP;
+        var offX  = (W - cell * COLS) / 2;
+        var offY  = (H - cell * ROWS) / 2;
+
+        for (var row = 0; row < ROWS; row++) {
+            for (var col = 0; col < COLS; col++) {
+                var px   = pixels[row][col];
+                var x    = offX + col * cell;
+                var y    = offY + row * cell;
+                var elev = px.current;
+                var ox   = -elev * 1.2;
+                var oy   = -elev * 1.8;
+
+                // Shadow
+                if (elev > 0.5) {
+                    dispCtx.fillStyle = 'rgba(0,0,0,' + Math.min(0.6, elev * 0.04) + ')';
+                    dispCtx.fillRect(x + gap/2 + elev*1.5, y + gap/2 + elev*2, cell - gap, cell - gap);
+                }
+
+                // Right face
+                if (elev > 0.5) {
+                    dispCtx.fillStyle = 'rgb(' + Math.max(0,px.r-80) + ',' + Math.max(0,px.g-80) + ',' + Math.max(0,px.b-80) + ')';
+                    dispCtx.beginPath();
+                    dispCtx.moveTo(x+cell-gap/2+ox, y+gap/2+oy);
+                    dispCtx.lineTo(x+cell-gap/2,    y+gap/2);
+                    dispCtx.lineTo(x+cell-gap/2,    y+cell-gap/2);
+                    dispCtx.lineTo(x+cell-gap/2+ox, y+cell-gap/2+oy);
+                    dispCtx.closePath();
+                    dispCtx.fill();
+
+                    // Bottom face
+                    dispCtx.fillStyle = 'rgb(' + Math.max(0,px.r-50) + ',' + Math.max(0,px.g-50) + ',' + Math.max(0,px.b-50) + ')';
+                    dispCtx.beginPath();
+                    dispCtx.moveTo(x+gap/2+ox,      y+cell-gap/2+oy);
+                    dispCtx.lineTo(x+gap/2,          y+cell-gap/2);
+                    dispCtx.lineTo(x+cell-gap/2,     y+cell-gap/2);
+                    dispCtx.lineTo(x+cell-gap/2+ox,  y+cell-gap/2+oy);
+                    dispCtx.closePath();
+                    dispCtx.fill();
+                }
+
+                // Top face
+                var bright = 1 + elev * 0.05;
+                dispCtx.fillStyle = 'rgb(' + Math.min(255,Math.round(px.r*bright)) + ',' + Math.min(255,Math.round(px.g*bright)) + ',' + Math.min(255,Math.round(px.b*bright)) + ')';
+                dispCtx.fillRect(x+gap/2+ox, y+gap/2+oy, cell-gap, cell-gap);
+
+                // Border
+                dispCtx.strokeStyle = 'rgba(255,255,255,' + (0.06 + elev*0.008) + ')';
+                dispCtx.lineWidth = 0.5;
+                dispCtx.strokeRect(x+gap/2+ox, y+gap/2+oy, cell-gap, cell-gap);
+            }
+        }
+
+        requestAnimationFrame(render);
+    }
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' } })
+            .then(function(stream) {
+                video.srcObject = stream;
+                return video.play();
+            })
+            .then(function() {
+                requestAnimationFrame(render);
+            })
+            .catch(function() {
+                // Sem câmera — fundo estático continua visível
+            });
+    }
+})();
+</script>
 
 </body>
 </html>
