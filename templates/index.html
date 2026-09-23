@@ -662,6 +662,10 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
     const colBtn   = document.getElementById('sbCollapseBtn');
     const sel      = document.getElementById('customAnalysisSelector');
 
+    // Começa colapsado
+    sidebar.classList.add('collapsed');
+    colBtn.textContent = '▶';
+
     // Colapsar / expandir
     colBtn.addEventListener('click', () => {
         const collapsed = sidebar.classList.toggle('collapsed');
