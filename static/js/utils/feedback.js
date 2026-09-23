@@ -8,7 +8,9 @@ import * as dom from '../dom.js';
 export function showLoading(show) {
     if (dom.dashboardContentDiv) {
         dom.dashboardContentDiv.classList.toggle('hidden', show);
-        if (dom.mainChartsArea) dom.mainChartsArea.classList.toggle('hidden', show);
+        // Ao iniciar loading, esconde mainChartsArea.
+        // Ao terminar (show=false), NÃO re-exibe mainChartsArea — cada renderer faz isso explicitamente.
+        if (show && dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
     }
     if (dom.chartLoadingDiv) dom.chartLoadingDiv.classList.toggle('hidden', !show);
     if (dom.chartErrorMsgDiv) dom.chartErrorMsgDiv.classList.add('hidden');

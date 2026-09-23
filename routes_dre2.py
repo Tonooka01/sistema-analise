@@ -72,6 +72,12 @@ def _ensure_tables(conn):
             Valor    REAL,
             PRIMARY KEY (Secao, Categoria, Ano)
         );
+        CREATE TABLE IF NOT EXISTS GC_DFC_Estruturado_Sheet (
+            Ano   INTEGER,
+            Campo TEXT,
+            Valor REAL,
+            PRIMARY KEY (Ano, Campo)
+        );
     """)
     conn.commit()
     # Migrations — novas colunas do v9
@@ -159,6 +165,29 @@ def _import_excel(conn, file_bytes):
              pessoal, enc_trabal, marketing, infra, tecnologia,
              frota, desp_admin, atendimento, impostos, 0)
         )
+
+    # --- DFC Estruturado Sheet (agregado por ano, preservado do import do Excel) ---
+    conn.execute("DELETE FROM GC_DFC_Estruturado_Sheet")
+    conn.execute("""
+        INSERT OR REPLACE INTO GC_DFC_Estruturado_Sheet (Ano, Campo, Valor)
+        SELECT Ano, 'entradas',       ROUND(SUM(COALESCE(Entradas,0)),2)       FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'cmv',            ROUND(SUM(COALESCE(CMV,0)),2)            FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'pessoal',        ROUND(SUM(COALESCE(Pessoal,0)),2)        FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'enc_trabalh',    ROUND(SUM(COALESCE(EncargosTrabalh,0)),2) FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'marketing',      ROUND(SUM(COALESCE(Marketing_DFC,0)),2)  FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'infraestrutura', ROUND(SUM(COALESCE(Infraestrutura,0)),2) FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'tecnologia',     ROUND(SUM(COALESCE(Tecnologia,0)),2)     FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'frota',          ROUND(SUM(COALESCE(Frota,0)),2)          FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'desp_admin',     ROUND(SUM(COALESCE(DespAdmin,0)),2)      FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'atendimento',    ROUND(SUM(COALESCE(Atendimento,0)),2)    FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'impostos',       ROUND(SUM(COALESCE(Impostos,0)),2)       FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'irpj_csll',      ROUND(SUM(COALESCE(IRPJCSLL,0)),2)      FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'desp_fin',       ROUND(SUM(COALESCE(DespFin,0)),2)        FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'outros',         ROUND(SUM(COALESCE(Outros,0)),2)         FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'total_saidas',   ROUND(SUM(COALESCE(TotalSaidas,0)),2)   FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'saldo_periodo',  ROUND(SUM(COALESCE(SaldoPeriodo,0)),2)  FROM GC_DFC_Mensal GROUP BY Ano UNION ALL
+        SELECT Ano, 'saldo_acumulado',ROUND(MAX(COALESCE(SaldoAcumulado,0)),2) FROM GC_DFC_Mensal GROUP BY Ano
+    """)
 
     # --- CAC Mensal ---
     ws = wb['📈 CAC Mensal']
@@ -935,6 +964,27 @@ def api_dre2_dre_anual():
 
 
 # ---------------------------------------------------------------------------
+# DFC debug
+# ---------------------------------------------------------------------------
+@dre2_bp.route('/api/dre2/dfc_debug')
+@login_required
+def api_dre2_dfc_debug():
+    conn = get_db()
+    try:
+        _ensure_tables(conn)
+        sheet = conn.execute("SELECT Ano, Campo, Valor FROM GC_DFC_Estruturado_Sheet WHERE Ano=2026 ORDER BY Campo").fetchall()
+        mensal = conn.execute("SELECT AnoMes, Entradas, TotalSaidas, SaldoPeriodo, SaldoAcumulado FROM GC_DFC_Mensal WHERE Ano=2026 ORDER BY AnoMes").fetchall()
+        return jsonify({
+            'sheet_rows': [dict(r) for r in sheet],
+            'mensal_rows': [dict(r) for r in mensal],
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # DFC Anual
 # ---------------------------------------------------------------------------
 @dre2_bp.route('/api/dre2/dfc_anual')
@@ -943,30 +993,66 @@ def api_dre2_dfc_anual():
     conn = get_db()
     try:
         _ensure_tables(conn)
-        rows = conn.execute("""
-            SELECT Ano,
-                   SUM(Entradas)                    AS entradas,
-                   SUM(COALESCE(CMV,0))             AS cmv,
-                   SUM(COALESCE(Pessoal,0))         AS pessoal,
-                   SUM(COALESCE(EncargosTrabalh,0))  AS enc_trabalh,
-                   SUM(COALESCE(Marketing_DFC,0))    AS marketing,
-                   SUM(COALESCE(Infraestrutura,0))   AS infraestrutura,
-                   SUM(COALESCE(Tecnologia,0))       AS tecnologia,
-                   SUM(COALESCE(Frota,0))            AS frota,
-                   SUM(COALESCE(DespAdmin,0))        AS desp_admin,
-                   SUM(COALESCE(Atendimento,0))      AS atendimento,
-                   SUM(COALESCE(Impostos,0))         AS impostos,
-                   SUM(COALESCE(IRPJCSLL,0))         AS irpj_csll,
-                   SUM(COALESCE(DespFin,0))          AS desp_fin,
-                   SUM(COALESCE(Outros,0))           AS outros,
-                   SUM(TotalSaidas)                  AS total_saidas,
-                   SUM(SaldoPeriodo)                 AS saldo_periodo,
-                   MAX(SaldoAcumulado)               AS saldo_acumulado
-            FROM GC_DFC_Mensal
+        sheet_rows = conn.execute("""
+            SELECT Ano, Campo, Valor FROM GC_DFC_Estruturado_Sheet
             WHERE Ano <= CAST(strftime('%Y', 'now') AS INTEGER)
-            GROUP BY Ano ORDER BY Ano
+            ORDER BY Ano
         """).fetchall()
-        return jsonify({'anos': [dict(r) for r in rows]})
+
+        # pivot: {ano: {campo: valor}}
+        raw = {}
+        for r in sheet_rows:
+            raw.setdefault(r['Ano'], {})[r['Campo']] = r['Valor'] or 0
+
+        def _g(d, k): return d.get(k) or 0
+
+        anos = []
+        acum = 0.0
+        for ano in sorted(raw.keys()):
+            d = raw[ano]
+            entradas     = _g(d, 'entradas')
+            cmv          = _g(d, 'cmv')
+            pessoal      = _g(d, 'pessoal')
+            enc_trabalh  = _g(d, 'enc_trabalh')
+            marketing    = _g(d, 'marketing')
+            infra        = _g(d, 'infraestrutura')
+            tecnologia   = _g(d, 'tecnologia')
+            frota        = _g(d, 'frota')
+            desp_admin   = _g(d, 'desp_admin')
+            atendimento  = _g(d, 'atendimento')
+            impostos     = _g(d, 'impostos')
+            irpj_csll    = _g(d, 'irpj_csll')
+            desp_fin     = _g(d, 'desp_fin')
+            outros       = _g(d, 'outros')
+            total_saidas = _g(d, 'total_saidas') or (cmv + pessoal + enc_trabalh + marketing +
+                           infra + tecnologia + frota + desp_admin + atendimento +
+                           impostos + irpj_csll + desp_fin + outros)
+            saldo        = _g(d, 'saldo_periodo') or (entradas - total_saidas)
+            acum         += saldo
+            saldo_acum   = _g(d, 'saldo_acumulado') or round(acum, 2)
+            pct_saldo    = round(saldo / entradas * 100, 1) if entradas else 0
+            anos.append({
+                'Ano': ano,
+                'entradas': round(entradas, 2),
+                'cmv': round(cmv, 2),
+                'pessoal': round(pessoal, 2),
+                'enc_trabalh': round(enc_trabalh, 2),
+                'marketing': round(marketing, 2),
+                'infraestrutura': round(infra, 2),
+                'tecnologia': round(tecnologia, 2),
+                'frota': round(frota, 2),
+                'desp_admin': round(desp_admin, 2),
+                'atendimento': round(atendimento, 2),
+                'impostos': round(impostos, 2),
+                'irpj_csll': round(irpj_csll, 2),
+                'desp_fin': round(desp_fin, 2),
+                'outros': round(outros, 2),
+                'total_saidas': round(total_saidas, 2),
+                'saldo_periodo': round(saldo, 2),
+                'saldo_acumulado': round(saldo_acum, 2),
+                'pct_saldo': pct_saldo,
+            })
+        return jsonify({'anos': anos})
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500

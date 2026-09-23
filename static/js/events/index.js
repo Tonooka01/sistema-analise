@@ -89,7 +89,8 @@ export function initializeEventListeners() {
         }
     });
 
-    // --- Seletores de Coleção Principal (botões azuis) ---
+    // --- Seletores de Coleção Principal ---
+    // Delegação original (cobre botões dentro de .collection-selector)
     document.querySelector('.collection-selector')?.addEventListener('click', e => {
         const _excluded = ['saveLayoutBtn','btnCashflow','btnDRE','btnDRE2','btnCrescimento'];
         if (e.target.tagName === 'BUTTON' && e.target.id && !_excluded.includes(e.target.id)) {
@@ -102,6 +103,25 @@ export function initializeEventListeners() {
                 analysis.fetchAndRenderMainAnalysis(buttonText.trim());
             }
         }
+    });
+
+    // Handlers individuais para botões movidos para a sidebar (fora de .collection-selector)
+    const _sidebarCollections = [
+        { id: 'btnClientes',        name: 'Clientes' },
+        { id: 'btnContratos',       name: 'Contratos' },
+        { id: 'btnContasAReceber',  name: 'Contas a Receber' },
+        { id: 'btnAtendimentos',    name: 'Atendimentos' },
+        { id: 'btnOS',              name: 'OS' },
+        { id: 'btnLogins',          name: 'Logins' },
+    ];
+    _sidebarCollections.forEach(({ id, name }) => {
+        document.getElementById(id)?.addEventListener('click', e => {
+            utils.resetAllFilters();
+            utils.setActiveControl(e.target);
+            if (dom.customAnalysisSelector) dom.customAnalysisSelector.value = '';
+            utils.hideAllCustomFilters();
+            analysis.fetchAndRenderMainAnalysis(name);
+        });
     });
 
     // --- Exportação CSV ---

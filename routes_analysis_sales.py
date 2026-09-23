@@ -177,9 +177,13 @@ def api_activations_by_seller():
         )
 
         df_final = pd.merge(df_grouped, df_vend, left_on="Vendedor_ID", right_on="ID", how="left")
+        df_final.drop(columns=["ID"], errors="ignore", inplace=True)
         df_final.rename(columns={"Vendedor": "Vendedor_Nome"}, inplace=True)
         df_final["Vendedor_Nome"] = df_final["Vendedor_Nome"].fillna("Nao Identificado")
         df_final["Total_Churn"]   = df_final["Cancelados"] + df_final["Negativados"]
+        # Converte NaN em 0 nas colunas numéricas para gerar JSON válido
+        num_cols = ["Total_Ativacoes", "Permanecem_Ativos", "Cancelados", "Negativados", "Total_Churn"]
+        df_final[num_cols] = df_final[num_cols].fillna(0).astype(int)
         df_final = df_final.sort_values("Total_Ativacoes", ascending=False)
 
         totals = {

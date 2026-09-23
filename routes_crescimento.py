@@ -262,8 +262,18 @@ def api_crescimento_dados():
                 'neg':       round(max(0, avg_neg)),
             })
 
+        # ── Contratos ativos reais (status IXC) ──────────────────────────────
+        try:
+            cli_ativo_ixc = conn.execute("""
+                SELECT COUNT(*) FROM Contratos
+                WHERE Status_contrato NOT IN ('Inativo','Cancelado','Desistente','Negativado','Pendente')
+            """).fetchone()[0] or 0
+        except Exception:
+            cli_ativo_ixc = 0
+
         return jsonify({'historico': historico, 'projecao': projecao,
-                        'periodo_stats': periodo_stats})
+                        'periodo_stats': periodo_stats,
+                        'clientes_ativo_ixc': cli_ativo_ixc})
 
     except sqlite3.Error as e:
         logger.error("crescimento/dados: %s", e, exc_info=True)

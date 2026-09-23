@@ -3,134 +3,276 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login · NetVale Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>Login · NetVale</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:          #09090b;
+            --card-bg:     #18181b;
+            --card-border: #27272a;
+            --panel-bg:    #111113;
+            --text-1:      #fafafa;
+            --text-2:      #a1a1aa;
+            --text-muted:  #71717a;
+            --input-bg:    #09090b;
+            --input-border:#3f3f46;
+            --input-focus: #71717a;
+            --btn-bg:      #fafafa;
+            --btn-text:    #09090b;
+            --btn-hover:   #e4e4e7;
+            --separator:   #27272a;
+            --link:        #a1a1aa;
+            --link-hover:  #fafafa;
+            --error-bg:    rgba(239,68,68,.1);
+            --error-bd:    rgba(239,68,68,.35);
+            --error-text:  #fca5a5;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #091f42 0%, #0f2d5e 55%, #163a75 100%);
+            background: var(--bg);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+            padding: 1.5rem;
+        }
+
+        /* Wrapper */
+        .login-wrapper {
+            width: 100%;
+            max-width: 860px;
+        }
+
+        /* Card dois painéis */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+        @media (min-width: 700px) {
+            .card { grid-template-columns: 1fr 1fr; }
+        }
+
+        /* Painel esquerdo — formulário */
+        .form-panel {
+            padding: 2.5rem 2rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 1.5rem;
+        }
+
+        .form-header { text-align: center; }
+        .form-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-1);
+            margin-bottom: .3rem;
+        }
+        .form-desc {
+            font-size: .83rem;
+            color: var(--text-muted);
+        }
+
+        /* Alerta de erro */
+        .alert {
+            background: var(--error-bg);
+            border: 1px solid var(--error-bd);
+            color: var(--error-text);
+            border-radius: 8px;
+            padding: .65rem .9rem;
+            font-size: .82rem;
+        }
+
+        /* Campos */
+        .fields { display: flex; flex-direction: column; gap: .9rem; }
+
+        .field { display: flex; flex-direction: column; gap: .4rem; }
+        .field-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+        label {
+            font-size: .8rem;
+            font-weight: 500;
+            color: var(--text-2);
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: .58rem .9rem;
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 8px;
+            font-size: .875rem;
+            font-family: 'Inter', sans-serif;
+            color: var(--text-1);
+            outline: none;
+            transition: border-color .15s, box-shadow .15s;
+        }
+        input::placeholder { color: #52525b; }
+        input:focus {
+            border-color: var(--input-focus);
+            box-shadow: 0 0 0 3px rgba(113,113,122,.18);
+        }
+
+        /* Botão */
+        .btn-login {
+            width: 100%;
+            padding: .65rem;
+            background: var(--btn-bg);
+            color: var(--btn-text);
+            font-size: .9rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background .15s, transform .1s;
+            margin-top: .15rem;
+        }
+        .btn-login:hover  { background: var(--btn-hover); transform: translateY(-1px); }
+        .btn-login:active { transform: translateY(0); }
+
+        /* Painel direito — decorativo */
+        .deco-panel {
+            display: none;
+            background: var(--panel-bg);
+            position: relative;
+            overflow: hidden;
+            min-height: 340px;
+        }
+        @media (min-width: 700px) { .deco-panel { display: flex; } }
+
+        .deco-inner {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            padding: 2rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Grid decorativo de fundo */
+        .deco-panel::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(var(--card-border) 1px, transparent 1px),
+                linear-gradient(90deg, var(--card-border) 1px, transparent 1px);
+            background-size: 28px 28px;
+            opacity: .5;
+        }
+        /* Gradiente central */
+        .deco-panel::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at 50% 50%, rgba(9,9,11,.2) 0%, var(--panel-bg) 80%);
+        }
+
+        .deco-logo {
+            width: 52px;
+            height: 52px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 1rem;
+            font-size: 1.4rem;
         }
-        .login-card {
-            background: #ffffff;
-            border-radius: 16px;
-            box-shadow: 0 25px 60px rgba(9,31,66,0.4);
-            padding: 2.5rem 2rem;
-            width: 100%;
-            max-width: 400px;
-            border-top: 4px solid #00aaff;
-        }
-        .logo-area {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        .logo-area .brand {
-            font-size: 1.6rem;
-            font-weight: 800;
-            color: #0f2d5e;
-            letter-spacing: -0.5px;
-        }
-        .logo-area .brand span { color: #00aaff; }
-        .logo-area .subtitle {
-            font-size: 0.8rem;
-            color: #64748b;
-            margin-top: 0.25rem;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-        }
-        label {
-            display: block;
-            font-size: 0.78rem;
-            font-weight: 600;
-            color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 0.4rem;
-        }
-        input {
-            width: 100%;
-            padding: 0.6rem 0.875rem;
-            border: 1.5px solid #dde3ec;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            color: #1e293b;
-            background: #f8fafc;
-            transition: border-color 0.18s, box-shadow 0.18s;
-            outline: none;
-        }
-        input:focus {
-            border-color: #00aaff;
-            box-shadow: 0 0 0 3px rgba(0,170,255,0.15);
-            background: #fff;
-        }
-        .form-group { margin-bottom: 1.1rem; }
-        .btn-login {
-            width: 100%;
-            padding: 0.7rem;
-            background: linear-gradient(135deg, #0f2d5e, #1d6dcc);
-            color: #fff;
-            font-size: 0.95rem;
+        .deco-name {
+            font-size: 1.3rem;
             font-weight: 700;
-            border: none;
-            border-radius: 9px;
-            cursor: pointer;
-            margin-top: 0.5rem;
-            transition: opacity 0.18s, transform 0.14s;
-            letter-spacing: 0.02em;
+            color: var(--text-1);
+            letter-spacing: -.01em;
         }
-        .btn-login:hover { opacity: 0.92; transform: translateY(-1px); }
-        .btn-login:active { transform: translateY(0); }
-        .alert {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #b91c1c;
-            border-radius: 8px;
-            padding: 0.65rem 0.875rem;
-            font-size: 0.85rem;
-            margin-bottom: 1.25rem;
-            border-left: 3px solid #ef4444;
-        }
-        .footer-text {
+        .deco-tagline {
+            font-size: .78rem;
+            color: var(--text-muted);
             text-align: center;
-            font-size: 0.75rem;
-            color: #94a3b8;
-            margin-top: 1.5rem;
+            max-width: 180px;
+            line-height: 1.5;
         }
+
+        /* Footer */
+        .footer {
+            font-size: .72rem;
+            color: #3f3f46;
+            text-align: center;
+        }
+        .footer a {
+            color: var(--link);
+            text-underline-offset: 3px;
+        }
+        .footer a:hover { color: var(--link-hover); }
     </style>
 </head>
 <body>
-    <div class="login-card">
-        <div class="logo-area">
-            <div class="brand">Net<span>Vale</span></div>
-            <div class="subtitle">Dashboard Analítico</div>
+
+    <div class="login-wrapper">
+        <div class="card">
+
+            <!-- Formulário -->
+            <div class="form-panel">
+                <div class="form-header">
+                    <div class="form-title">Welcome back</div>
+                    <div class="form-desc">Entre na sua conta NetVale Telecom</div>
+                </div>
+
+                {% with messages = get_flashed_messages() %}
+                    {% if messages %}
+                        <div class="alert">{{ messages[0] }}</div>
+                    {% endif %}
+                {% endwith %}
+
+                <form action="/login" method="POST">
+                    <div class="fields">
+                        <div class="field">
+                            <label for="username">Usuário</label>
+                            <input id="username" name="username" type="text"
+                                   placeholder="Digite seu usuário" required autofocus>
+                        </div>
+                        <div class="field">
+                            <div class="field-row">
+                                <label for="password">Senha</label>
+                            </div>
+                            <input id="password" name="password" type="password"
+                                   placeholder="••••••••••" required>
+                        </div>
+                        <button class="btn-login" type="submit">Login</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Painel decorativo -->
+            <div class="deco-panel">
+                <div class="deco-inner">
+                    <div class="deco-logo">📊</div>
+                    <div class="deco-name">NetVale</div>
+                    <div class="deco-tagline">Dashboard de Gestão · Telecom</div>
+                </div>
+            </div>
+
         </div>
-
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                <div class="alert">{{ messages[0] }}</div>
-            {% endif %}
-        {% endwith %}
-
-        <form action="/login" method="POST">
-            <div class="form-group">
-                <label for="username">Usuário</label>
-                <input id="username" name="username" type="text" placeholder="Digite seu usuário" required autofocus>
-            </div>
-            <div class="form-group">
-                <label for="password">Senha</label>
-                <input id="password" name="password" type="password" placeholder="••••••••••••" required>
-            </div>
-            <button class="btn-login" type="submit">Entrar</button>
-        </form>
-
-        <p class="footer-text">Acesso restrito · NetVale Telecom</p>
     </div>
+
+    <p class="footer">Acesso restrito · NetVale Telecom · © 2026</p>
+
 </body>
 </html>

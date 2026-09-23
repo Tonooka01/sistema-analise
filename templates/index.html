@@ -36,6 +36,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!['btnCashflow','btnDRE','btnDRE2','btnCrescimento'].includes(btn.id))
                 btn.style.display = 'none';
         });
+        // Botões movidos para sidebar (fora de .collection-selector)
+        ['btnClientes','btnContratos','btnContasAReceber','btnAtendimentos','btnOS','btnLogins'].forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) btn.style.display = 'none';
+        });
     }
 
     // --- Filtra o seletor: sem dashboard, só mostra o que o usuário tem acesso ---
@@ -89,59 +94,201 @@ document.addEventListener('DOMContentLoaded', () => {
 <div class="nv-topbar">
     <h1>Dashboard Analítico · NetVale</h1>
     <div class="nv-topbar-actions">
-        {% if current_user.is_authenticated %}
-            <button id="openAdminSettingsModalBtn" class="btn btn-ghost">⚙️ Configurações</button>
-        {% endif %}
-        {% if current_user.is_authenticated and current_user.username == 'admin' %}
-            <a href="/admin/logs" class="btn btn-ghost">👁️ Logs</a>
-        {% endif %}
-        <a href="/logout" class="btn btn-danger">Sair</a>
     </div>
 </div>
 
-<!-- Collection Selector Bar -->
-<div class="collection-bar">
-    <div class="collection-selector flex flex-wrap gap-2 justify-center items-center">
-        <button id="btnCashflow" style="background:#10b981 !important; border-color:#059669 !important; display:none !important;">💰 Cashflow</button>
-        <button id="btnDRE" style="background:#6366f1 !important; border-color:#4f46e5 !important;">📊 DRE</button>
-        <button id="btnDRE2" style="background:#0f766e !important; border-color:#0d9488 !important;">📊 Gestão</button>
-        <button id="btnCrescimento" style="background:#0891b2 !important; border-color:#0e7490 !important;">📈 Crescimento</button>
-        <button id="btnClientes">Clientes</button>
-        <button id="btnContasAReceber">Contas a Receber</button>
-        <button id="btnAtendimentos">Atendimentos</button>
-        <button id="btnOS">OS</button>
-        <button id="btnLogins">Logins</button>
-        <button id="btnContratos">Contratos</button>
-        <button id="btnCidade">Cidade</button>
-        <button id="btnVendedor">Vendedor</button>
-    </div>
-    <div class="flex gap-2 items-center flex-wrap justify-center">
-        <select id="customAnalysisSelector">
-            <option value="" disabled selected>Análise Personalizada</option>
-            <option value="real_permanence" class="text-black bg-white">Análise de Permanência Real (Paga)</option>
-            <option value="analise_juros_atraso" class="text-black bg-white">Análise de Juros por Atraso</option>
-            <option value="faturamento_por_cidade" class="text-black bg-white">Faturamento por Período e Cidade</option>
-            <option value="active_clients_evolution" class="text-black bg-white">Evolução de Clientes Ativos</option>
-            <option value="analise_comportamento" id="behaviorAnalysisOption" class="text-black bg-white">Análise de Comportamento</option>
-            <option value="retirada" class="text-black bg-white">📦 Retirada de Equipamento</option>
-            <option value="activations_by_seller" class="text-black bg-white">Ativação por Vendedor</option>
-            <option value="atrasos_e_nao_pagos" class="text-black bg-white">Atrasos e Faturas Não Pagas</option>
-            <option value="saude_financeira_contrato_atraso" class="text-black bg-white">Saúde Financeira por Contrato (Financeiro em atraso)</option>
-            <option value="saude_financeira_contrato_bloqueio" class="text-black bg-white">Saúde Financeira por Contrato (Bloqueio automático)</option>
-            <option value="cancellations" class="text-black bg-white">Análise de Cancelamento</option>
-            <option value="negativacao" class="text-black bg-white">Análise de Negativação</option>
-            <option value="vendedores" class="text-black bg-white">Análise de Vendedores (Churn)</option>
-            <option value="cancellations_by_city" class="text-black bg-white">Cancelamento/Negativação por Cidade</option>
-            <option value="cancellations_by_neighborhood" class="text-black bg-white">Cancelamento/Negativação por Bairro</option>
-            <option value="cancellations_by_equipment" class="text-black bg-white">Cancelamento por Equipamento</option>
-            <option value="equipment_by_olt" class="text-black bg-white">Equipamentos por OLT</option>
-            <option value="cohort_retention" class="text-black bg-white">Gráfico de Retenção (Coorte)</option>
-            <option value="daily_evolution_by_city" class="text-black bg-white">Evolução Diária por Cidade</option>
-            <option value="comparativo_diario" class="text-black bg-white">Comparativo Diário</option>
-        </select>
-        <button id="saveLayoutBtn">💾 Salvar Layout</button>
-    </div>
+<!-- select oculto — sistema de eventos depende dele, botões movidos para sidebar -->
+<div style="display:none;">
+    <select id="customAnalysisSelector" style="display:none;">
+        <option value="" disabled selected>Análise Personalizada</option>
+        <option value="real_permanence">Análise de Permanência Real (Paga)</option>
+        <option value="analise_juros_atraso">Análise de Juros por Atraso</option>
+        <option value="faturamento_por_cidade">Faturamento por Período e Cidade</option>
+        <option value="active_clients_evolution">Evolução de Clientes Ativos</option>
+        <option value="analise_comportamento" id="behaviorAnalysisOption">Análise de Comportamento</option>
+        <option value="retirada">📦 Retirada de Equipamento</option>
+        <option value="activations_by_seller">Ativação por Vendedor</option>
+        <option value="atrasos_e_nao_pagos">Atrasos e Faturas Não Pagas</option>
+        <option value="saude_financeira_contrato_atraso">Saúde Financeira por Contrato (Financeiro em atraso)</option>
+        <option value="saude_financeira_contrato_bloqueio">Saúde Financeira por Contrato (Bloqueio automático)</option>
+        <option value="cancellations">Análise de Cancelamento</option>
+        <option value="negativacao">Análise de Negativação</option>
+        <option value="vendedores">Análise de Vendedores (Churn)</option>
+        <option value="cancellations_by_city">Cancelamento/Negativação por Cidade</option>
+        <option value="cancellations_by_neighborhood">Cancelamento/Negativação por Bairro</option>
+        <option value="cancellations_by_equipment">Cancelamento por Equipamento</option>
+        <option value="equipment_by_olt">Equipamentos por OLT</option>
+        <option value="cohort_retention">Gráfico de Retenção (Coorte)</option>
+        <option value="daily_evolution_by_city">Evolução Diária por Cidade</option>
+        <option value="comparativo_diario">Comparativo Diário</option>
+    </select>
 </div>
+
+<style>
+#analysis-layout{display:flex;gap:.75rem;align-items:flex-start;margin-top:.5rem;}
+#analysisSidebar{width:240px;min-width:240px;background:#fff;border:1px solid #e5e7eb;border-radius:.6rem;flex-shrink:0;position:sticky;top:.75rem;max-height:calc(100vh - 110px);overflow-y:auto;overflow-x:hidden;transition:width .2s ease,min-width .2s ease;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+#analysisSidebar.collapsed{width:48px;min-width:48px;}
+#analysisSidebar.collapsed .sb-glabel,
+#analysisSidebar.collapsed .sb-chev,
+#analysisSidebar.collapsed .sb-item,
+#analysisSidebar.collapsed #sbLabel{display:none;}
+#analysisSidebar.collapsed .sb-gicon{font-size:1.1rem;margin:0 auto;}
+#analysisSidebar.collapsed .sb-group-hdr{justify-content:center;padding:.6rem .4rem;}
+.sb-sidebar-hdr{padding:.65rem 1rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e5e7eb;}
+#sbLabel{font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;}
+#sbCollapseBtn{background:none;border:none;color:#9ca3af;cursor:pointer;font-size:.85rem;padding:.15rem .3rem;border-radius:.25rem;line-height:1;transition:color .15s;}
+#sbCollapseBtn:hover{color:#374151;}
+.sb-group{border-bottom:1px solid #f3f4f6;}
+.sb-group-hdr{display:flex;align-items:center;gap:.5rem;padding:.55rem 1rem;cursor:pointer;transition:background .15s;user-select:none;}
+.sb-group-hdr:hover{background:#f9fafb;}
+.sb-gicon{font-size:.9rem;flex-shrink:0;}
+.sb-glabel{font-size:.75rem;font-weight:600;color:#374151;flex:1;white-space:nowrap;}
+.sb-chev{font-size:.7rem;color:#9ca3af;transition:transform .2s;flex-shrink:0;}
+.sb-group.open .sb-chev{transform:rotate(180deg);}
+.sb-items{display:none;padding:.2rem 0;}
+.sb-group.open .sb-items{display:block;}
+.sb-item{padding:.38rem 1rem .38rem 2.2rem;font-size:.76rem;color:#6b7280;cursor:pointer;border-left:2px solid transparent;transition:background .12s,color .12s,border-color .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sb-item:hover{background:#f3f4f6;color:#111827;}
+.sb-item.active{background:#eff6ff;color:#2563eb;border-left-color:#3b82f6;font-weight:600;}
+button.sb-item{border:none;background:none;width:100%;font-family:inherit;display:block;text-align:left;}
+#analysis-layout #dashboard-content-wrapper{flex:1;min-width:0;}
+
+/* Módulos na sidebar */
+.sb-section-label{font-size:.72rem;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;padding:.45rem 1rem .2rem;white-space:nowrap;}
+.sb-modules{padding:.2rem 0 .35rem;border-bottom:1px solid #e5e7eb;}
+.sb-module-btn{display:flex;align-items:center;gap:.55rem;width:calc(100% - .8rem);margin:.08rem .4rem;padding:.36rem .65rem;border-radius:.4rem;border:none !important;font-size:.77rem;font-weight:500;cursor:pointer;background:none !important;box-shadow:none !important;color:#6b7280 !important;text-align:left;font-family:inherit;transition:background .12s,color .12s;}
+.sb-module-btn:hover{background:#f3f4f6 !important;color:#111827 !important;}
+.sb-mod-icon{font-size:.86rem;flex-shrink:0;}
+.sb-mod-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#analysisSidebar.collapsed .sb-mod-label{display:none;}
+#analysisSidebar.collapsed .sb-module-btn{justify-content:center;padding:.38rem 0;margin:.08rem auto;width:80%;}
+#analysisSidebar.collapsed .sb-section-label{display:none;}
+#analysisSidebar.collapsed .sb-modules{padding:.15rem 0;}
+
+/* Rodapé da sidebar */
+.sb-footer{border-top:1px solid #e5e7eb;padding:.5rem .5rem;display:flex;flex-direction:column;gap:.3rem;margin-top:auto;}
+.sb-footer-btn{display:flex;align-items:center;gap:.55rem;padding:.42rem .6rem;border-radius:.4rem;font-size:.76rem;font-weight:500;cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:background .12s,color .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sb-footer-btn:hover{background:#f3f4f6;color:#111827;}
+.sb-footer-btn.danger{color:#dc2626;}
+.sb-footer-btn.danger:hover{background:#fef2f2;color:#b91c1c;}
+.sb-footer-icon{font-size:.9rem;flex-shrink:0;}
+.sb-footer-label{flex:1;overflow:hidden;text-overflow:ellipsis;}
+#analysisSidebar.collapsed .sb-footer-label{display:none;}
+#analysisSidebar.collapsed .sb-footer-btn{justify-content:center;padding:.42rem 0;}
+#analysisSidebar{display:flex;flex-direction:column;}
+</style>
+
+<div id="analysis-layout">
+
+<!-- ── SIDEBAR ── -->
+<nav id="analysisSidebar">
+  <div class="sb-sidebar-hdr">
+    <span id="sbLabel">Dashboard</span>
+    <button id="sbCollapseBtn" title="Recolher">◀</button>
+  </div>
+
+  <!-- MÓDULOS (collection-selector mantido para compatibilidade com JS de permissões) -->
+  <div class="sb-modules collection-selector">
+    <div class="sb-section-label">Módulos</div>
+    <button id="btnCashflow" class="sb-module-btn" style="display:none !important;">
+      <span class="sb-mod-icon">💰</span><span class="sb-mod-label">Cashflow</span>
+    </button>
+    <button id="btnDRE" class="sb-module-btn">
+      <span class="sb-mod-icon">📊</span><span class="sb-mod-label">DRE</span>
+    </button>
+    <button id="btnDRE2" class="sb-module-btn">
+      <span class="sb-mod-icon">📊</span><span class="sb-mod-label">Gestão</span>
+    </button>
+    <button id="btnCrescimento" class="sb-module-btn">
+      <span class="sb-mod-icon">📈</span><span class="sb-mod-label">Crescimento</span>
+    </button>
+  </div>
+
+  <!-- ANÁLISES -->
+  <div class="sb-section-label" style="border-top:1px solid #e5e7eb;padding-top:.6rem;">Análises</div>
+
+  <!-- VENDAS (primeiro, conforme solicitado) -->
+  <div class="sb-group open" data-grp="vendas">
+    <div class="sb-group-hdr">
+      <span class="sb-gicon">📈</span><span class="sb-glabel">Vendas</span><span class="sb-chev">▾</span>
+    </div>
+    <div class="sb-items">
+      <div class="sb-item" data-val="activations_by_seller">Ativação por Vendedor</div>
+    </div>
+  </div>
+
+  <!-- FINANCEIRO -->
+  <div class="sb-group open" data-grp="financeiro">
+    <div class="sb-group-hdr">
+      <span class="sb-gicon">💰</span><span class="sb-glabel">Financeiro</span><span class="sb-chev">▾</span>
+    </div>
+    <div class="sb-items">
+      <button id="btnContasAReceber" class="sb-item">Contas a Receber</button>
+      <div class="sb-item" data-val="real_permanence">Permanência Real (Paga)</div>
+      <div class="sb-item" data-val="analise_juros_atraso">Juros por Atraso</div>
+      <div class="sb-item" data-val="faturamento_por_cidade">Faturamento por Período/Cidade</div>
+      <div class="sb-item" data-val="saude_financeira_contrato_atraso">Saúde Financeira (Atraso)</div>
+      <div class="sb-item" data-val="saude_financeira_contrato_bloqueio">Saúde Financeira (Bloqueio)</div>
+      <div class="sb-item" data-val="atrasos_e_nao_pagos">Atrasos e Faturas Não Pagas</div>
+      <div class="sb-item" data-val="daily_evolution_by_city">Evolução Diária por Cidade</div>
+      <div class="sb-item" data-val="comparativo_diario">Comparativo Diário</div>
+    </div>
+  </div>
+
+  <!-- CLIENTES -->
+  <div class="sb-group open" data-grp="clientes">
+    <div class="sb-group-hdr">
+      <span class="sb-gicon">👥</span><span class="sb-glabel">Clientes</span><span class="sb-chev">▾</span>
+    </div>
+    <div class="sb-items">
+      <button id="btnClientes"       class="sb-item">Clientes</button>
+      <button id="btnContratos"      class="sb-item">Contratos</button>
+      <button id="btnAtendimentos"   class="sb-item">Atendimentos</button>
+      <button id="btnOS"             class="sb-item">OS</button>
+      <button id="btnLogins"         class="sb-item">Logins</button>
+      <div class="sb-item" data-val="active_clients_evolution">Evolução de Clientes Ativos</div>
+      <div class="sb-item" data-val="analise_comportamento" id="sbItemBehavior">Análise de Comportamento</div>
+      <div class="sb-item" data-val="equipment_by_olt">Equipamentos por OLT</div>
+      <div class="sb-item" data-val="cohort_retention">Retenção (Coorte)</div>
+    </div>
+  </div>
+
+  <!-- CANCELAMENTO -->
+  <div class="sb-group open" data-grp="cancelamento">
+    <div class="sb-group-hdr">
+      <span class="sb-gicon">🚨</span><span class="sb-glabel">Cancelamento</span><span class="sb-chev">▾</span>
+    </div>
+    <div class="sb-items">
+      <div class="sb-item" data-val="cancellations_by_city">Canc./Neg. por Cidade</div>
+      <div class="sb-item" data-val="cancellations_by_neighborhood">Canc./Neg. por Bairro</div>
+      <div class="sb-item" data-val="cancellations_by_equipment">Canc. por Equipamento</div>
+      <div class="sb-item" data-val="retirada" id="sbItemRetirada">📦 Retirada de Equipamento</div>
+      <div class="sb-item" data-val="cancellations">Análise de Cancelamento</div>
+      <div class="sb-item" data-val="negativacao">Análise de Negativação</div>
+      <div class="sb-item" data-val="vendedores">Vendedores (Churn)</div>
+    </div>
+  </div>
+
+  <!-- RODAPÉ: Salvar Layout + ações do usuário -->
+  <div class="sb-footer">
+    <button id="saveLayoutBtn" class="sb-footer-btn" title="Salvar Layout">
+      <span class="sb-footer-icon">💾</span><span class="sb-footer-label">Salvar Layout</span>
+    </button>
+    {% if current_user.is_authenticated %}
+      <button id="openAdminSettingsModalBtn" class="sb-footer-btn" title="Configurações">
+        <span class="sb-footer-icon">⚙️</span><span class="sb-footer-label">Configurações</span>
+      </button>
+    {% endif %}
+    {% if current_user.is_authenticated and current_user.username == 'admin' %}
+      <a href="/admin/logs" class="sb-footer-btn" title="Logs">
+        <span class="sb-footer-icon">👁️</span><span class="sb-footer-label">Logs</span>
+      </a>
+    {% endif %}
+    <a href="/logout" class="sb-footer-btn danger" title="Sair">
+      <span class="sb-footer-icon">🚪</span><span class="sb-footer-label">Sair</span>
+    </a>
+  </div>
+</nav>
 
 <div id="dashboard-content-wrapper" class="card p-6">
     <div id="dashboard-content">
@@ -500,13 +647,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
     <div id="main-charts-area" class="grid-stack mt-8">
         </div>
-    
+
     <div class="flex justify-center mt-6">
         <button id="viewTableBtn" class="bg-purple-600 text-white px-6 py-3 rounded-xl shadow-md transition duration-300 ease-in-out transform hover:scale-105 active:scale-95 font-semibold hidden">
             Ver Tabela Completa (Paginação)
         </button>
     </div>
-</div>
+</div><!-- /#dashboard-content-wrapper -->
+</div><!-- /#analysis-layout -->
+
+<script>
+(function() {
+    const sidebar  = document.getElementById('analysisSidebar');
+    const colBtn   = document.getElementById('sbCollapseBtn');
+    const sel      = document.getElementById('customAnalysisSelector');
+
+    // Colapsar / expandir
+    colBtn.addEventListener('click', () => {
+        const collapsed = sidebar.classList.toggle('collapsed');
+        colBtn.textContent = collapsed ? '▶' : '◀';
+    });
+
+    // Toggle de grupo — se colapsada, expande a sidebar e abre o grupo
+    sidebar.querySelectorAll('.sb-group-hdr').forEach(hdr => {
+        hdr.addEventListener('click', () => {
+            if (sidebar.classList.contains('collapsed')) {
+                sidebar.classList.remove('collapsed');
+                colBtn.textContent = '◀';
+                hdr.closest('.sb-group').classList.add('open');
+            } else {
+                hdr.closest('.sb-group').classList.toggle('open');
+            }
+        });
+    });
+
+    // Clique em item → dispara a análise
+    sidebar.querySelectorAll('.sb-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const val = item.dataset.val;
+            if (!val) return;
+            // Marca ativo
+            sidebar.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            // Dispara o sistema existente
+            sel.value = val;
+            sel.dispatchEvent(new Event('change'));
+        });
+    });
+
+    // Sincroniza sidebar quando o select muda de fora (auto-nav, permissões)
+    sel.addEventListener('change', () => {
+        const val = sel.value;
+        sidebar.querySelectorAll('.sb-item').forEach(i => {
+            i.classList.toggle('active', i.dataset.val === val);
+        });
+    });
+})();
+</script>
 
 <!-- =====================================================================
      MODAL: Detalhes do Cliente (global — usado por todas as abas de comportamento)

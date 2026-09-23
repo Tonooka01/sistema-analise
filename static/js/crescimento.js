@@ -113,10 +113,10 @@ function _shell() {
     <div id="cgTab0">
 
     <!-- KPI cards -->
-    <div id="cgKpis" style="display:grid;grid-template-columns:repeat(5,1fr);gap:.75rem;margin-bottom:1.25rem;"></div>
+    <div id="cgKpis" style="display:grid;grid-template-columns:repeat(6,1fr);gap:.75rem;margin-bottom:1.25rem;"></div>
 
     <!-- Gráficos de crescimento -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem;">
+    <div style="display:grid;grid-template-columns:1fr;gap:1rem;margin-bottom:2rem;">
         ${[
             {title:'MRR Mensal (R$)',     desc:'Evolução da receita recorrente mensal ao longo do tempo. Fonte: Contas_a_Receber (Status="Recebido"), agrupado por mês de pagamento. Permite identificar sazonalidade, aceleração ou desaceleração da receita. A linha de projeção (pontilhada) usa CAGR dos últimos 6 meses para estimar os próximos 6.'},
             {title:'Clientes Ativos',     desc:'Quantidade de contratos únicos com pagamento confirmado a cada mês (ID_contrato_principal distintos em Contas_a_Receber, Status="Recebido"). Crescimento aqui reflete expansão da base; queda pode indicar aumento de churn mesmo com MRR estável (upsell compensando saídas).'},
@@ -127,7 +127,7 @@ function _shell() {
                       text-transform:uppercase;letter-spacing:.06em;">${title}</p>
             <p style="font-size:.67rem;color:#94a3b8;margin:0 0 .4rem;line-height:1.4;">${desc}</p>
             <div id="cgLegend${i}" style="font-size:.7rem;color:#9ca3af;margin-bottom:.25rem;min-height:1rem;"></div>
-            <div style="position:relative;height:200px;">
+            <div style="position:relative;height:280px;">
                 <canvas id="cgChart${i}"></canvas>
             </div>
         </div>`).join('')}
@@ -460,7 +460,7 @@ function _renderCharts(d) {
                         borderWidth: 2,
                         fill: true,
                         tension: 0.3,
-                        pointRadius: 2,
+                        pointRadius: 3,
                     },
                     {
                         label: 'Projeção',
@@ -471,7 +471,7 @@ function _renderCharts(d) {
                         borderDash: [6, 3],
                         fill: false,
                         tension: 0.3,
-                        pointRadius: 2,
+                        pointRadius: 3,
                         pointStyle: 'rectRot',
                     },
                 ],
@@ -486,10 +486,10 @@ function _renderCharts(d) {
                     },
                 },
                 scales: {
-                    x: { ticks: { font: { size: 8 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 10 } },
+                    x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 18 } },
                     y: {
                         beginAtZero: false,
-                        ticks: { font: { size: 9 }, callback: v => cfg.tickFmt(v) },
+                        ticks: { font: { size: 10 }, callback: v => cfg.tickFmt(v) },
                     },
                 },
             },
@@ -526,8 +526,9 @@ function _renderKpis(d) {
 
     const mrr_now  = last.mrr      || 0;
     const mrr_6m   = lproj.mrr     || 0;
-    const cli_now  = last.clientes  || 0;
-    const cli_6m   = lproj.clientes || 0;
+    const cli_now     = last.clientes || 0;
+    const cli_ixc     = d.clientes_ativo_ixc || 0;
+    const cli_6m      = lproj.clientes || 0;
 
     const mrr_delta = mrr_now > 0 ? ((mrr_6m - mrr_now) / mrr_now * 100) : 0;
     const cli_delta = cli_now > 0 ? ((cli_6m - cli_now) / cli_now * 100) : 0;
@@ -563,7 +564,16 @@ function _renderKpis(d) {
             delta: cli_delta,
             icon:  '👥',
             color: null,
-            desc:  'Contagem de contratos únicos (ID_contrato_principal) com ao menos um pagamento confirmado no último mês do histórico (Contas_a_Receber, Status="Recebido"). Divergência entre crescimento de MRR e de clientes indica mudança no ticket médio (ARPU). Projeção via CAGR dos últimos 6 meses completos.',
+            desc:  'Contratos únicos com pagamento confirmado no mês (Contas_a_Receber, Status="Recebido"). Exclui clientes em atraso que ainda não pagaram. Projeção via CAGR dos últimos 6 meses completos.',
+        },
+        {
+            label: 'Clientes Ativos IXC',
+            value: cli_ixc > 0 ? cli_ixc.toLocaleString('pt-BR') : '—',
+            sub:   `Em atraso: ${cli_ixc > 0 ? (cli_ixc - cli_now).toLocaleString('pt-BR') : '—'}`,
+            delta: null,
+            icon:  '🟢',
+            color: '#059669',
+            desc:  'Contratos com Status=Ativo na tabela Contratos (igual ao número exibido no IXC). Inclui clientes inadimplentes que ainda não foram cancelados. A diferença para "Clientes Ativos" indica quantos estão ativos mas em atraso no pagamento.',
         },
         {
             label: 'Crescimento Mensal',
