@@ -770,7 +770,9 @@ function _openAnualVencDetalhe(ano) {
                     ${cidades.map(c => {
                         const v = m.cidades[c]?.total || 0;
                         cidadeTotais[c] += v;
-                        return `<td style="padding:.45rem .75rem;text-align:right;color:#6b7280;white-space:nowrap;">${v > 0 ? fmtBRL(v) : '—'}</td>`;
+                        return v > 0
+                            ? `<td data-cidade="${c}" style="padding:.45rem .75rem;text-align:right;color:#059669;white-space:nowrap;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" title="Ver boletos: ${c}">${fmtBRL(v)}</td>`
+                            : `<td style="padding:.45rem .75rem;text-align:right;color:#d1d5db;white-space:nowrap;">—</td>`;
                     }).join('')}
                     <td style="padding:.45rem .75rem;text-align:right;font-weight:700;color:#059669;white-space:nowrap;">${fmtBRL(rowTotal)}</td>
                     <td style="padding:.45rem .75rem;text-align:right;color:#9ca3af;">${rowQtd}</td>
@@ -842,7 +844,9 @@ function _openAnualDetalhe(ano) {
                     ${cidades.map(c => {
                         const v = m.cidades[c]?.total || 0;
                         cidadeTotais[c] += v;
-                        return `<td style="padding:.45rem .75rem;text-align:right;color:#6b7280;white-space:nowrap;">${v > 0 ? fmtBRL(v) : '—'}</td>`;
+                        return v > 0
+                            ? `<td data-cidade="${c}" style="padding:.45rem .75rem;text-align:right;color:#1d4ed8;white-space:nowrap;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" title="Ver boletos: ${c}">${fmtBRL(v)}</td>`
+                            : `<td style="padding:.45rem .75rem;text-align:right;color:#d1d5db;white-space:nowrap;">—</td>`;
                     }).join('')}
                     <td style="padding:.45rem .75rem;text-align:right;font-weight:700;color:#1d4ed8;white-space:nowrap;">${fmtBRL(rowTotal)}</td>
                     <td style="padding:.45rem .75rem;text-align:right;color:#9ca3af;">${rowQtd}</td>
@@ -893,11 +897,19 @@ function _attachBoletosRowHandlers(tipo) {
         const origBg = tr.dataset.bg || '#fff';
         tr.addEventListener('mouseover', () => { tr.style.backgroundColor = hoverBg; });
         tr.addEventListener('mouseout',  () => { tr.style.backgroundColor = origBg; });
-        tr.addEventListener('click', () => _openBoletosForMes(tr.dataset.mes, tipo));
+        // Clique na linha inteira = todos os boletos do mês
+        tr.addEventListener('click', () => _openBoletosForMes(tr.dataset.mes, tipo, null));
+        // Clique em célula de cidade específica = filtra por aquela cidade
+        tr.querySelectorAll('td[data-cidade]').forEach(td => {
+            td.addEventListener('click', e => {
+                e.stopPropagation();
+                _openBoletosForMes(tr.dataset.mes, tipo, td.dataset.cidade);
+            });
+        });
     });
 }
 
-function _openBoletosForMes(mes, tipo) {
+function _openBoletosForMes(mes, tipo, cidade) {
     const bodyId  = tipo === 'venc' ? 'cgAnualVencModalBody' : 'cgAnualModalBody';
     const titleId = tipo === 'venc' ? 'cgAnualVencModalTitle' : 'cgAnualModalTitle';
     const body    = document.getElementById(bodyId);
@@ -911,14 +923,18 @@ function _openBoletosForMes(mes, tipo) {
     const savedTitle = (window._cgBoletosState[tipo]?.title || '').split(' — ')[0];
 
     body.innerHTML = '<p style="color:#6b7280;font-size:.85rem;">Carregando boletos…</p>';
-    titleEl.textContent = `${savedTitle} › ${mesLabel}`;
+    titleEl.textContent = cidade
+        ? `${savedTitle} › ${mesLabel} · ${cidade}`
+        : `${savedTitle} › ${mesLabel}`;
 
     const fmtBRL      = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const accent      = tipo === 'venc' ? '#059669' : '#1d4ed8';
     const accentBg    = tipo === 'venc' ? '#f0fdf4' : '#eff6ff';
     const accentBd    = tipo === 'venc' ? '#bbf7d0' : '#bfdbfe';
 
-    fetch(`${API}/api/crescimento/boletos?ano=${ano}&mes=${mesNum}&tipo=${tipo}`)
+    let url = `${API}/api/crescimento/boletos?ano=${ano}&mes=${mesNum}&tipo=${tipo}`;
+    if (cidade) url += `&cidade=${encodeURIComponent(cidade)}`;
+    fetch(url)
         .then(r => r.json())
         .then(d => {
             if (d.error) { body.innerHTML = `<p style="color:red;">${d.error}</p>`; return; }

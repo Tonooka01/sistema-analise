@@ -485,6 +485,8 @@ def api_boletos_mes():
         return jsonify({'error': 'Parâmetros inválidos'}), 400
     mes = mes.zfill(2)
 
+    cidade_filter = request.args.get('cidade', '').strip()
+
     conn = get_db()
     try:
         date_col = 'Vencimento' if tipo == 'venc' else 'Data_pagamento'
@@ -500,7 +502,14 @@ def api_boletos_mes():
             ORDER BY Cidade, Cliente
         """, (ano, mes)).fetchall()
 
-        boletos = [dict(r) for r in rows]
+        boletos = []
+        for r in rows:
+            cidade_norm = _norm_cidade(r['Cidade'])
+            if cidade_filter and cidade_norm != cidade_filter:
+                continue
+            row = dict(r)
+            row['Cidade'] = cidade_norm
+            boletos.append(row)
         return jsonify({'boletos': boletos, 'total': len(boletos)})
     except Exception as e:
         logger.error("crescimento/boletos: %s", e, exc_info=True)
