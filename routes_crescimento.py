@@ -186,37 +186,33 @@ def api_crescimento_dados():
             logger.error("crescimento/dados clientes_ativo_ixc: %s", _e, exc_info=True)
             cli_ativo_ixc = 0
 
-        # ── Faturamento real anual (apenas as 4 cidades principais) ─────────
-        CIDADES_PRINCIPAIS = ('São Domingos do Maranhão', 'Dom Pedro', 'Presidente Dutra', 'Tuntum')
+        # ── Faturamento real anual (todas as cidades) ────────────────────────
         faturamento_anual = []
         faturamento_anual_venc = []
         try:
-            ph = ','.join(['?'] * len(CIDADES_PRINCIPAIS))
             # Por data de pagamento
-            for r in conn.execute(f"""
+            for r in conn.execute("""
                 SELECT STRFTIME('%Y', Data_pagamento) AS ano,
                        SUM(Valor_recebido)            AS total
                 FROM Contas_a_Receber
                 WHERE Status = 'Recebido'
                   AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
-                  AND Cidade IN ({ph})
                 GROUP BY ano
                 ORDER BY ano
-            """, CIDADES_PRINCIPAIS):
+            """):
                 if r['ano']:
                     faturamento_anual.append({'ano': r['ano'], 'total': float(r['total'] or 0)})
             # Por data de vencimento — exige Data_pagamento preenchida (igual ao IXC)
-            for r in conn.execute(f"""
+            for r in conn.execute("""
                 SELECT STRFTIME('%Y', Vencimento) AS ano,
                        SUM(Valor_recebido)        AS total
                 FROM Contas_a_Receber
                 WHERE Status = 'Recebido'
                   AND Vencimento IS NOT NULL AND Vencimento != ''
                   AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
-                  AND Cidade IN ({ph})
                 GROUP BY ano
                 ORDER BY ano
-            """, CIDADES_PRINCIPAIS):
+            """):
                 if r['ano']:
                     faturamento_anual_venc.append({'ano': r['ano'], 'total': float(r['total'] or 0)})
         except Exception as _e:
@@ -323,16 +319,14 @@ def api_crescimento_dados():
 @crescimento_bp.route('/faturamento_detalhe')
 @login_required
 def api_faturamento_detalhe():
-    """Retorna recebimentos mês a mês para um ano específico (4 cidades principais)."""
+    """Retorna recebimentos mês a mês para um ano específico (todas as cidades)."""
     ano = request.args.get('ano', '').strip()
     if not ano or not ano.isdigit():
         return jsonify({'error': 'Ano inválido'}), 400
 
-    CIDADES = ('São Domingos do Maranhão', 'Dom Pedro', 'Presidente Dutra', 'Tuntum')
     conn = get_db()
     try:
-        ph = ','.join(['?'] * len(CIDADES))
-        rows = conn.execute(f"""
+        rows = conn.execute("""
             SELECT
                 STRFTIME('%Y-%m', Data_pagamento)  AS mes,
                 Cidade,
@@ -342,15 +336,15 @@ def api_faturamento_detalhe():
             WHERE Status = 'Recebido'
               AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
               AND STRFTIME('%Y', Data_pagamento) = ?
-              AND Cidade IN ({ph})
             GROUP BY mes, Cidade
             ORDER BY mes, Cidade
-        """, (ano, *CIDADES)).fetchall()
+        """, (ano,)).fetchall()
 
         total_geral = sum(r['total'] or 0 for r in rows)
 
         # Agrupa por mês com subtotais por cidade
         meses = {}
+        cidades_set = set()
         for r in rows:
             m = r['mes']
             if m not in meses:
@@ -361,10 +355,11 @@ def api_faturamento_detalhe():
             }
             meses[m]['total'] += float(r['total'] or 0)
             meses[m]['qtd']   += int(r['qtd'] or 0)
+            cidades_set.add(r['Cidade'])
 
         return jsonify({
             'ano':         ano,
-            'cidades':     list(CIDADES),
+            'cidades':     sorted(cidades_set),
             'meses':       list(meses.values()),
             'total_geral': total_geral,
         })
@@ -378,16 +373,14 @@ def api_faturamento_detalhe():
 @crescimento_bp.route('/faturamento_venc_detalhe')
 @login_required
 def api_faturamento_venc_detalhe():
-    """Retorna recebimentos mês a mês por vencimento para um ano específico (4 cidades)."""
+    """Retorna recebimentos mês a mês por vencimento para um ano específico (todas as cidades)."""
     ano = request.args.get('ano', '').strip()
     if not ano or not ano.isdigit():
         return jsonify({'error': 'Ano inválido'}), 400
 
-    CIDADES = ('São Domingos do Maranhão', 'Dom Pedro', 'Presidente Dutra', 'Tuntum')
     conn = get_db()
     try:
-        ph = ','.join(['?'] * len(CIDADES))
-        rows = conn.execute(f"""
+        rows = conn.execute("""
             SELECT
                 STRFTIME('%Y-%m', Vencimento) AS mes,
                 Cidade,
@@ -398,12 +391,12 @@ def api_faturamento_venc_detalhe():
               AND Vencimento IS NOT NULL AND Vencimento != ''
               AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
               AND STRFTIME('%Y', Vencimento) = ?
-              AND Cidade IN ({ph})
             GROUP BY mes, Cidade
             ORDER BY mes, Cidade
-        """, (ano, *CIDADES)).fetchall()
+        """, (ano,)).fetchall()
 
         meses = {}
+        cidades_set = set()
         for r in rows:
             m = r['mes']
             if m not in meses:
@@ -414,12 +407,13 @@ def api_faturamento_venc_detalhe():
             }
             meses[m]['total'] += float(r['total'] or 0)
             meses[m]['qtd']   += int(r['qtd'] or 0)
+            cidades_set.add(r['Cidade'])
 
         total_geral = sum(m['total'] for m in meses.values())
 
         return jsonify({
             'ano':         ano,
-            'cidades':     list(CIDADES),
+            'cidades':     sorted(cidades_set),
             'meses':       list(meses.values()),
             'total_geral': total_geral,
         })
@@ -433,7 +427,7 @@ def api_faturamento_venc_detalhe():
 @crescimento_bp.route('/boletos')
 @login_required
 def api_boletos_mes():
-    """Retorna boletos individuais de um mês/ano para as 4 cidades (por pgto ou vencimento)."""
+    """Retorna boletos individuais de um mês/ano (todas as cidades, por pgto ou vencimento)."""
     ano  = request.args.get('ano', '').strip()
     mes  = request.args.get('mes', '').strip()
     tipo = request.args.get('tipo', 'pgto')  # 'pgto' | 'venc'
@@ -442,10 +436,8 @@ def api_boletos_mes():
         return jsonify({'error': 'Parâmetros inválidos'}), 400
     mes = mes.zfill(2)
 
-    CIDADES = ('São Domingos do Maranhão', 'Dom Pedro', 'Presidente Dutra', 'Tuntum')
     conn = get_db()
     try:
-        ph = ','.join(['?'] * len(CIDADES))
         date_col = 'Vencimento' if tipo == 'venc' else 'Data_pagamento'
         extra = "AND Data_pagamento IS NOT NULL AND Data_pagamento != ''" if tipo == 'venc' else ''
         rows = conn.execute(f"""
@@ -456,9 +448,8 @@ def api_boletos_mes():
               {extra}
               AND STRFTIME('%Y', {date_col}) = ?
               AND STRFTIME('%m', {date_col}) = ?
-              AND Cidade IN ({ph})
             ORDER BY Cidade, Cliente
-        """, (ano, mes, *CIDADES)).fetchall()
+        """, (ano, mes)).fetchall()
 
         boletos = [dict(r) for r in rows]
         return jsonify({'boletos': boletos, 'total': len(boletos)})
