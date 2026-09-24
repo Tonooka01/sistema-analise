@@ -155,25 +155,25 @@ function _shell() {
 
     <!-- Modal de detalhe anual por vencimento -->
     <div id="cgAnualVencModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
-        <div style="background:#fff;border-radius:.75rem;width:min(920px,95vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+        <div style="background:#fff;border-radius:.75rem;width:min(1200px,97vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
             <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;">
                 <h3 id="cgAnualVencModalTitle" style="margin:0;font-size:1rem;font-weight:700;color:#111827;">Faturamento por Vencimento</h3>
                 <button onclick="document.getElementById('cgAnualVencModal').style.display='none'"
                         style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:#6b7280;line-height:1;">×</button>
             </div>
-            <div id="cgAnualVencModalBody" style="overflow-y:auto;padding:1rem 1.25rem;"></div>
+            <div id="cgAnualVencModalBody" style="overflow-y:auto;overflow-x:auto;padding:1rem 1.25rem;"></div>
         </div>
     </div>
 
     <!-- Modal de detalhe anual -->
     <div id="cgAnualModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
-        <div style="background:#fff;border-radius:.75rem;width:min(920px,95vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+        <div style="background:#fff;border-radius:.75rem;width:min(1200px,97vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
             <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;">
                 <h3 id="cgAnualModalTitle" style="margin:0;font-size:1rem;font-weight:700;color:#111827;">Faturamento</h3>
                 <button onclick="document.getElementById('cgAnualModal').style.display='none'"
                         style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:#6b7280;line-height:1;">×</button>
             </div>
-            <div id="cgAnualModalBody" style="overflow-y:auto;padding:1rem 1.25rem;"></div>
+            <div id="cgAnualModalBody" style="overflow-y:auto;overflow-x:auto;padding:1rem 1.25rem;"></div>
         </div>
     </div>
 
@@ -676,13 +676,13 @@ function _renderCharts(d) {
     // ── Gráfico de Faturamento Anual ─────────────────────────────────────────
     const anualData    = d.faturamento_anual || [];
     const cidadesPgto  = d.cidades_pgto || [];
-    const selPgto      = new Set(cidadesPgto);
+    window._cgSelPgto  = new Set(cidadesPgto);   // exposto para os modais
 
     function _recalcAnual() {
         if (!_charts._anual) return;
         _charts._anual.data.datasets[0].data = anualData.map(r => {
             if (!r.por_cidade) return r.total;
-            return Array.from(selPgto).reduce((s, c) => s + (r.por_cidade[c] || 0), 0);
+            return Array.from(window._cgSelPgto).reduce((s, c) => s + (r.por_cidade[c] || 0), 0);
         });
         _charts._anual.update();
     }
@@ -693,19 +693,19 @@ function _renderCharts(d) {
             'cgChartAnual', anualData, '#3b82f6', '#93c5fd',
             'Faturamento Real (R$)', _openAnualDetalhe, 'barLabels'
         );
-        _renderCidadeFilter('cgFiltCidadesAnual', cidadesPgto, selPgto, _recalcAnual);
+        _renderCidadeFilter('cgFiltCidadesAnual', cidadesPgto, window._cgSelPgto, _recalcAnual);
     }
 
     // ── Gráfico de Faturamento por Vencimento ────────────────────────────────
     const vencData     = d.faturamento_anual_venc || [];
     const cidadesVenc  = d.cidades_venc || [];
-    const selVenc      = new Set(cidadesVenc);
+    window._cgSelVenc  = new Set(cidadesVenc);   // exposto para os modais
 
     function _recalcVenc() {
         if (!_charts._anualVenc) return;
         _charts._anualVenc.data.datasets[0].data = vencData.map(r => {
             if (!r.por_cidade) return r.total;
-            return Array.from(selVenc).reduce((s, c) => s + (r.por_cidade[c] || 0), 0);
+            return Array.from(window._cgSelVenc).reduce((s, c) => s + (r.por_cidade[c] || 0), 0);
         });
         _charts._anualVenc.update();
     }
@@ -716,7 +716,7 @@ function _renderCharts(d) {
             'cgChartAnualVenc', vencData, '#10b981', '#6ee7b7',
             'Faturamento por Vencimento (R$)', _openAnualVencDetalhe, 'barLabelsVenc'
         );
-        _renderCidadeFilter('cgFiltCidadesVenc', cidadesVenc, selVenc, _recalcVenc);
+        _renderCidadeFilter('cgFiltCidadesVenc', cidadesVenc, window._cgSelVenc, _recalcVenc);
     }
 }
 
@@ -737,47 +737,52 @@ function _openAnualVencDetalhe(ano) {
         .then(r => r.json())
         .then(d => {
             if (d.error) { body.innerHTML = `<p style="color:red;">${d.error}</p>`; return; }
-            const cidades = d.cidades || [];
-            const meses   = d.meses   || [];
+            const todasCidades = d.cidades || [];
+            const meses        = d.meses   || [];
+            // Filtra colunas pelas cidades selecionadas no checkbox
+            const sel = window._cgSelVenc;
+            const cidades = (sel && sel.size > 0 && sel.size < todasCidades.length)
+                ? todasCidades.filter(c => sel.has(c))
+                : todasCidades;
 
-            let html = `
-            <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
-                <thead>
-                    <tr style="background:#f0fdf4;">
-                        <th style="padding:.5rem .75rem;text-align:left;color:#374151;font-weight:700;border-bottom:2px solid #bbf7d0;">Mês</th>
-                        ${cidades.map(c => `<th style="padding:.5rem .75rem;text-align:right;color:#374151;font-weight:700;border-bottom:2px solid #bbf7d0;">${c}</th>`).join('')}
-                        <th style="padding:.5rem .75rem;text-align:right;color:#059669;font-weight:700;border-bottom:2px solid #bbf7d0;">Total</th>
-                        <th style="padding:.5rem .75rem;text-align:right;color:#6b7280;font-weight:700;border-bottom:2px solid #bbf7d0;">Qtd</th>
-                    </tr>
-                </thead>
-                <tbody>`;
+            const TH = 'padding:.5rem .75rem;text-align:right;color:#374151;font-weight:700;border-bottom:2px solid #bbf7d0;white-space:nowrap;';
+            let html = `<table style="border-collapse:collapse;font-size:.82rem;min-width:100%;">
+                <thead><tr style="background:#f0fdf4;">
+                    <th style="padding:.5rem .75rem;text-align:left;color:#374151;font-weight:700;border-bottom:2px solid #bbf7d0;white-space:nowrap;">Mês</th>
+                    ${cidades.map(c => `<th style="${TH}">${c}</th>`).join('')}
+                    <th style="${TH.replace('#374151','#059669')}">Total</th>
+                    <th style="${TH.replace('#374151','#6b7280')}">Qtd</th>
+                </tr></thead><tbody>`;
 
             let totalGeral = 0, qtdGeral = 0;
             const cidadeTotais = {};
             cidades.forEach(c => { cidadeTotais[c] = 0; });
 
             meses.forEach((m, i) => {
-                const mesNum = m.mes.split('-')[1];
+                const mesNum   = m.mes.split('-')[1];
                 const mesLabel = MESES_PT[parseInt(mesNum, 10) - 1] || m.mes;
                 const bg = i % 2 === 0 ? '#fff' : '#f9fafb';
+                // Recalcula total da linha só com cidades selecionadas
+                const rowTotal = cidades.reduce((s, c) => s + (m.cidades[c]?.total || 0), 0);
+                const rowQtd   = cidades.reduce((s, c) => s + (m.cidades[c]?.qtd   || 0), 0);
                 html += `<tr data-mes="${m.mes}" data-bg="${bg}" style="background:${bg};cursor:pointer;" title="Ver boletos de ${mesLabel}">
-                    <td style="padding:.45rem .75rem;color:#374151;font-weight:600;">${mesLabel} <span style="color:#9ca3af;font-size:.72rem;">↗</span></td>
+                    <td style="padding:.45rem .75rem;color:#374151;font-weight:600;white-space:nowrap;">${mesLabel} <span style="color:#9ca3af;font-size:.72rem;">↗</span></td>
                     ${cidades.map(c => {
                         const v = m.cidades[c]?.total || 0;
                         cidadeTotais[c] += v;
-                        return `<td style="padding:.45rem .75rem;text-align:right;color:#6b7280;">${v > 0 ? fmtBRL(v) : '—'}</td>`;
+                        return `<td style="padding:.45rem .75rem;text-align:right;color:#6b7280;white-space:nowrap;">${v > 0 ? fmtBRL(v) : '—'}</td>`;
                     }).join('')}
-                    <td style="padding:.45rem .75rem;text-align:right;font-weight:700;color:#059669;">${fmtBRL(m.total)}</td>
-                    <td style="padding:.45rem .75rem;text-align:right;color:#9ca3af;">${m.qtd}</td>
+                    <td style="padding:.45rem .75rem;text-align:right;font-weight:700;color:#059669;white-space:nowrap;">${fmtBRL(rowTotal)}</td>
+                    <td style="padding:.45rem .75rem;text-align:right;color:#9ca3af;">${rowQtd}</td>
                 </tr>`;
-                totalGeral += m.total;
-                qtdGeral   += m.qtd;
+                totalGeral += rowTotal;
+                qtdGeral   += rowQtd;
             });
 
             html += `<tr style="background:#f0fdf4;border-top:2px solid #bbf7d0;">
                 <td style="padding:.5rem .75rem;font-weight:700;color:#065f46;">TOTAL</td>
-                ${cidades.map(c => `<td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#065f46;">${fmtBRL(cidadeTotais[c])}</td>`).join('')}
-                <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#059669;font-size:.9rem;">${fmtBRL(totalGeral)}</td>
+                ${cidades.map(c => `<td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#065f46;white-space:nowrap;">${fmtBRL(cidadeTotais[c])}</td>`).join('')}
+                <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#059669;font-size:.9rem;white-space:nowrap;">${fmtBRL(totalGeral)}</td>
                 <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#374151;">${qtdGeral}</td>
             </tr>`;
 
@@ -806,49 +811,50 @@ function _openAnualDetalhe(ano) {
         .then(r => r.json())
         .then(d => {
             if (d.error) { body.innerHTML = `<p style="color:red;">${d.error}</p>`; return; }
-            const cidades = d.cidades || [];
-            const meses   = d.meses   || [];
+            const todasCidades = d.cidades || [];
+            const meses        = d.meses   || [];
+            const sel = window._cgSelPgto;
+            const cidades = (sel && sel.size > 0 && sel.size < todasCidades.length)
+                ? todasCidades.filter(c => sel.has(c))
+                : todasCidades;
 
-            // Cabeçalho da tabela
-            let html = `
-            <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
-                <thead>
-                    <tr style="background:#f3f4f6;">
-                        <th style="padding:.5rem .75rem;text-align:left;color:#374151;font-weight:700;border-bottom:2px solid #e5e7eb;">Mês</th>
-                        ${cidades.map(c => `<th style="padding:.5rem .75rem;text-align:right;color:#374151;font-weight:700;border-bottom:2px solid #e5e7eb;">${c}</th>`).join('')}
-                        <th style="padding:.5rem .75rem;text-align:right;color:#1d4ed8;font-weight:700;border-bottom:2px solid #e5e7eb;">Total</th>
-                        <th style="padding:.5rem .75rem;text-align:right;color:#6b7280;font-weight:700;border-bottom:2px solid #e5e7eb;">Qtd</th>
-                    </tr>
-                </thead>
-                <tbody>`;
+            const TH = 'padding:.5rem .75rem;text-align:right;color:#374151;font-weight:700;border-bottom:2px solid #e5e7eb;white-space:nowrap;';
+            let html = `<table style="border-collapse:collapse;font-size:.82rem;min-width:100%;">
+                <thead><tr style="background:#f3f4f6;">
+                    <th style="padding:.5rem .75rem;text-align:left;color:#374151;font-weight:700;border-bottom:2px solid #e5e7eb;white-space:nowrap;">Mês</th>
+                    ${cidades.map(c => `<th style="${TH}">${c}</th>`).join('')}
+                    <th style="${TH.replace('#374151','#1d4ed8')}">Total</th>
+                    <th style="${TH.replace('#374151','#6b7280')}">Qtd</th>
+                </tr></thead><tbody>`;
 
             let totalGeral = 0, qtdGeral = 0;
             const cidadeTotais = {};
             cidades.forEach(c => { cidadeTotais[c] = 0; });
 
             meses.forEach((m, i) => {
-                const [_a, mesNum] = m.mes.split('-');
+                const mesNum   = m.mes.split('-')[1];
                 const mesLabel = MESES_PT[parseInt(mesNum, 10) - 1] || m.mes;
                 const bg = i % 2 === 0 ? '#fff' : '#f9fafb';
+                const rowTotal = cidades.reduce((s, c) => s + (m.cidades[c]?.total || 0), 0);
+                const rowQtd   = cidades.reduce((s, c) => s + (m.cidades[c]?.qtd   || 0), 0);
                 html += `<tr data-mes="${m.mes}" data-bg="${bg}" style="background:${bg};cursor:pointer;" title="Ver boletos de ${mesLabel}">
-                    <td style="padding:.45rem .75rem;color:#374151;font-weight:600;">${mesLabel} <span style="color:#9ca3af;font-size:.72rem;">↗</span></td>
+                    <td style="padding:.45rem .75rem;color:#374151;font-weight:600;white-space:nowrap;">${mesLabel} <span style="color:#9ca3af;font-size:.72rem;">↗</span></td>
                     ${cidades.map(c => {
                         const v = m.cidades[c]?.total || 0;
                         cidadeTotais[c] += v;
-                        return `<td style="padding:.45rem .75rem;text-align:right;color:#6b7280;">${v > 0 ? fmtBRL(v) : '—'}</td>`;
+                        return `<td style="padding:.45rem .75rem;text-align:right;color:#6b7280;white-space:nowrap;">${v > 0 ? fmtBRL(v) : '—'}</td>`;
                     }).join('')}
-                    <td style="padding:.45rem .75rem;text-align:right;font-weight:700;color:#1d4ed8;">${fmtBRL(m.total)}</td>
-                    <td style="padding:.45rem .75rem;text-align:right;color:#9ca3af;">${m.qtd}</td>
+                    <td style="padding:.45rem .75rem;text-align:right;font-weight:700;color:#1d4ed8;white-space:nowrap;">${fmtBRL(rowTotal)}</td>
+                    <td style="padding:.45rem .75rem;text-align:right;color:#9ca3af;">${rowQtd}</td>
                 </tr>`;
-                totalGeral += m.total;
-                qtdGeral   += m.qtd;
+                totalGeral += rowTotal;
+                qtdGeral   += rowQtd;
             });
 
-            // Linha de totais
             html += `<tr style="background:#eff6ff;border-top:2px solid #bfdbfe;">
                 <td style="padding:.5rem .75rem;font-weight:700;color:#1e3a5f;">TOTAL</td>
-                ${cidades.map(c => `<td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#1e3a5f;">${fmtBRL(cidadeTotais[c])}</td>`).join('')}
-                <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#1d4ed8;font-size:.9rem;">${fmtBRL(totalGeral)}</td>
+                ${cidades.map(c => `<td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#1e3a5f;white-space:nowrap;">${fmtBRL(cidadeTotais[c])}</td>`).join('')}
+                <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#1d4ed8;font-size:.9rem;white-space:nowrap;">${fmtBRL(totalGeral)}</td>
                 <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:#374151;">${qtdGeral}</td>
             </tr>`;
 
