@@ -14,6 +14,27 @@ from logger import get_logger
 crescimento_bp = Blueprint('crescimento_bp', __name__)
 logger = get_logger(__name__)
 
+# IDs numéricos de cidade do IXC → "Nome - UF" (tabela relatorio 30)
+_CIDADE_NOME = {
+    '3823': 'São José dos Campos - SP',
+    '3543': 'Jacareí - SP',
+    '3362': 'Caçapava - SP',
+    '2856': 'Pouso Alegre - MG',
+    '2139': 'Presidente Dutra - BA',
+    '510':  'Colinas - MA',
+    # Nomes texto sem UF → adiciona MA (cidades operacionais)
+    'Presidente Dutra':         'Presidente Dutra - MA',
+    'Dom Pedro':                'Dom Pedro - MA',
+    'Tuntum':                   'Tuntum - MA',
+    'São Domingos do Maranhão': 'São Domingos do Maranhão - MA',
+}
+
+def _norm_cidade(c):
+    """Resolve IDs numéricos do IXC para nome real e adiciona UF."""
+    if not c:
+        return 'Outros'
+    return _CIDADE_NOME.get(str(c).strip(), c)
+
 
 def get_db():
     return current_app.config['GET_DB_CONNECTION']()
@@ -192,21 +213,23 @@ def api_crescimento_dados():
         cidades_pgto_set       = set()
         cidades_venc_set       = set()
         try:
-            # Por data de pagamento — agrupado por ano + cidade
+            # Por data de pagamento — agrupado por ano + cidade (normalizada)
             _pgto_raw = {}
             for r in conn.execute("""
                 SELECT STRFTIME('%Y', Data_pagamento) AS ano,
-                       COALESCE(Cidade, 'Outros')     AS cidade,
+                       Cidade,
                        SUM(Valor_recebido)            AS total
                 FROM Contas_a_Receber
                 WHERE Status = 'Recebido'
                   AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
-                GROUP BY ano, cidade
-                ORDER BY ano, cidade
+                GROUP BY ano, Cidade
+                ORDER BY ano, Cidade
             """):
                 if not r['ano']: continue
-                _pgto_raw.setdefault(r['ano'], {})[r['cidade']] = float(r['total'] or 0)
-                cidades_pgto_set.add(r['cidade'])
+                cidade = _norm_cidade(r['Cidade'])
+                prev = _pgto_raw.setdefault(r['ano'], {}).get(cidade, 0)
+                _pgto_raw[r['ano']][cidade] = prev + float(r['total'] or 0)
+                cidades_pgto_set.add(cidade)
             faturamento_anual = [
                 {'ano': ano, 'total': sum(d.values()), 'por_cidade': d}
                 for ano, d in sorted(_pgto_raw.items())
@@ -215,18 +238,20 @@ def api_crescimento_dados():
             _venc_raw = {}
             for r in conn.execute("""
                 SELECT STRFTIME('%Y', Vencimento)  AS ano,
-                       COALESCE(Cidade, 'Outros')  AS cidade,
+                       Cidade,
                        SUM(Valor_recebido)         AS total
                 FROM Contas_a_Receber
                 WHERE Status = 'Recebido'
                   AND Vencimento IS NOT NULL AND Vencimento != ''
                   AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
-                GROUP BY ano, cidade
-                ORDER BY ano, cidade
+                GROUP BY ano, Cidade
+                ORDER BY ano, Cidade
             """):
                 if not r['ano']: continue
-                _venc_raw.setdefault(r['ano'], {})[r['cidade']] = float(r['total'] or 0)
-                cidades_venc_set.add(r['cidade'])
+                cidade = _norm_cidade(r['Cidade'])
+                prev = _venc_raw.setdefault(r['ano'], {}).get(cidade, 0)
+                _venc_raw[r['ano']][cidade] = prev + float(r['total'] or 0)
+                cidades_venc_set.add(cidade)
             faturamento_anual_venc = [
                 {'ano': ano, 'total': sum(d.values()), 'por_cidade': d}
                 for ano, d in sorted(_venc_raw.items())
@@ -360,24 +385,27 @@ def api_faturamento_detalhe():
 
         total_geral = sum(r['total'] or 0 for r in rows)
 
-        # Agrupa por mês com subtotais por cidade
+        # Agrupa por mês com subtotais por cidade (normalizada)
         meses = {}
         cidades_set = set()
         for r in rows:
             m = r['mes']
+            if not m: continue
+            cidade = _norm_cidade(r['Cidade'])
             if m not in meses:
                 meses[m] = {'mes': m, 'cidades': {}, 'total': 0, 'qtd': 0}
-            meses[m]['cidades'][r['Cidade']] = {
-                'total': float(r['total'] or 0),
-                'qtd':   int(r['qtd'] or 0),
+            prev = meses[m]['cidades'].get(cidade, {'total': 0, 'qtd': 0})
+            meses[m]['cidades'][cidade] = {
+                'total': prev['total'] + float(r['total'] or 0),
+                'qtd':   prev['qtd']   + int(r['qtd'] or 0),
             }
             meses[m]['total'] += float(r['total'] or 0)
             meses[m]['qtd']   += int(r['qtd'] or 0)
-            cidades_set.add(r['Cidade'])
+            cidades_set.add(cidade)
 
         return jsonify({
             'ano':         ano,
-            'cidades':     sorted(c for c in cidades_set if c is not None),
+            'cidades':     sorted(cidades_set),
             'meses':       list(meses.values()),
             'total_geral': total_geral,
         })
@@ -417,21 +445,24 @@ def api_faturamento_venc_detalhe():
         cidades_set = set()
         for r in rows:
             m = r['mes']
+            if not m: continue
+            cidade = _norm_cidade(r['Cidade'])
             if m not in meses:
                 meses[m] = {'mes': m, 'cidades': {}, 'total': 0, 'qtd': 0}
-            meses[m]['cidades'][r['Cidade']] = {
-                'total': float(r['total'] or 0),
-                'qtd':   int(r['qtd'] or 0),
+            prev = meses[m]['cidades'].get(cidade, {'total': 0, 'qtd': 0})
+            meses[m]['cidades'][cidade] = {
+                'total': prev['total'] + float(r['total'] or 0),
+                'qtd':   prev['qtd']   + int(r['qtd'] or 0),
             }
             meses[m]['total'] += float(r['total'] or 0)
             meses[m]['qtd']   += int(r['qtd'] or 0)
-            cidades_set.add(r['Cidade'])
+            cidades_set.add(cidade)
 
         total_geral = sum(m['total'] for m in meses.values())
 
         return jsonify({
             'ano':         ano,
-            'cidades':     sorted(c for c in cidades_set if c is not None),
+            'cidades':     sorted(cidades_set),
             'meses':       list(meses.values()),
             'total_geral': total_geral,
         })
