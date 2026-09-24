@@ -205,13 +205,14 @@ def api_crescimento_dados():
             """, CIDADES_PRINCIPAIS):
                 if r['ano']:
                     faturamento_anual.append({'ano': r['ano'], 'total': float(r['total'] or 0)})
-            # Por data de vencimento (independente de quando pagou)
+            # Por data de vencimento — exige Data_pagamento preenchida (igual ao IXC)
             for r in conn.execute(f"""
                 SELECT STRFTIME('%Y', Vencimento) AS ano,
                        SUM(Valor_recebido)        AS total
                 FROM Contas_a_Receber
                 WHERE Status = 'Recebido'
                   AND Vencimento IS NOT NULL AND Vencimento != ''
+                  AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
                   AND Cidade IN ({ph})
                 GROUP BY ano
                 ORDER BY ano
@@ -395,6 +396,7 @@ def api_faturamento_venc_detalhe():
             FROM Contas_a_Receber
             WHERE Status = 'Recebido'
               AND Vencimento IS NOT NULL AND Vencimento != ''
+              AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
               AND STRFTIME('%Y', Vencimento) = ?
               AND Cidade IN ({ph})
             GROUP BY mes, Cidade
@@ -445,11 +447,13 @@ def api_boletos_mes():
     try:
         ph = ','.join(['?'] * len(CIDADES))
         date_col = 'Vencimento' if tipo == 'venc' else 'Data_pagamento'
+        extra = "AND Data_pagamento IS NOT NULL AND Data_pagamento != ''" if tipo == 'venc' else ''
         rows = conn.execute(f"""
             SELECT Cliente, Cidade, Valor_recebido, Vencimento, Data_pagamento
             FROM Contas_a_Receber
             WHERE Status = 'Recebido'
               AND {date_col} IS NOT NULL AND {date_col} != ''
+              {extra}
               AND STRFTIME('%Y', {date_col}) = ?
               AND STRFTIME('%m', {date_col}) = ?
               AND Cidade IN ({ph})
