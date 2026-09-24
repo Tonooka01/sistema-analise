@@ -491,35 +491,69 @@ function _renderCharts(d) {
             ...projVals,
         ];
 
+        // Gráfico de Cancelamentos/Mês: adiciona série de negativações (laranja)
+        const isChurnChart = cfg.key === 'churn';
+        const negHistVals  = isChurnChart ? hist.map(h => h.neg || 0) : null;
+        const negProjVals  = isChurnChart ? proj.map(p => p.neg || 0) : null;
+        const negProjLine  = isChurnChart ? [
+            ...new Array(n - 1).fill(null),
+            negHistVals[n - 1] ?? null,
+            ...negProjVals,
+        ] : null;
+
+        const datasets = [
+            {
+                label: isChurnChart ? 'Cancelamentos voluntários' : 'Histórico',
+                data: [...histVals, ...new Array(projVals.length).fill(null)],
+                borderColor: cfg.color,
+                backgroundColor: cfg.color + '22',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+            },
+            {
+                label: isChurnChart ? 'Proj. cancelamentos' : 'Projeção',
+                data: projLine,
+                borderColor: cfg.color,
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                borderDash: [6, 3],
+                fill: false,
+                tension: 0.3,
+                pointRadius: 3,
+                pointStyle: 'rectRot',
+            },
+        ];
+
+        if (isChurnChart) {
+            datasets.push({
+                label: 'Negativações (inadimplência)',
+                data: [...negHistVals, ...new Array(negProjVals.length).fill(null)],
+                borderColor: '#f97316',
+                backgroundColor: '#f9731622',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+            });
+            datasets.push({
+                label: 'Proj. negativações',
+                data: negProjLine,
+                borderColor: '#f97316',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                borderDash: [6, 3],
+                fill: false,
+                tension: 0.3,
+                pointRadius: 3,
+                pointStyle: 'rectRot',
+            });
+        }
+
         _charts[idx] = new Chart(canvas, {
             type: 'line',
-            data: {
-                labels,
-                datasets: [
-                    {
-                        label: 'Histórico',
-                        data: [...histVals, ...new Array(projVals.length).fill(null)],
-                        borderColor: cfg.color,
-                        backgroundColor: cfg.color + '22',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.3,
-                        pointRadius: 3,
-                    },
-                    {
-                        label: 'Projeção',
-                        data: projLine,
-                        borderColor: cfg.color,
-                        backgroundColor: 'transparent',
-                        borderWidth: 2,
-                        borderDash: [6, 3],
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: 3,
-                        pointStyle: 'rectRot',
-                    },
-                ],
-            },
+            data: { labels, datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -543,13 +577,15 @@ function _renderCharts(d) {
         const leg = document.getElementById(`cgLegend${idx}`);
         if (leg) {
             const parts = [];
-            if (projVals.length) {
-                const method = (cfg.key === 'mrr' || cfg.key === 'clientes') ? 'CAGR 6m' : 'média 3m';
+            if (isChurnChart) {
+                const method = 'média 3m';
+                parts.push(`🔴 Cancel. voluntários · Proj: ${cfg.fmt(projVals[projVals.length - 1])} (${method})`);
+                parts.push(`🟠 Negativações · Proj: ${cfg.fmt(negProjVals[negProjVals.length - 1])} (${method})`);
+            } else if (projVals.length) {
+                const method = cfg.key === 'mrr' || cfg.key === 'clientes' ? 'CAGR 6m' : 'média 3m';
                 parts.push(`Projeção 6m: ${cfg.fmt(projVals[projVals.length - 1])} (${method})`);
             }
-            if (extrapInfo) {
-                parts.push(`* ${extrapInfo}`);
-            }
+            if (extrapInfo) parts.push(`* ${extrapInfo}`);
             leg.textContent = parts.join('  ·  ');
         }
     });
