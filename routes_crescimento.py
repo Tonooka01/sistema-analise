@@ -125,12 +125,13 @@ def api_crescimento_dados():
         active_by_m  = {}
         for r in conn.execute("""
             SELECT STRFTIME('%Y-%m', Data_pagamento) AS mes,
-                   SUM(Valor_recebido)                AS mrr,
-                   COUNT(DISTINCT ID_contrato_principal) AS clientes
+                   SUM(Valor_recebido) AS mrr,
+                   COUNT(DISTINCT CASE WHEN ID_contrato_principal IS NOT NULL
+                         AND ID_contrato_principal > 0
+                         THEN ID_contrato_principal END) AS clientes
             FROM Contas_a_Receber
             WHERE Status = 'Recebido'
               AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
-              AND ID_contrato_principal IS NOT NULL AND ID_contrato_principal > 0
             GROUP BY mes
         """):
             if r['mes']:
