@@ -3927,13 +3927,22 @@ def api_behavior_retiradas():
 
         por_dia_rows = conn.execute(f"""
             SELECT o.Colaborador,
-                   CAST(strftime('%d', o.Abertura) AS INTEGER) AS dia,
+                   CAST(strftime('%d',
+                       CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                                 AND o.Fechamento NOT LIKE '0000%'
+                            THEN o.Fechamento ELSE o.Final END
+                   ) AS INTEGER) AS dia,
                    COUNT(*) AS cnt
             FROM OS o
             WHERE o.Assunto IN ({ph})
             AND o.Cidade IN ({_ph_cid})
+            AND o.Status = 'Finalizada'
             AND o.Colaborador IS NOT NULL AND TRIM(o.Colaborador) != '' AND o.Colaborador != '0'
-            AND strftime('%Y-%m', o.Abertura) = ?
+            AND strftime('%Y-%m',
+                CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                          AND o.Fechamento NOT LIKE '0000%'
+                     THEN o.Fechamento ELSE o.Final END
+            ) = ?
             GROUP BY o.Colaborador, dia
             ORDER BY o.Colaborador, dia
         """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP) + [_cur_ym]).fetchall()
@@ -4806,12 +4815,13 @@ def api_ret_atividade_tecnico_os():
             SELECT o.ID, o.Cliente, o.Status, o.Bairro, o.Cidade,
                    o.Assunto, o.Abertura, o.Mensagem
             FROM OS o WHERE CAST(o.ID AS TEXT) IN ({ph})
-            ORDER BY o.Cliente
+            ORDER BY o.Abertura DESC
         """, os_ids_com_ativ).fetchall()
         _tec_map = _get_tecnicos_map()
         nome_tec = _tec_map.get(str(colab)) or f'#{colab}'
         ordens = [{'id': r[0], 'cliente': r[1], 'status': r[2], 'bairro': r[3],
-                   'cidade': r[4], 'assunto': r[5], 'abertura': r[6], 'mensagem': r[7]}
+                   'cidade': r[4], 'assunto': r[5], 'abertura': r[6],
+                   'mensagem': (r[7] or '').strip()}
                   for r in rows]
         return jsonify({'ordens': ordens, 'tecnico': nome_tec, 'data': data_exata})
     except Exception as e:

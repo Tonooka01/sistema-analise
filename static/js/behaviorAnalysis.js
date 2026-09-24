@@ -3385,37 +3385,72 @@ window._retColabCellModal = async function(colab, dia, mes, tableType) {
             Agendada:    'bg-blue-100 text-blue-700',
             Finalizada:  'bg-green-100 text-green-700',
         };
-        const dataCol  = tableType === 'atividade' ? 'abertura' : 'fechamento';
-        const dataLabel2 = tableType === 'atividade' ? 'Abertura' : 'Finalização';
-        const rows = ordens.map(o => `
-            <tr class="border-b border-gray-50 hover:bg-gray-50 text-xs">
-                <td class="px-3 py-2 font-mono text-gray-500">${o.id}</td>
-                <td class="px-3 py-2 max-w-[200px]">
-                    <span class="font-medium text-blue-700 hover:underline cursor-pointer truncate block" title="${o.cliente||''}"
-                          onclick="window._retClientePerfil('${(o.cliente||'').replace(/'/g,"\\'")}')">
-                        ${o.cliente||'—'}
-                    </span>
-                </td>
-                <td class="px-3 py-2">
-                    <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_CLS[o.status]||'bg-gray-100 text-gray-600'}">${o.status||'—'}</span>
-                </td>
-                <td class="px-3 py-2 text-gray-500">${o.cidade||'—'}</td>
-                <td class="px-3 py-2 text-gray-400 whitespace-nowrap">${(o[dataCol]||'').slice(0,10)}</td>
-            </tr>`).join('');
-        body.innerHTML = `
-            <div class="text-xs text-gray-400 mb-2">${ordens.length} ordem${ordens.length !== 1 ? 's' : ''}</div>
-            <table class="w-full text-left">
-                <thead>
-                    <tr class="bg-gray-50 text-xs text-gray-500 font-semibold">
-                        <th class="px-3 py-2">ID</th>
-                        <th class="px-3 py-2">Cliente</th>
-                        <th class="px-3 py-2">Status</th>
-                        <th class="px-3 py-2">Cidade</th>
-                        <th class="px-3 py-2">${dataLabel2}</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>`;
+
+        if (tableType === 'atividade') {
+            // Layout de cards mostrando as interações (mensagens/fotos) do técnico
+            const cards = ordens.map(o => {
+                const msg = (o.mensagem || '').trim();
+                const statusCls = STATUS_CLS[o.status] || 'bg-gray-100 text-gray-600';
+                return `
+                <div class="border border-gray-100 rounded-lg p-3 mb-2 hover:bg-gray-50">
+                    <div class="flex items-start justify-between gap-2 mb-1">
+                        <span class="font-medium text-blue-700 hover:underline cursor-pointer text-xs"
+                              onclick="window._retClientePerfil('${(o.cliente||'').replace(/'/g,"\\'")}')">
+                            ${o.cliente||'—'}
+                        </span>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${statusCls}">${o.status||'—'}</span>
+                            <span class="text-[10px] text-gray-400 font-mono">#${o.id}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 text-[10px] text-gray-400 mb-1.5">
+                        <span>${o.assunto||'—'}</span>
+                        <span>·</span>
+                        <span>${o.cidade||'—'}</span>
+                        <span>·</span>
+                        <span>Abertura: ${(o.abertura||'').slice(0,10)}</span>
+                    </div>
+                    ${msg
+                        ? `<div class="bg-blue-50 border border-blue-100 rounded p-2 text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">${msg}</div>`
+                        : `<div class="text-[10px] text-gray-300 italic">Sem mensagem registrada</div>`
+                    }
+                </div>`;
+            }).join('');
+            body.innerHTML = `
+                <div class="text-xs text-gray-400 mb-3">${ordens.length} OS com atividade neste dia</div>
+                ${cards}`;
+        } else {
+            // Layout de tabela para produção (OS finalizadas)
+            const rows = ordens.map(o => `
+                <tr class="border-b border-gray-50 hover:bg-gray-50 text-xs">
+                    <td class="px-3 py-2 font-mono text-gray-500">${o.id}</td>
+                    <td class="px-3 py-2 max-w-[200px]">
+                        <span class="font-medium text-blue-700 hover:underline cursor-pointer truncate block" title="${o.cliente||''}"
+                              onclick="window._retClientePerfil('${(o.cliente||'').replace(/'/g,"\\'")}')">
+                            ${o.cliente||'—'}
+                        </span>
+                    </td>
+                    <td class="px-3 py-2">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_CLS[o.status]||'bg-gray-100 text-gray-600'}">${o.status||'—'}</span>
+                    </td>
+                    <td class="px-3 py-2 text-gray-500">${o.cidade||'—'}</td>
+                    <td class="px-3 py-2 text-gray-400 whitespace-nowrap">${(o.fechamento||'').slice(0,10)}</td>
+                </tr>`).join('');
+            body.innerHTML = `
+                <div class="text-xs text-gray-400 mb-2">${ordens.length} ordem${ordens.length !== 1 ? 's' : ''} finalizada${ordens.length !== 1 ? 's' : ''}</div>
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="bg-gray-50 text-xs text-gray-500 font-semibold">
+                            <th class="px-3 py-2">ID</th>
+                            <th class="px-3 py-2">Cliente</th>
+                            <th class="px-3 py-2">Status</th>
+                            <th class="px-3 py-2">Cidade</th>
+                            <th class="px-3 py-2">Finalização</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+        }
     } catch(e) {
         const body = document.getElementById('ret-ccm-body');
         if (body) body.innerHTML = '<div class="text-red-500">Erro ao carregar OS.</div>';
