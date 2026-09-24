@@ -136,7 +136,8 @@ function _shell() {
     <!-- Faturamento Anual -->
     <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;margin-bottom:1rem;">
         <p style="font-size:.7rem;font-weight:700;color:#6b7280;margin:0 0 .2rem;text-transform:uppercase;letter-spacing:.06em;">Faturamento Anual (R$)</p>
-        <p style="font-size:.67rem;color:#94a3b8;margin:0 0 .4rem;line-height:1.4;">Total real recebido por ano — São Domingos do Maranhão, Dom Pedro, Presidente Dutra e Tuntum. Clique em um ano para ver o detalhamento mensal.</p>
+        <p style="font-size:.67rem;color:#94a3b8;margin:0 0 .4rem;line-height:1.4;">Total real recebido por ano. Clique em um ano para ver o detalhamento mensal.</p>
+        <div id="cgFiltCidadesAnual" style="display:flex;flex-wrap:wrap;gap:.35rem .5rem;margin-bottom:.6rem;"></div>
         <div style="position:relative;height:360px;cursor:pointer;">
             <canvas id="cgChartAnual"></canvas>
         </div>
@@ -145,7 +146,8 @@ function _shell() {
     <!-- Faturamento Anual por Vencimento -->
     <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:.5rem;padding:1rem;margin-bottom:1rem;">
         <p style="font-size:.7rem;font-weight:700;color:#6b7280;margin:0 0 .2rem;text-transform:uppercase;letter-spacing:.06em;">Faturamento por Competência / Vencimento (R$)</p>
-        <p style="font-size:.67rem;color:#94a3b8;margin:0 0 .4rem;line-height:1.4;">Total recebido agrupado pelo mês de vencimento da fatura — São Domingos do Maranhão, Dom Pedro, Presidente Dutra e Tuntum. Clique em um ano para ver o detalhamento mensal.</p>
+        <p style="font-size:.67rem;color:#94a3b8;margin:0 0 .4rem;line-height:1.4;">Total recebido agrupado pelo mês de vencimento. Clique em um ano para ver o detalhamento mensal.</p>
+        <div id="cgFiltCidadesVenc" style="display:flex;flex-wrap:wrap;gap:.35rem .5rem;margin-bottom:.6rem;"></div>
         <div style="position:relative;height:360px;cursor:pointer;">
             <canvas id="cgChartAnualVenc"></canvas>
         </div>
@@ -552,17 +554,12 @@ function _renderCharts(d) {
         }
     });
 
-    // ── Gráfico de Faturamento Anual ─────────────────────────────────────────
+    // ── helpers de filtro de cidade ──────────────────────────────────────────
     const anoAtual = new Date().getFullYear().toString();
-    const anualCanvas = document.getElementById('cgChartAnual');
-    const anualData   = d.faturamento_anual || [];
-    if (anualCanvas && anualData.length) {
-        if (_charts._anual) { _charts._anual.destroy(); _charts._anual = null; }
-        const colors = anualData.map(r =>
-            r.ano === anoAtual ? '#93c5fd' : '#3b82f6'
-        );
-        const _barLabelsPlugin = {
-            id: 'barLabels',
+
+    function _makeBarLabelsPlugin(id) {
+        return {
+            id,
             afterDatasetsDraw(chart) {
                 const { ctx, data } = chart;
                 ctx.save();
@@ -572,20 +569,27 @@ function _renderCharts(d) {
                 ctx.textBaseline = 'bottom';
                 chart.getDatasetMeta(0).data.forEach((bar, i) => {
                     const v = data.datasets[0].data[i];
-                    const label = `R$ ${(v / 1_000_000).toFixed(2)}M`;
+                    const label = v >= 1_000_000
+                        ? `R$ ${(v / 1_000_000).toFixed(2)}M`
+                        : `R$ ${(v / 1_000).toFixed(0)}K`;
                     ctx.fillText(label, bar.x, bar.y - 3);
                 });
                 ctx.restore();
             },
         };
+    }
 
-        _charts._anual = new Chart(anualCanvas, {
+    function _buildAnualChart(canvasId, rows, colorDef, colorAno, labelKey, onClickFn, pluginId) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || !rows.length) return null;
+        const colors = rows.map(r => r.ano === anoAtual ? colorAno : colorDef);
+        return new Chart(canvas, {
             type: 'bar',
             data: {
-                labels: anualData.map(r => r.ano === anoAtual ? r.ano + ' *' : r.ano),
+                labels: rows.map(r => r.ano === anoAtual ? r.ano + ' *' : r.ano),
                 datasets: [{
-                    label: 'Faturamento Real (R$)',
-                    data: anualData.map(r => r.total),
+                    label: labelKey,
+                    data: rows.map(r => r._filtrado ?? r.total),
                     backgroundColor: colors,
                     borderRadius: 4,
                     borderSkipped: false,
@@ -601,7 +605,12 @@ function _renderCharts(d) {
                     tooltip: {
                         enabled: true,
                         callbacks: {
-                            label: ctx => ` R$ ${(ctx.parsed.y / 1_000_000).toFixed(2)}M`,
+                            label: ctx => {
+                                const v = ctx.parsed.y;
+                                return v >= 1_000_000
+                                    ? ` R$ ${(v / 1_000_000).toFixed(2)}M`
+                                    : ` R$ ${v.toLocaleString('pt-BR', {minimumFractionDigits:2})}`;
+                            },
                         },
                     },
                     datalabels: { display: false },
@@ -610,91 +619,104 @@ function _renderCharts(d) {
                     x: { grid: { display: false }, ticks: { font: { size: 11 } } },
                     y: {
                         beginAtZero: true,
-                        ticks: {
-                            font: { size: 10 },
-                            callback: v => `R$ ${(v / 1_000_000).toFixed(1)}M`,
-                        },
+                        ticks: { font: { size: 10 }, callback: v => `R$ ${(v / 1_000_000).toFixed(1)}M` },
                     },
                 },
                 onClick(e, elements) {
                     if (!elements.length) return;
-                    const ano = anualData[elements[0].index]?.ano;
-                    if (ano) _openAnualDetalhe(ano);
+                    const ano = rows[elements[0].index]?.ano;
+                    if (ano) onClickFn(ano);
                 },
             },
-            plugins: [_barLabelsPlugin],
+            plugins: [_makeBarLabelsPlugin(pluginId)],
         });
     }
 
-    // ── Gráfico de Faturamento por Vencimento ────────────────────────────────
-    const vencCanvas = document.getElementById('cgChartAnualVenc');
-    const vencData   = d.faturamento_anual_venc || [];
-    if (vencCanvas && vencData.length) {
-        if (_charts._anualVenc) { _charts._anualVenc.destroy(); _charts._anualVenc = null; }
-        const vencColors = vencData.map(r =>
-            r.ano === anoAtual ? '#6ee7b7' : '#10b981'
-        );
-        const _barLabelsPluginVenc = {
-            id: 'barLabelsVenc',
-            afterDatasetsDraw(chart) {
-                const { ctx, data } = chart;
-                ctx.save();
-                ctx.font = 'bold 11px Inter, sans-serif';
-                ctx.fillStyle = '#374151';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'bottom';
-                chart.getDatasetMeta(0).data.forEach((bar, i) => {
-                    const v = data.datasets[0].data[i];
-                    ctx.fillText(`R$ ${(v / 1_000_000).toFixed(2)}M`, bar.x, bar.y - 3);
-                });
-                ctx.restore();
-            },
-        };
-        _charts._anualVenc = new Chart(vencCanvas, {
-            type: 'bar',
-            data: {
-                labels: vencData.map(r => r.ano === anoAtual ? r.ano + ' *' : r.ano),
-                datasets: [{
-                    label: 'Faturamento por Vencimento (R$)',
-                    data: vencData.map(r => r.total),
-                    backgroundColor: vencColors,
-                    borderRadius: 4,
-                    borderSkipped: false,
-                    minBarLength: 28,
-                }],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                layout: { padding: { top: 24 } },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        enabled: true,
-                        callbacks: {
-                            label: ctx => ` R$ ${(ctx.parsed.y / 1_000_000).toFixed(2)}M`,
-                        },
-                    },
-                    datalabels: { display: false },
-                },
-                scales: {
-                    x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            font: { size: 10 },
-                            callback: v => `R$ ${(v / 1_000_000).toFixed(1)}M`,
-                        },
-                    },
-                },
-                onClick(e, elements) {
-                    if (!elements.length) return;
-                    const ano = vencData[elements[0].index]?.ano;
-                    if (ano) _openAnualVencDetalhe(ano);
-                },
-            },
-            plugins: [_barLabelsPluginVenc],
+    function _renderCidadeFilter(containerId, cidades, selectedSet, onToggle) {
+        const cont = document.getElementById(containerId);
+        if (!cont) return;
+        const CHIP_STYLE = 'display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .55rem;'
+            + 'border-radius:999px;border:1px solid #d1d5db;background:#fff;cursor:pointer;'
+            + 'font-size:.72rem;color:#374151;user-select:none;white-space:nowrap;';
+        const ALL_STYLE  = CHIP_STYLE + 'font-weight:600;';
+        cont.innerHTML = '';
+
+        // Botão "Todas"
+        const btnAll = document.createElement('label');
+        btnAll.style.cssText = ALL_STYLE;
+        const cbAll = document.createElement('input');
+        cbAll.type = 'checkbox'; cbAll.style.accentColor = '#6b7280';
+        cbAll.checked = selectedSet.size === cidades.length;
+        cbAll.addEventListener('change', () => {
+            cidades.forEach(c => cbAll.checked ? selectedSet.add(c) : selectedSet.delete(c));
+            onToggle();
+            _renderCidadeFilter(containerId, cidades, selectedSet, onToggle);
         });
+        btnAll.appendChild(cbAll);
+        btnAll.appendChild(document.createTextNode(' Todas'));
+        cont.appendChild(btnAll);
+
+        cidades.forEach(c => {
+            const lbl = document.createElement('label');
+            lbl.style.cssText = CHIP_STYLE;
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.style.accentColor = '#3b82f6';
+            cb.checked = selectedSet.has(c);
+            cb.addEventListener('change', () => {
+                cb.checked ? selectedSet.add(c) : selectedSet.delete(c);
+                onToggle();
+                _renderCidadeFilter(containerId, cidades, selectedSet, onToggle);
+            });
+            lbl.appendChild(cb);
+            lbl.appendChild(document.createTextNode(' ' + c));
+            cont.appendChild(lbl);
+        });
+    }
+
+    // ── Gráfico de Faturamento Anual ─────────────────────────────────────────
+    const anualData    = d.faturamento_anual || [];
+    const cidadesPgto  = d.cidades_pgto || [];
+    const selPgto      = new Set(cidadesPgto);
+
+    function _recalcAnual() {
+        if (!_charts._anual) return;
+        _charts._anual.data.datasets[0].data = anualData.map(r => {
+            if (!r.por_cidade) return r.total;
+            return Array.from(selPgto).reduce((s, c) => s + (r.por_cidade[c] || 0), 0);
+        });
+        _charts._anual.update();
+    }
+
+    if (anualData.length) {
+        if (_charts._anual) { _charts._anual.destroy(); _charts._anual = null; }
+        _charts._anual = _buildAnualChart(
+            'cgChartAnual', anualData, '#3b82f6', '#93c5fd',
+            'Faturamento Real (R$)', _openAnualDetalhe, 'barLabels'
+        );
+        _renderCidadeFilter('cgFiltCidadesAnual', cidadesPgto, selPgto, _recalcAnual);
+    }
+
+    // ── Gráfico de Faturamento por Vencimento ────────────────────────────────
+    const vencData     = d.faturamento_anual_venc || [];
+    const cidadesVenc  = d.cidades_venc || [];
+    const selVenc      = new Set(cidadesVenc);
+
+    function _recalcVenc() {
+        if (!_charts._anualVenc) return;
+        _charts._anualVenc.data.datasets[0].data = vencData.map(r => {
+            if (!r.por_cidade) return r.total;
+            return Array.from(selVenc).reduce((s, c) => s + (r.por_cidade[c] || 0), 0);
+        });
+        _charts._anualVenc.update();
+    }
+
+    if (vencData.length) {
+        if (_charts._anualVenc) { _charts._anualVenc.destroy(); _charts._anualVenc = null; }
+        _charts._anualVenc = _buildAnualChart(
+            'cgChartAnualVenc', vencData, '#10b981', '#6ee7b7',
+            'Faturamento por Vencimento (R$)', _openAnualVencDetalhe, 'barLabelsVenc'
+        );
+        _renderCidadeFilter('cgFiltCidadesVenc', cidadesVenc, selVenc, _recalcVenc);
     }
 }
 

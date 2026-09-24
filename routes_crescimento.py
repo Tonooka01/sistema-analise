@@ -186,35 +186,51 @@ def api_crescimento_dados():
             logger.error("crescimento/dados clientes_ativo_ixc: %s", _e, exc_info=True)
             cli_ativo_ixc = 0
 
-        # ── Faturamento real anual (todas as cidades) ────────────────────────
-        faturamento_anual = []
+        # ── Faturamento real anual (todas as cidades, breakdown por cidade) ──
+        faturamento_anual      = []
         faturamento_anual_venc = []
+        cidades_pgto_set       = set()
+        cidades_venc_set       = set()
         try:
-            # Por data de pagamento
+            # Por data de pagamento — agrupado por ano + cidade
+            _pgto_raw = {}
             for r in conn.execute("""
                 SELECT STRFTIME('%Y', Data_pagamento) AS ano,
+                       COALESCE(Cidade, 'Outros')     AS cidade,
                        SUM(Valor_recebido)            AS total
                 FROM Contas_a_Receber
                 WHERE Status = 'Recebido'
                   AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
-                GROUP BY ano
-                ORDER BY ano
+                GROUP BY ano, cidade
+                ORDER BY ano, cidade
             """):
-                if r['ano']:
-                    faturamento_anual.append({'ano': r['ano'], 'total': float(r['total'] or 0)})
+                if not r['ano']: continue
+                _pgto_raw.setdefault(r['ano'], {})[r['cidade']] = float(r['total'] or 0)
+                cidades_pgto_set.add(r['cidade'])
+            faturamento_anual = [
+                {'ano': ano, 'total': sum(d.values()), 'por_cidade': d}
+                for ano, d in sorted(_pgto_raw.items())
+            ]
             # Por data de vencimento — exige Data_pagamento preenchida (igual ao IXC)
+            _venc_raw = {}
             for r in conn.execute("""
-                SELECT STRFTIME('%Y', Vencimento) AS ano,
-                       SUM(Valor_recebido)        AS total
+                SELECT STRFTIME('%Y', Vencimento)  AS ano,
+                       COALESCE(Cidade, 'Outros')  AS cidade,
+                       SUM(Valor_recebido)         AS total
                 FROM Contas_a_Receber
                 WHERE Status = 'Recebido'
                   AND Vencimento IS NOT NULL AND Vencimento != ''
                   AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
-                GROUP BY ano
-                ORDER BY ano
+                GROUP BY ano, cidade
+                ORDER BY ano, cidade
             """):
-                if r['ano']:
-                    faturamento_anual_venc.append({'ano': r['ano'], 'total': float(r['total'] or 0)})
+                if not r['ano']: continue
+                _venc_raw.setdefault(r['ano'], {})[r['cidade']] = float(r['total'] or 0)
+                cidades_venc_set.add(r['cidade'])
+            faturamento_anual_venc = [
+                {'ano': ano, 'total': sum(d.values()), 'por_cidade': d}
+                for ano, d in sorted(_venc_raw.items())
+            ]
         except Exception as _e:
             logger.error("crescimento/dados faturamento_anual: %s", _e, exc_info=True)
 
@@ -309,7 +325,9 @@ def api_crescimento_dados():
                         'periodo_stats': periodo_stats,
                         'clientes_ativo_ixc': cli_ativo_ixc,
                         'faturamento_anual': faturamento_anual,
-                        'faturamento_anual_venc': faturamento_anual_venc})
+                        'faturamento_anual_venc': faturamento_anual_venc,
+                        'cidades_pgto': sorted(cidades_pgto_set),
+                        'cidades_venc': sorted(cidades_venc_set)})
 
     except sqlite3.Error as e:
         logger.error("crescimento/dados: %s", e, exc_info=True)
@@ -359,7 +377,7 @@ def api_faturamento_detalhe():
 
         return jsonify({
             'ano':         ano,
-            'cidades':     sorted(cidades_set),
+            'cidades':     sorted(c for c in cidades_set if c is not None),
             'meses':       list(meses.values()),
             'total_geral': total_geral,
         })
@@ -413,7 +431,7 @@ def api_faturamento_venc_detalhe():
 
         return jsonify({
             'ano':         ano,
-            'cidades':     sorted(cidades_set),
+            'cidades':     sorted(c for c in cidades_set if c is not None),
             'meses':       list(meses.values()),
             'total_geral': total_geral,
         })
