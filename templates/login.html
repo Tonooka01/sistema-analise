@@ -245,6 +245,28 @@
             line-height: 1.5;
         }
 
+        /* Frase do painel decorativo */
+        .deco-quote-wrap {
+            margin-top: 1.5rem;
+            padding: 0 .5rem;
+            text-align: center;
+            max-width: 220px;
+        }
+        .deco-quote {
+            font-size: .76rem;
+            color: #a1a1aa;
+            line-height: 1.6;
+            font-style: italic;
+            margin-bottom: .4rem;
+            min-height: 2.5rem;
+        }
+        .deco-author {
+            font-size: .7rem;
+            color: #52525b;
+            font-style: normal;
+            font-weight: 500;
+        }
+
         /* Footer */
         .footer {
             font-size: .72rem;
@@ -304,6 +326,10 @@
                     <div class="deco-logo">📊</div>
                     <div class="deco-name">NetVale</div>
                     <div class="deco-tagline">Dashboard de Gestão · Telecom</div>
+                    <div class="deco-quote-wrap">
+                        <p class="deco-quote" id="decoQuote">…</p>
+                        <span class="deco-author" id="decoAuthor"></span>
+                    </div>
                 </div>
             </div>
 
@@ -312,6 +338,38 @@
 
     <p class="footer">Acesso restrito · NetVale Telecom · © 2026</p>
 
+<script>
+(function () {
+    const FALLBACKS = [
+        { q: "A disciplina é a ponte entre metas e realizações.", a: "Jim Rohn" },
+        { q: "O sucesso é a soma de pequenos esforços repetidos dia após dia.", a: "Robert Collier" },
+        { q: "Não é a montanha que conquistamos, mas a nós mesmos.", a: "Edmund Hillary" },
+        { q: "O único modo de fazer um grande trabalho é amar o que você faz.", a: "Steve Jobs" },
+        { q: "Tudo parece impossível até que seja feito.", a: "Nelson Mandela" },
+        { q: "Seja a mudança que você quer ver no mundo.", a: "Mahatma Gandhi" },
+        { q: "O futuro pertence àqueles que acreditam na beleza de seus sonhos.", a: "Eleanor Roosevelt" },
+        { q: "Não espere por oportunidades extraordinárias. Agarre as comuns e as torne grandes.", a: "Orison Swett Marden" },
+        { q: "Conhecimento não é poder — é poder potencial. Só se torna poder quando aplicado.", a: "Jim Kwik" },
+        { q: "Trabalhe enquanto eles dormem. Aprenda enquanto eles descansam.", a: "Desconhecido" },
+    ];
 
+    function show(text, author) {
+        const q = document.getElementById('decoQuote');
+        const a = document.getElementById('decoAuthor');
+        if (q) q.textContent = '"' + text + '"';
+        if (a) a.textContent = '— ' + author;
+    }
+
+    function showFallback() {
+        const f = FALLBACKS[Math.floor(Math.random() * FALLBACKS.length)];
+        show(f.q, f.a);
+    }
+
+    fetch('https://api.quotable.io/random?tags=success|wisdom|motivational&maxLength=160', { signal: AbortSignal.timeout(4000) })
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(d => show(d.content, d.author))
+        .catch(showFallback);
+})();
+</script>
 </body>
 </html>
