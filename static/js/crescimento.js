@@ -154,26 +154,26 @@ function _shell() {
     </div>
 
     <!-- Modal de detalhe anual por vencimento -->
-    <div id="cgAnualVencModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
-        <div style="background:#fff;border-radius:.75rem;width:min(1200px,97vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;">
-                <h3 id="cgAnualVencModalTitle" style="margin:0;font-size:1rem;font-weight:700;color:#111827;">Faturamento por Vencimento</h3>
+    <div id="cgAnualVencModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;padding:1rem;">
+        <div style="background:#fff;border-radius:.75rem;width:fit-content;max-width:98vw;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;gap:2rem;">
+                <h3 id="cgAnualVencModalTitle" style="margin:0;font-size:1rem;font-weight:700;color:#111827;white-space:nowrap;">Faturamento por Vencimento</h3>
                 <button onclick="document.getElementById('cgAnualVencModal').style.display='none'"
-                        style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:#6b7280;line-height:1;">×</button>
+                        style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:#6b7280;line-height:1;flex-shrink:0;">×</button>
             </div>
-            <div id="cgAnualVencModalBody" style="overflow-y:auto;overflow-x:auto;padding:1rem 1.25rem;"></div>
+            <div id="cgAnualVencModalBody" style="overflow-y:auto;padding:1rem 1.25rem;"></div>
         </div>
     </div>
 
     <!-- Modal de detalhe anual -->
-    <div id="cgAnualModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;">
-        <div style="background:#fff;border-radius:.75rem;width:min(1200px,97vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;">
-                <h3 id="cgAnualModalTitle" style="margin:0;font-size:1rem;font-weight:700;color:#111827;">Faturamento</h3>
+    <div id="cgAnualModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;padding:1rem;">
+        <div style="background:#fff;border-radius:.75rem;width:fit-content;max-width:98vw;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;gap:2rem;">
+                <h3 id="cgAnualModalTitle" style="margin:0;font-size:1rem;font-weight:700;color:#111827;white-space:nowrap;">Faturamento</h3>
                 <button onclick="document.getElementById('cgAnualModal').style.display='none'"
                         style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:#6b7280;line-height:1;">×</button>
             </div>
-            <div id="cgAnualModalBody" style="overflow-y:auto;overflow-x:auto;padding:1rem 1.25rem;"></div>
+            <div id="cgAnualModalBody" style="overflow-y:auto;padding:1rem 1.25rem;"></div>
         </div>
     </div>
 
@@ -746,7 +746,7 @@ function _openAnualVencDetalhe(ano) {
                 : todasCidades;
 
             const TH = 'padding:.5rem .75rem;text-align:right;color:#374151;font-weight:700;border-bottom:2px solid #bbf7d0;white-space:nowrap;';
-            let html = `<table style="border-collapse:collapse;font-size:.82rem;min-width:100%;">
+            let html = `<table style="border-collapse:collapse;font-size:.82rem;width:auto;">
                 <thead><tr style="background:#f0fdf4;">
                     <th style="padding:.5rem .75rem;text-align:left;color:#374151;font-weight:700;border-bottom:2px solid #bbf7d0;white-space:nowrap;">Mês</th>
                     ${cidades.map(c => `<th style="${TH}">${c}</th>`).join('')}
@@ -819,7 +819,7 @@ function _openAnualDetalhe(ano) {
                 : todasCidades;
 
             const TH = 'padding:.5rem .75rem;text-align:right;color:#374151;font-weight:700;border-bottom:2px solid #e5e7eb;white-space:nowrap;';
-            let html = `<table style="border-collapse:collapse;font-size:.82rem;min-width:100%;">
+            let html = `<table style="border-collapse:collapse;font-size:.82rem;width:auto;">
                 <thead><tr style="background:#f3f4f6;">
                     <th style="padding:.5rem .75rem;text-align:left;color:#374151;font-weight:700;border-bottom:2px solid #e5e7eb;white-space:nowrap;">Mês</th>
                     ${cidades.map(c => `<th style="${TH}">${c}</th>`).join('')}
