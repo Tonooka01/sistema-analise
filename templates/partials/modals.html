@@ -454,7 +454,29 @@
                     <pre id="ixcLogText" class="bg-gray-900 text-green-400 text-xs p-3 rounded max-h-48 overflow-y-auto whitespace-pre-wrap"></pre>
                 </div>
 
-                <p class="text-xs text-blue-500 mt-3">⏰ Sincronização automática todo domingo às 23:59</p>
+                <p class="text-xs text-blue-500 mt-3">⏰ Sincronização automática todo dia às 23:59 com até 3 tentativas.</p>
+
+                <!-- Telegram -->
+                <div class="mt-4 pt-4 border-t border-blue-200">
+                    <p class="text-xs font-bold text-blue-700 mb-2">📲 Notificações Telegram</p>
+                    <div class="flex flex-col gap-2">
+                        <input type="text" id="tgTokenInput" placeholder="Bot Token (ex: 123456:ABC-DEF...)"
+                               class="w-full border border-blue-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <input type="text" id="tgChatIdInput" placeholder="Chat ID (ex: -1001234567890)"
+                               class="w-full border border-blue-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <div class="flex gap-2">
+                            <button id="btnSaveTelegram"
+                                    class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded text-sm transition">
+                                Salvar
+                            </button>
+                            <button id="btnTestTelegram"
+                                    class="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded text-sm transition">
+                                Testar envio
+                            </button>
+                        </div>
+                        <p id="tgStatus" class="text-xs text-gray-500 hidden"></p>
+                    </div>
+                </div>
             </div>
 
             <!-- Configuração de Atendimentos -->

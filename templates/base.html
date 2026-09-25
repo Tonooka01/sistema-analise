@@ -68,8 +68,21 @@
     </style>
 </head>
 <body class="p-2 md:p-4">
+
+    <!-- Banner de erro de sync — visível só para admin -->
+    <div id="syncErrBanner" style="display:none;background:#fee2e2;border:1.5px solid #fca5a5;border-radius:10px;padding:.6rem 1rem;margin-bottom:.75rem;display:flex;align-items:center;gap:.75rem;font-size:.82rem;color:#7f1d1d;">
+        <span style="font-size:1.1rem">⚠️</span>
+        <span id="syncErrMsg" style="flex:1"></span>
+        <button onclick="fetch('/api/ixc/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'full'})}).then(()=>document.getElementById('syncErrBanner').style.display='none')"
+                style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:.3rem .75rem;cursor:pointer;font-weight:600;font-size:.78rem;white-space:nowrap">
+            Tentar novamente
+        </button>
+        <button onclick="document.getElementById('syncErrBanner').style.display='none'"
+                style="background:none;border:none;cursor:pointer;color:#7f1d1d;font-size:1.1rem;line-height:1;padding:0 .2rem">×</button>
+    </div>
+
     <!-- ALTERAÇÃO CRÍTICA: Mudado de 'container' para 'custom-container' para remover limite fixo do Tailwind -->
-    <div class="custom-container mx-auto"> 
+    <div class="custom-container mx-auto">
         {% block content %}{% endblock %}
     </div>
 
@@ -448,6 +461,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 logEl.textContent = data.last_log;
                 logCont.classList.remove('hidden');
             }
+            // Preenche campos do Telegram com valores salvos (mascarado)
+            const tgTokEl  = document.getElementById('tgTokenInput');
+            const tgChatEl = document.getElementById('tgChatIdInput');
+            if (tgTokEl  && data.tg_token)   tgTokEl.placeholder  = data.tg_token   || 'Bot Token…';
+            if (tgChatEl && data.tg_chat_id) tgChatEl.value        = data.tg_chat_id || '';
         } catch(e) { console.error('IXC status error:', e); }
     }
 
@@ -461,6 +479,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         const data = await res.json();
         alert(data.success ? '✅ Token salvo!' : '❌ ' + data.error);
+    });
+
+    // ── Telegram config ──────────────────────────────────────────────────────
+    document.getElementById('btnSaveTelegram')?.addEventListener('click', async () => {
+        const tg_token   = document.getElementById('tgTokenInput').value.trim();
+        const tg_chat_id = document.getElementById('tgChatIdInput').value.trim();
+        const st = document.getElementById('tgStatus');
+        if (!tg_token || !tg_chat_id) { alert('Preencha o Token e o Chat ID'); return; }
+        const res  = await fetch('/api/ixc/save_telegram', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({tg_token, tg_chat_id})
+        });
+        const data = await res.json();
+        st.textContent = data.success ? '✅ Configuração salva.' : '❌ ' + data.error;
+        st.className = data.success ? 'text-xs text-green-600' : 'text-xs text-red-600';
+        st.classList.remove('hidden');
+    });
+
+    document.getElementById('btnTestTelegram')?.addEventListener('click', async () => {
+        const st = document.getElementById('tgStatus');
+        st.textContent = '⏳ Enviando…';
+        st.className = 'text-xs text-gray-500';
+        st.classList.remove('hidden');
+        const res  = await fetch('/api/ixc/test_telegram', {method: 'POST'});
+        const data = await res.json();
+        st.textContent = data.success ? '✅ Mensagem enviada! Verifique o Telegram.' : '❌ ' + data.error;
+        st.className = data.success ? 'text-xs text-green-600' : 'text-xs text-red-600';
     });
 
     document.getElementById('btnCancelSync')?.addEventListener('click', async () => {
@@ -627,6 +673,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (adminSettingsModal) adminSettingsModal.classList.remove('show');
         // Limpa o status ao fechar
         statusSpan.classList.add('hidden');
+    }
+
+    // Verificar status de sync e exibir banner se houve erro (só admin)
+    if (_IS_ADMIN) {
+        fetch('/api/ixc/status').then(r => r.json()).then(d => {
+            if (d.status === 'error' && !d.is_syncing) {
+                const banner = document.getElementById('syncErrBanner');
+                const msg    = document.getElementById('syncErrMsg');
+                if (banner && msg) {
+                    const lastSync = d.last_sync ? ` (última tentativa: ${d.last_sync})` : '';
+                    msg.textContent = `Sincronização IXC falhou${lastSync}. Dados podem estar desatualizados.`;
+                    banner.style.display = 'flex';
+                }
+            }
+        }).catch(() => {});
     }
 
     // Inicializar e Monitorar Eventos do Usuário

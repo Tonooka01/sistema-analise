@@ -9,6 +9,7 @@ from flask_login import login_user, login_required, logout_user, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from database import get_db_connection
 from models import User
+from routes_ixc_sync import _tg_send
 
 auth_bp = Blueprint('auth_bp', __name__)
 
@@ -36,6 +37,11 @@ def login():
             )
             session.permanent = True
             login_user(user, remember=True)
+            try:
+                ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+                _tg_send(f"🔐 <b>Login</b>: <code>{username}</code>\n🕐 {__import__('datetime').datetime.now().strftime('%d/%m/%Y %H:%M')}\n🌐 IP: {ip}")
+            except Exception:
+                pass
             return redirect(url_for('index'))
 
         flash('Usuário ou senha inválidos.')

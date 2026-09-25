@@ -177,6 +177,30 @@ function _shell() {
         </div>
     </div>
 
+    <!-- Modal Coorte detalhe -->
+    <div id="cgCoorteModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;padding:1rem;">
+        <div style="background:#fff;border-radius:.75rem;width:fit-content;max-width:98vw;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;gap:2rem;">
+                <h3 id="cgCoorteModalTitle" style="margin:0;font-size:1rem;font-weight:700;color:#111827;white-space:nowrap;">Coorte</h3>
+                <button onclick="document.getElementById('cgCoorteModal').style.display='none'"
+                        style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:#6b7280;line-height:1;flex-shrink:0;">×</button>
+            </div>
+            <div id="cgCoorteModalBody" style="overflow-y:auto;padding:1rem 1.25rem;"></div>
+        </div>
+    </div>
+
+    <!-- Modal Net Adds detalhe -->
+    <div id="cgNetAddsModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);align-items:center;justify-content:center;padding:1rem;">
+        <div style="background:#fff;border-radius:.75rem;width:fit-content;max-width:98vw;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;gap:2rem;">
+                <h3 id="cgNetAddsModalTitle" style="margin:0;font-size:1rem;font-weight:700;color:#111827;white-space:nowrap;">Detalhe</h3>
+                <button onclick="document.getElementById('cgNetAddsModal').style.display='none'"
+                        style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:#6b7280;line-height:1;flex-shrink:0;">×</button>
+            </div>
+            <div id="cgNetAddsModalBody" style="overflow-y:auto;padding:1rem 1.25rem;"></div>
+        </div>
+    </div>
+
     <!-- Separador Mapa -->
     <div style="border-top:2px solid #e5e7eb;margin-bottom:1.25rem;padding-top:1.25rem;">
         <div style="display:flex;align-items:center;flex-wrap:wrap;gap:.75rem;">
@@ -1760,8 +1784,90 @@ function _renderNetAdds(d2) {
                 x: { ticks: { font: { size: 8 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
                 y: { ticks: { font: { size: 9 } } },
             },
+            onClick: (evt, elements) => {
+                if (!elements.length) return;
+                const el   = elements[0];
+                const idx  = el.datasetIndex;
+                if (idx === 3) return; // linha Net — ignora
+                const mes  = labels[el.index];
+                const tipo = ['novos', 'churn', 'neg'][idx];
+                if (tipo) _openNetAddsDetalhe(mes, tipo);
+            },
         },
     });
+}
+
+function _openNetAddsDetalhe(mes, tipo) {
+    const modal = document.getElementById('cgNetAddsModal');
+    const title = document.getElementById('cgNetAddsModalTitle');
+    const body  = document.getElementById('cgNetAddsModalBody');
+    if (!modal) return;
+
+    const MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const [ano, mesNum] = mes.split('-');
+    const mesLabel = MESES_PT[parseInt(mesNum, 10) - 1] || mes;
+
+    const TIPO_LABEL = { novos: '🟦 Novos', churn: '🔴 Cancelamentos', neg: '🟠 Negativações' };
+    const TIPO_COLOR = { novos: '#3b82f6', churn: '#ef4444', neg: '#f97316' };
+    const color = TIPO_COLOR[tipo] || '#374151';
+
+    title.textContent = `${TIPO_LABEL[tipo] || tipo} — ${mesLabel}/${ano}`;
+    body.innerHTML = '<p style="color:#6b7280;font-size:.85rem;padding:.5rem 0;">Carregando…</p>';
+    modal.style.display = 'flex';
+
+    fetch(`${API}/api/crescimento/netadds_detalhe?mes=${mes}&tipo=${tipo}`)
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) { body.innerHTML = `<p style="color:red;">${d.error}</p>`; return; }
+            const rows = d.clientes || [];
+            const total = rows.length;
+
+            const TH = `padding:.45rem .7rem;text-align:left;border-bottom:2px solid ${color}22;color:#374151;font-weight:700;white-space:nowrap;font-size:.8rem;`;
+            const TD = 'padding:.38rem .7rem;white-space:nowrap;font-size:.8rem;';
+
+            let cols, headerRow, bodyRows;
+
+            if (tipo === 'novos') {
+                cols = ['Cliente','Cidade','Plano','Data Ativação','Status','Fidelidade'];
+                headerRow = cols.map(c => `<th style="${TH}">${c}</th>`).join('');
+                bodyRows = rows.map((r, i) => `
+                    <tr style="background:${i%2===0?'#fff':'#f9fafb'};">
+                        <td style="${TD}color:#111827;font-weight:500;">${r.cliente||'—'}</td>
+                        <td style="${TD}color:#6b7280;">${r.cidade||'—'}</td>
+                        <td style="${TD}color:#374151;">${r.plano||'—'}</td>
+                        <td style="${TD}color:#6b7280;font-variant-numeric:tabular-nums;">${r.data_ativacao||'—'}</td>
+                        <td style="${TD}"><span style="padding:.15rem .45rem;border-radius:4px;font-size:.72rem;font-weight:600;
+                            background:${r.status==='Ativo'?'#d1fae5':'#fee2e2'};
+                            color:${r.status==='Ativo'?'#065f46':'#991b1b'};">${r.status||'—'}</span></td>
+                        <td style="${TD}color:#6b7280;text-align:center;">${r.fidelidade ? r.fidelidade+'m' : '—'}</td>
+                    </tr>`).join('');
+            } else {
+                const isNeg = tipo === 'neg';
+                const dtLabel = isNeg ? 'Data Negativação' : 'Data Cancelamento';
+                cols = ['Cliente','Cidade','Plano','Data Ativação', dtLabel,'Tempo','Motivo','Obs'];
+                headerRow = cols.map(c => `<th style="${TH}">${c}</th>`).join('');
+                bodyRows = rows.map((r, i) => `
+                    <tr style="background:${i%2===0?'#fff':'#f9fafb'};">
+                        <td style="${TD}color:#111827;font-weight:500;">${r.cliente||'—'}</td>
+                        <td style="${TD}color:#6b7280;">${r.cidade||'—'}</td>
+                        <td style="${TD}color:#374151;">${r.plano||'—'}</td>
+                        <td style="${TD}color:#6b7280;font-variant-numeric:tabular-nums;">${r.data_ativacao||'—'}</td>
+                        <td style="${TD}color:${color};font-variant-numeric:tabular-nums;font-weight:600;">${r.data_saida||'—'}</td>
+                        <td style="${TD}color:#6b7280;text-align:center;">${r.tempo||'—'}</td>
+                        <td style="${TD}color:#374151;">${r.motivo||'—'}</td>
+                        <td style="${TD}color:#9ca3af;max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="${(r.obs||'').replace(/"/g,'&quot;')}">${r.obs||'—'}</td>
+                    </tr>`).join('');
+            }
+
+            body.innerHTML = `
+                <p style="font-size:.8rem;color:#6b7280;margin:0 0 .75rem;">${total} registro${total!==1?'s':''}</p>
+                <div style="overflow-x:auto;">
+                <table style="border-collapse:collapse;width:auto;">
+                    <thead><tr style="background:${color}11;">${headerRow}</tr></thead>
+                    <tbody>${bodyRows||'<tr><td colspan="8" style="padding:1rem;color:#9ca3af;text-align:center;">Nenhum registro</td></tr>'}</tbody>
+                </table></div>`;
+        })
+        .catch(e => { body.innerHTML = `<p style="color:red;">Erro: ${e.message}</p>`; });
 }
 
 // ── ARPU ──────────────────────────────────────────────────────────────────────
@@ -1865,8 +1971,8 @@ function _renderCohort(cohort) {
         const bg  = ret >= 70 ? '#f0fdf4' : ret >= 50 ? '#fffbeb' : '#fef2f2';
         const fc  = ret >= 70 ? '#16a34a' : ret >= 50 ? '#d97706' : '#dc2626';
         const bar = Math.round(ret);
-        return `<tr style="background:${i%2===0?'#fff':bg};">
-            <td style="padding:.35rem .6rem;font-size:.75rem;">${c.mes}</td>
+        return `<tr data-mes="${c.mes}" style="background:${i%2===0?'#fff':bg};cursor:pointer;" title="Ver clientes desta coorte">
+            <td style="padding:.35rem .6rem;font-size:.75rem;">${c.mes} <span style="color:#9ca3af;font-size:.65rem;">↗</span></td>
             <td style="padding:.35rem .6rem;font-size:.75rem;text-align:right;">${c.total.toLocaleString('pt-BR')}</td>
             <td style="padding:.35rem .6rem;font-size:.75rem;text-align:right;">${c.ativos.toLocaleString('pt-BR')}</td>
             <td style="padding:.35rem .6rem;font-size:.75rem;">
@@ -1888,6 +1994,103 @@ function _renderCohort(cohort) {
         </tr></thead>
         <tbody>${rows}</tbody>
     </table>`;
+
+    // Click handler em cada linha
+    el.querySelectorAll('tr[data-mes]').forEach(tr => {
+        const hoverBg = '#f0f9ff';
+        const origBg  = tr.style.background;
+        tr.addEventListener('mouseover', () => { tr.style.background = hoverBg; });
+        tr.addEventListener('mouseout',  () => { tr.style.background = origBg; });
+        tr.addEventListener('click', () => _openCoorteDetalhe(tr.dataset.mes));
+    });
+}
+
+function _openCoorteDetalhe(mes) {
+    const modal = document.getElementById('cgCoorteModal');
+    const title = document.getElementById('cgCoorteModalTitle');
+    const body  = document.getElementById('cgCoorteModalBody');
+    if (!modal) return;
+
+    title.textContent = `Coorte ${mes} — Clientes Ativados`;
+    body.innerHTML = '<p style="color:#6b7280;font-size:.85rem;padding:.5rem 0;">Carregando…</p>';
+    modal.style.display = 'flex';
+
+    fetch(`${API}/api/crescimento/cohort_detalhe?mes=${mes}`)
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) { body.innerHTML = `<p style="color:red;">${d.error}</p>`; return; }
+            const rows   = d.clientes || [];
+            const ativos = rows.filter(r => r.status === 'Ativo');
+            const saidas = rows.filter(r => r.status !== 'Ativo');
+
+            const TH = 'padding:.4rem .65rem;text-align:left;white-space:nowrap;font-size:.78rem;font-weight:700;border-bottom:2px solid #e5e7eb;color:#374151;';
+            const TD = 'padding:.35rem .65rem;font-size:.78rem;white-space:nowrap;';
+
+            function statusBadge(s) {
+                const MAP = {
+                    'Ativo':       ['#d1fae5','#065f46'],
+                    'Inativo':     ['#fee2e2','#991b1b'],
+                    'Negativado':  ['#ffedd5','#9a3412'],
+                    'Cancelado':   ['#fee2e2','#991b1b'],
+                    'Desistente':  ['#fef3c7','#92400e'],
+                };
+                const [bg, fc] = MAP[s] || ['#f3f4f6','#374151'];
+                return `<span style="padding:.15rem .45rem;border-radius:4px;font-size:.7rem;font-weight:600;background:${bg};color:${fc};">${s}</span>`;
+            }
+
+            function buildTable(list, isAtivos) {
+                if (!list.length) return '<p style="color:#9ca3af;font-size:.78rem;padding:.5rem 0;">Nenhum registro.</p>';
+                const cols = isAtivos
+                    ? ['Cliente','Cidade','Plano','Data Ativação','Status','Fidelidade']
+                    : ['Cliente','Cidade','Plano','Data Ativação','Data Saída','Tempo','Status','Motivo','Obs'];
+                const header = cols.map(c => `<th style="${TH}">${c}</th>`).join('');
+                const body_ = list.map((r, i) => {
+                    const bg = i % 2 === 0 ? '#fff' : '#f9fafb';
+                    if (isAtivos) {
+                        return `<tr style="background:${bg};">
+                            <td style="${TD}font-weight:500;color:#111827;">${r.cliente||'—'}</td>
+                            <td style="${TD}color:#6b7280;">${r.cidade||'—'}</td>
+                            <td style="${TD}color:#374151;">${r.plano||'—'}</td>
+                            <td style="${TD}color:#6b7280;font-variant-numeric:tabular-nums;">${r.data_ativacao||'—'}</td>
+                            <td style="${TD}">${statusBadge(r.status)}</td>
+                            <td style="${TD}color:#6b7280;text-align:center;">${r.fidelidade ? r.fidelidade+'m' : '—'}</td>
+                        </tr>`;
+                    } else {
+                        return `<tr style="background:${bg};">
+                            <td style="${TD}font-weight:500;color:#111827;">${r.cliente||'—'}</td>
+                            <td style="${TD}color:#6b7280;">${r.cidade||'—'}</td>
+                            <td style="${TD}color:#374151;">${r.plano||'—'}</td>
+                            <td style="${TD}color:#6b7280;font-variant-numeric:tabular-nums;">${r.data_ativacao||'—'}</td>
+                            <td style="${TD}color:#dc2626;font-weight:600;font-variant-numeric:tabular-nums;">${r.data_saida||'—'}</td>
+                            <td style="${TD}color:#6b7280;text-align:center;">${r.tempo||'—'}</td>
+                            <td style="${TD}">${statusBadge(r.status)}</td>
+                            <td style="${TD}color:#374151;">${r.motivo||'—'}</td>
+                            <td style="${TD}color:#9ca3af;max-width:180px;overflow:hidden;text-overflow:ellipsis;" title="${(r.obs||'').replace(/"/g,'&quot;')}">${r.obs||'—'}</td>
+                        </tr>`;
+                    }
+                }).join('');
+                return `<div style="overflow-x:auto;"><table style="border-collapse:collapse;width:auto;">
+                    <thead><tr style="background:#f9fafb;">${header}</tr></thead>
+                    <tbody>${body_}</tbody>
+                </table></div>`;
+            }
+
+            const pct = rows.length > 0 ? (ativos.length / rows.length * 100).toFixed(1) : '0';
+            const fcPct = parseFloat(pct) >= 70 ? '#16a34a' : parseFloat(pct) >= 50 ? '#d97706' : '#dc2626';
+
+            body.innerHTML = `
+                <div style="display:flex;gap:1.5rem;margin-bottom:1rem;flex-wrap:wrap;">
+                    <span style="font-size:.82rem;color:#6b7280;">Total ativados: <strong>${rows.length}</strong></span>
+                    <span style="font-size:.82rem;color:#16a34a;">Ativos hoje: <strong>${ativos.length}</strong></span>
+                    <span style="font-size:.82rem;color:#dc2626;">Saídas: <strong>${saidas.length}</strong></span>
+                    <span style="font-size:.82rem;color:${fcPct};font-weight:700;">Retenção: ${pct}%</span>
+                </div>
+                <p style="font-size:.78rem;font-weight:700;color:#16a34a;margin:.75rem 0 .35rem;">✅ Ainda Ativos (${ativos.length})</p>
+                ${buildTable(ativos, true)}
+                <p style="font-size:.78rem;font-weight:700;color:#dc2626;margin:1rem 0 .35rem;">❌ Saídas (${saidas.length})</p>
+                ${buildTable(saidas, false)}`;
+        })
+        .catch(e => { body.innerHTML = `<p style="color:red;">Erro: ${e.message}</p>`; });
 }
 
 // ── Cidades ───────────────────────────────────────────────────────────────────

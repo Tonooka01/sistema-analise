@@ -19,6 +19,41 @@ ixc_sync_bp = Blueprint('ixc_sync_bp', __name__)
 from logger import get_logger
 logger = get_logger(__name__)
 
+
+# ── Telegram ────────────────────────────────────────────────────────────────────
+
+def _tg_send(text: str, app=None):
+    """Envia mensagem via Telegram Bot.
+    Passa `app` quando chamado de thread; omite quando chamado dentro de request context."""
+    try:
+        from flask import current_app as _ca
+        _app = app or _ca._get_current_object()
+
+        def _do():
+            conn = _app.config['GET_DB_CONNECTION']()
+            def _get(k):
+                r = conn.execute("SELECT value FROM Settings WHERE key=?", (k,)).fetchone()
+                return r['value'] if r else None
+            token   = _get('tg_token')
+            chat_id = _get('tg_chat_id')
+            conn.close()
+            if not token or not chat_id:
+                return
+            requests.post(
+                f'https://api.telegram.org/bot{token}/sendMessage',
+                json={'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'},
+                timeout=10,
+                verify=False,
+            )
+
+        if app:
+            with app.app_context():
+                _do()
+        else:
+            _do()
+    except Exception as e:
+        logger.warning(f"[Telegram] Falha ao enviar mensagem: {e}")
+
 IXC_BASE_URL  = 'https://sistema.netvaletelecom.com/webservice/v1'
 ROWS_PER_PAGE = 500
 
@@ -1042,13 +1077,18 @@ def sync_status():
             r = conn.execute("SELECT value FROM Settings WHERE key = ?", (key,)).fetchone()
             return r['value'] if r else None
 
+        tg_tok  = _get('tg_token')   or ''
+        tg_chat = _get('tg_chat_id') or ''
         return jsonify({
-            "last_sync":  _get('ixc_last_sync'),
-            "last_log":   _get('ixc_last_sync_log'),
-            "status":     _get('ixc_sync_status'),
-            "has_token":  bool(_get('ixc_token')),
-            "is_syncing": _get('ixc_syncing') == '1',
-            "progress":   _get('ixc_sync_progress') or '0|Aguardando'
+            "last_sync":   _get('ixc_last_sync'),
+            "last_log":    _get('ixc_last_sync_log'),
+            "status":      _get('ixc_sync_status'),
+            "has_token":   bool(_get('ixc_token')),
+            "is_syncing":  _get('ixc_syncing') == '1',
+            "progress":    _get('ixc_sync_progress') or '0|Aguardando',
+            "tg_token":    tg_tok[:8] + '…' if len(tg_tok) > 8 else tg_tok,
+            "tg_chat_id":  tg_chat,
+            "tg_enabled":  bool(tg_tok and tg_chat),
         })
     finally:
         conn.close()
@@ -1069,6 +1109,36 @@ def save_token():
         return jsonify({"success": True})
     finally:
         conn.close()
+
+
+@ixc_sync_bp.route('/save_telegram', methods=['POST'])
+@login_required
+def save_telegram():
+    if current_user.username != 'admin':
+        return jsonify({"error": "Acesso negado"}), 403
+    data    = request.json or {}
+    tg_tok  = data.get('tg_token',   '').strip()
+    tg_chat = data.get('tg_chat_id', '').strip()
+    conn = get_db()
+    try:
+        conn.execute("REPLACE INTO Settings (key, value) VALUES ('tg_token',   ?)", (tg_tok,))
+        conn.execute("REPLACE INTO Settings (key, value) VALUES ('tg_chat_id', ?)", (tg_chat,))
+        conn.commit()
+        return jsonify({"success": True})
+    finally:
+        conn.close()
+
+
+@ixc_sync_bp.route('/test_telegram', methods=['POST'])
+@login_required
+def test_telegram():
+    if current_user.username != 'admin':
+        return jsonify({"error": "Acesso negado"}), 403
+    try:
+        _tg_send(f"✅ <b>Teste NetVale</b>\nBot Telegram configurado corretamente! {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @ixc_sync_bp.route('/cancel', methods=['POST'])
@@ -1114,21 +1184,58 @@ def start_sync():
     return jsonify({"success": True, "message": f"Sync {mode} iniciada"})
 
 
-# ── Agendamento semanal ────────────────────────────────────────────────────────
+# ── Agendamento diário ────────────────────────────────────────────────────────
 
 def start_weekly_scheduler(app):
+    """Mantém nome original para compatibilidade; agora executa todo dia às 23:59."""
     def _scheduler():
         while True:
-            now = datetime.now()
-            if now.weekday() == 6 and now.hour == 23 and now.minute == 59:
+            now    = datetime.now()
+            target = now.replace(hour=23, minute=59, second=0, microsecond=0)
+            if now >= target:
+                target += timedelta(days=1)
+            wait = (target - now).total_seconds()
+            logger.info(f"[Scheduler] Próxima sync agendada para {target.strftime('%Y-%m-%d %H:%M')} ({wait/3600:.1f}h)")
+            time.sleep(wait)
+
+            with app.app_context():
+                conn  = app.config['GET_DB_CONNECTION']()
+                token = _get_token(conn)
+                conn.close()
+            if not token:
+                logger.warning("[Scheduler] Token IXC não encontrado — sync ignorada.")
+                time.sleep(120)
+                continue
+
+            MAX_TENTATIVAS = 3
+            _tg_send(f"🔄 <b>Sync diária iniciada</b>\n{datetime.now().strftime('%d/%m/%Y %H:%M')}", app=app)
+            for tentativa in range(1, MAX_TENTATIVAS + 1):
+                logger.info(f"[{datetime.now()}] Sync diária completa — tentativa {tentativa}/{MAX_TENTATIVAS}...")
+                _run_sync(app, token, 'full')
+
                 with app.app_context():
-                    conn = app.config['GET_DB_CONNECTION']()
-                    token = _get_token(conn)
-                    conn.close()
-                if token:
-                    logger.info(f"[{now}] Sync semanal completa iniciada...")
-                    _run_sync(app, token, 'full')
-                time.sleep(61)
-            time.sleep(30)
+                    _conn = app.config['GET_DB_CONNECTION']()
+                    row   = _conn.execute(
+                        "SELECT value FROM Settings WHERE key='ixc_sync_status'"
+                    ).fetchone()
+                    _conn.close()
+                status = row['value'] if row else 'error'
+
+                if status == 'success':
+                    logger.info(f"[Scheduler] Sync concluída com sucesso na tentativa {tentativa}.")
+                    _tg_send(f"✅ <b>Sync concluída</b> (tentativa {tentativa}/{MAX_TENTATIVAS})\n{datetime.now().strftime('%d/%m/%Y %H:%M')}", app=app)
+                    break
+                else:
+                    logger.warning(f"[Scheduler] Tentativa {tentativa}/{MAX_TENTATIVAS} falhou (status={status}).")
+                    if tentativa < MAX_TENTATIVAS:
+                        logger.info("[Scheduler] Aguardando 5 min antes de nova tentativa...")
+                        _tg_send(f"⚠️ Tentativa {tentativa}/{MAX_TENTATIVAS} falhou. Nova tentativa em 5 min...", app=app)
+                        time.sleep(300)
+                    else:
+                        logger.error("[Scheduler] Todas as tentativas falharam. Sync tentada novamente amanhã.")
+                        _tg_send(f"❌ <b>Sync falhou após {MAX_TENTATIVAS} tentativas!</b>\nDados podem estar desatualizados. Verifique o sistema.", app=app)
+
+            # Aguarda 2 min para evitar duplo disparo no mesmo horário
+            time.sleep(120)
 
     threading.Thread(target=_scheduler, daemon=True).start()

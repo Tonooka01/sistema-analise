@@ -519,6 +519,187 @@ def api_boletos_mes():
         conn.close()
 
 
+_MOTIVO_CANCEL = {
+    '1': 'Alteração de contrato', '2': 'Cancelamento renegociação',
+    '3': 'A pedido do cliente',   '4': 'Pendência financeira',
+    '5': 'Migração de plano',     '8': 'Migração de vencimento',
+    '9': 'Cancelamento',          '10': 'Insatisfação',
+    '11': 'Mudança de endereço',  '12': 'Dificuldades financeiras',
+    '13': 'Viagem',               '14': 'Término de contrato',
+    '15': 'Suspensão temporária',
+}
+
+def _decode_motivo(val):
+    if not val or str(val).strip() in ('0', ''):
+        return ''
+    return _MOTIVO_CANCEL.get(str(val).strip(), f'Código {val}')
+
+def _tenure(date_ativa, date_out):
+    """Retorna string de tempo como cliente (ex: '14m' ou '8d')."""
+    try:
+        from datetime import datetime
+        d1 = datetime.strptime(str(date_ativa)[:10], '%Y-%m-%d')
+        d2 = datetime.strptime(str(date_out)[:10],   '%Y-%m-%d')
+        days = (d2 - d1).days
+        if days < 0: return '—'
+        months = days // 30
+        return f'{months}m' if months >= 1 else f'{days}d'
+    except Exception:
+        return '—'
+
+
+@crescimento_bp.route('/cohort_detalhe')
+@login_required
+def api_cohort_detalhe():
+    """Retorna todos os clientes de uma coorte (mês de ativação) com status atual."""
+    mes = request.args.get('mes', '').strip()  # YYYY-MM
+    if not mes:
+        return jsonify({'error': 'Parâmetro mes obrigatório'}), 400
+
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT Cliente, Cidade, Descri_o, Data_ativa_o, Data_primeira_assinatura,
+                   Status_contrato, Data_cancelamento, Data_negativa_o,
+                   Motivo_cancelamento, Obs_cancelamento, Fidelidade, Filial
+            FROM Contratos
+            WHERE Status_contrato != 'Pendente'
+              AND Data_ativa_o IS NOT NULL AND Data_ativa_o != '' AND Data_ativa_o != '0000-00-00'
+              AND STRFTIME('%Y-%m', Data_ativa_o) = ?
+            ORDER BY Status_contrato = 'Ativo' DESC, Data_ativa_o, Cliente
+        """, (mes,)).fetchall()
+
+        clientes = []
+        for r in rows:
+            status = r['Status_contrato'] or 'Desconhecido'
+            is_ativo = status == 'Ativo'
+
+            # Data de saída: usa Data_cancelamento se válida, senão Data_negativa_o
+            data_cancel = r['Data_cancelamento'] or ''
+            data_neg    = r['Data_negativa_o']   or ''
+            if data_cancel and data_cancel != '0000-00-00':
+                data_saida = data_cancel
+            elif data_neg and data_neg != '0000-00-00':
+                data_saida = data_neg
+            else:
+                data_saida = None
+
+            clientes.append({
+                'cliente':      r['Cliente'],
+                'cidade':       _norm_cidade(r['Cidade']),
+                'plano':        r['Descri_o'] or '—',
+                'data_ativacao': r['Data_ativa_o'],
+                'status':       status,
+                'fidelidade':   r['Fidelidade'],
+                'filial':       r['Filial'],
+                'data_saida':   data_saida if not is_ativo else None,
+                'tempo':        _tenure(r['Data_ativa_o'], data_saida) if (not is_ativo and data_saida) else None,
+                'motivo':       _decode_motivo(r['Motivo_cancelamento']) if not is_ativo else None,
+                'obs':          (r['Obs_cancelamento'] or '') if not is_ativo else None,
+            })
+
+        return jsonify({'clientes': clientes, 'total': len(clientes)})
+    except Exception as e:
+        logger.error("crescimento/cohort_detalhe: %s", e, exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@crescimento_bp.route('/netadds_detalhe')
+@login_required
+def api_netadds_detalhe():
+    """Retorna clientes do Net Adds para um mês e tipo (novos/churn/neg)."""
+    mes  = request.args.get('mes', '').strip()   # YYYY-MM
+    tipo = request.args.get('tipo', '').strip()  # novos | churn | neg
+
+    if not mes or tipo not in ('novos', 'churn', 'neg'):
+        return jsonify({'error': 'Parâmetros inválidos'}), 400
+
+    conn = get_db()
+    try:
+        clientes = []
+
+        if tipo == 'novos':
+            rows = conn.execute("""
+                SELECT Cliente, Cidade, Descri_o, Data_ativa_o, Data_primeira_assinatura,
+                       Status_contrato, Fidelidade, Filial, Vendedor
+                FROM Contratos
+                WHERE Status_contrato != 'Pendente'
+                  AND Data_ativa_o IS NOT NULL AND Data_ativa_o != '' AND Data_ativa_o != '0000-00-00'
+                  AND STRFTIME('%Y-%m', Data_ativa_o) = ?
+                ORDER BY Data_ativa_o, Cliente
+            """, (mes,)).fetchall()
+            for r in rows:
+                clientes.append({
+                    'cliente':      r['Cliente'],
+                    'cidade':       _norm_cidade(r['Cidade']),
+                    'plano':        r['Descri_o'] or '—',
+                    'data_ativacao': r['Data_ativa_o'],
+                    'data_primeira_assinatura': r['Data_primeira_assinatura'],
+                    'status':       r['Status_contrato'],
+                    'fidelidade':   r['Fidelidade'],
+                    'filial':       r['Filial'],
+                })
+
+        elif tipo == 'churn':
+            rows = conn.execute("""
+                SELECT Cliente, Cidade, Descri_o, Data_ativa_o, Data_cancelamento,
+                       Motivo_cancelamento, Obs_cancelamento, Status_contrato, Fidelidade, Filial
+                FROM Contratos
+                WHERE Status_contrato IN ('Inativo','Cancelado','Desistente')
+                  AND Data_cancelamento IS NOT NULL AND Data_cancelamento != '' AND Data_cancelamento != '0000-00-00'
+                  AND STRFTIME('%Y-%m', Data_cancelamento) = ?
+                ORDER BY Data_cancelamento, Cliente
+            """, (mes,)).fetchall()
+            for r in rows:
+                clientes.append({
+                    'cliente':      r['Cliente'],
+                    'cidade':       _norm_cidade(r['Cidade']),
+                    'plano':        r['Descri_o'] or '—',
+                    'data_ativacao': r['Data_ativa_o'],
+                    'data_saida':   r['Data_cancelamento'],
+                    'tempo':        _tenure(r['Data_ativa_o'], r['Data_cancelamento']),
+                    'motivo':       _decode_motivo(r['Motivo_cancelamento']),
+                    'obs':          r['Obs_cancelamento'] or '',
+                    'status':       r['Status_contrato'],
+                    'filial':       r['Filial'],
+                })
+
+        else:  # neg
+            has_neg = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='Contratos_Negativacao'"
+            ).fetchone()
+            if has_neg:
+                rows = conn.execute("""
+                    SELECT Cliente, Cidade, Descri_o, Data_ativa_o, Data_negativa_o,
+                           Motivo_cancelamento, Obs_cancelamento, Status_contrato, Fidelidade, Filial
+                    FROM Contratos_Negativacao
+                    WHERE Data_negativa_o IS NOT NULL AND Data_negativa_o != '' AND Data_negativa_o != '0000-00-00'
+                      AND STRFTIME('%Y-%m', Data_negativa_o) = ?
+                    ORDER BY Data_negativa_o, Cliente
+                """, (mes,)).fetchall()
+                for r in rows:
+                    clientes.append({
+                        'cliente':      r['Cliente'],
+                        'cidade':       _norm_cidade(r['Cidade']),
+                        'plano':        r['Descri_o'] or '—',
+                        'data_ativacao': r['Data_ativa_o'],
+                        'data_saida':   r['Data_negativa_o'],
+                        'tempo':        _tenure(r['Data_ativa_o'], r['Data_negativa_o']),
+                        'motivo':       _decode_motivo(r['Motivo_cancelamento']),
+                        'obs':          r['Obs_cancelamento'] or '',
+                        'filial':       r['Filial'],
+                    })
+
+        return jsonify({'clientes': clientes, 'total': len(clientes)})
+    except Exception as e:
+        logger.error("crescimento/netadds_detalhe: %s", e, exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
 @crescimento_bp.route('/mapa')
 @login_required
 def api_crescimento_mapa():
