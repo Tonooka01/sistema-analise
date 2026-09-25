@@ -3647,6 +3647,12 @@ RETIRADA_ASSUNTOS = (
     'CANCELAMENTO RETIRADA',
 )
 
+# Filtro restrito para a tabela "Produção por Técnico" (apenas retiradas efetivas)
+PRODUCAO_TECNICO_ASSUNTOS = (
+    'INADIMPLENCIA RETIRADA',
+    'RETIRADA DE EQUIPAMENTO',
+)
+
 # Cache de técnicos — populado uma vez, reusado nas requisições seguintes
 _tecnicos_cache: dict = {}
 _tecnicos_cache_ts: float = 0.0
@@ -4682,7 +4688,7 @@ def api_ret_producao_tecnico():
     conn = None
     try:
         conn = current_app.config['GET_DB_CONNECTION']()
-        ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
+        ph = ','.join('?' * len(PRODUCAO_TECNICO_ASSUNTOS))
         _CIDADES_OP = ('Dom Pedro', 'Presidente Dutra', 'Tuntum', 'São Domingos do Maranhão')
         _ph_cid = ','.join('?' * len(_CIDADES_OP))
         year, month = int(mes[:4]), int(mes[5:])
@@ -4708,7 +4714,7 @@ def api_ret_producao_tecnico():
             ) = ?
             GROUP BY o.Colaborador, dia
             ORDER BY o.Colaborador, dia
-        """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP) + [mes]).fetchall()
+        """, list(PRODUCAO_TECNICO_ASSUNTOS) + list(_CIDADES_OP) + [mes]).fetchall()
 
         _tec_map = _get_tecnicos_map()
         _colab_dias = {}

@@ -70,14 +70,14 @@
 <body class="p-2 md:p-4">
 
     <!-- Banner de erro de sync — visível só para admin -->
-    <div id="syncErrBanner" style="display:none;background:#fee2e2;border:1.5px solid #fca5a5;border-radius:10px;padding:.6rem 1rem;margin-bottom:.75rem;display:flex;align-items:center;gap:.75rem;font-size:.82rem;color:#7f1d1d;">
+    <div id="syncErrBanner" hidden style="background:#fee2e2;border:1.5px solid #fca5a5;border-radius:10px;padding:.6rem 1rem;margin-bottom:.75rem;align-items:center;gap:.75rem;font-size:.82rem;color:#7f1d1d;">
         <span style="font-size:1.1rem">⚠️</span>
         <span id="syncErrMsg" style="flex:1"></span>
-        <button onclick="fetch('/api/ixc/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'full'})}).then(()=>document.getElementById('syncErrBanner').style.display='none')"
+        <button onclick="fetch('/api/ixc/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'full'})}).then(()=>{const b=document.getElementById('syncErrBanner');b.hidden=true;b.style.display='none';})"
                 style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:.3rem .75rem;cursor:pointer;font-weight:600;font-size:.78rem;white-space:nowrap">
             Tentar novamente
         </button>
-        <button onclick="document.getElementById('syncErrBanner').style.display='none'"
+        <button onclick="const b=document.getElementById('syncErrBanner');b.hidden=true;b.style.display='none';"
                 style="background:none;border:none;cursor:pointer;color:#7f1d1d;font-size:1.1rem;line-height:1;padding:0 .2rem">×</button>
     </div>
 
@@ -684,6 +684,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (banner && msg) {
                     const lastSync = d.last_sync ? ` (última tentativa: ${d.last_sync})` : '';
                     msg.textContent = `Sincronização IXC falhou${lastSync}. Dados podem estar desatualizados.`;
+                    banner.hidden = false;
                     banner.style.display = 'flex';
                 }
             }

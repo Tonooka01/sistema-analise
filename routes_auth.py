@@ -4,12 +4,16 @@ Blueprint de autenticação — login, logout, criação de usuários.
 """
 
 import sqlite3
+import logging
+from datetime import datetime
 from flask import Blueprint, render_template, redirect, url_for, request, flash, abort, session
 from flask_login import login_user, login_required, logout_user, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from database import get_db_connection
 from models import User
 from routes_ixc_sync import _tg_send
+
+_auth_log = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth_bp', __name__)
 
@@ -39,9 +43,9 @@ def login():
             login_user(user, remember=True)
             try:
                 ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-                _tg_send(f"🔐 <b>Login</b>: <code>{username}</code>\n🕐 {__import__('datetime').datetime.now().strftime('%d/%m/%Y %H:%M')}\n🌐 IP: {ip}")
-            except Exception:
-                pass
+                _tg_send(f"\U0001f510 <b>Login</b>: <code>{username}</code>\n\U0001f550 {datetime.now().strftime('%d/%m/%Y %H:%M')}\n\U0001f310 IP: {ip}")
+            except Exception as _e:
+                _auth_log.warning(f"[Telegram] login notify failed: {_e}")
             return redirect(url_for('index'))
 
         flash('Usuário ou senha inválidos.')

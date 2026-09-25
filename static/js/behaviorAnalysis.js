@@ -4249,6 +4249,7 @@ function _retRenderMainDashboard(d) {
           <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
             <span class="text-sm font-semibold text-gray-700">Produção por Técnico
               <span class="text-xs font-normal text-gray-400 ml-1">(Dom Pedro · Presidente Dutra · Tuntum · São Domingos)</span>
+              <span class="text-xs font-normal text-blue-500 ml-2">Inadimplência Retirada · Retirada de Equipamento</span>
             </span>
             <select id="ret-colab-mes-sel" class="border border-gray-300 rounded px-2 py-1 text-xs text-gray-700 bg-white">
               ${selOpts}
