@@ -5,6 +5,7 @@ Configuração, middleware, registro de blueprints e inicialização.
 """
 
 import os
+import threading
 from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request, redirect, url_for
 from flask_cors import CORS
@@ -59,7 +60,7 @@ from routes_dre2 import dre2_bp
 from routes_crescimento import crescimento_bp
 
 # --- Blueprint Sync IXC ---
-from routes_ixc_sync import ixc_sync_bp
+from routes_ixc_sync import ixc_sync_bp, _tg_send
 
 # ---------------------------------------------------------------------------
 # App
@@ -92,6 +93,67 @@ login_manager.login_view = 'auth_bp.login'
 login_manager.login_message = "Por favor, faça login para acessar."
 login_manager.login_message_category = "error"
 login_manager.user_loader(load_user)
+
+# ---------------------------------------------------------------------------
+# Telegram activity tracking
+# ---------------------------------------------------------------------------
+
+# Mapa rota → emoji + nome legível (GET, exceto onde indicado)
+_TG_ROUTES = {
+    '/':                                       '🏠 Dashboard',
+    '/api/crescimento/dados':                  '📈 Crescimento',
+    '/api/crescimento/mapa':                   '🗺️ Mapa de Cobertura',
+    '/api/behavior/retiradas':                 '📦 Análise de Retiradas',
+    '/api/behavior/predictive_churn':          '🔮 Churn Preditivo',
+    '/api/behavior/qos_overview':              '📡 QoS / Qualidade de Sinal',
+    '/api/behavior/financial_behavior':        '💳 Comportamento Financeiro',
+    '/api/behavior/contact_list':              '📋 Lista de Contatos',
+    '/api/behavior/churn_pattern':             '📉 Padrão de Cancelamentos',
+    '/api/behavior/action_alerts':             '⚠️ Alertas de Ação',
+    '/api/behavior/cancellation_seasonality':  '📆 Sazonalidade de Cancelamentos',
+    '/api/behavior/lifecycle_risk':            '⚡ Risco de Ciclo de Vida',
+    '/api/behavior/plan_risk':                 '🎯 Risco por Plano',
+    '/api/behavior/payment_profile':           '💰 Perfil de Pagamento',
+    '/api/behavior/signal_causes':             '🔧 Causas de Sinal',
+    '/api/behavior/temporal_support':          '🕐 Suporte Temporal',
+    '/api/behavior/connection_inactivity':     '🔌 Inatividade de Conexão',
+    '/api/dre2/dre':                           '📊 DRE — Resultado',
+    '/api/dre2/dfc':                           '💵 DFC — Fluxo de Caixa',
+    '/api/dre2/cac':                           '📌 CAC',
+    '/api/dre2/dre_anual':                     '📊 DRE Anual',
+    '/api/ixc/start':                          '🔄 Sync Manual IXC',  # POST
+}
+
+# Deduplicação: (username, rota) → último envio; não repete dentro de 10 min
+_tg_dedup: dict = {}
+_TG_DEDUP_SECS = 600  # 10 minutos
+
+
+def _tg_track(username: str, path: str, method: str, status: int):
+    label = _TG_ROUTES.get(path)
+    if not label:
+        return
+    if status >= 400:
+        return
+    # POST /api/ixc/start → só notifica em POST, todos os outros são GET
+    if path == '/api/ixc/start' and method != 'POST':
+        return
+    if path != '/api/ixc/start' and method != 'GET':
+        return
+
+    key = (username, path)
+    now = datetime.now().timestamp()
+    if now - _tg_dedup.get(key, 0) < _TG_DEDUP_SECS:
+        return
+    _tg_dedup[key] = now
+
+    hora = datetime.now().strftime('%H:%M')
+    threading.Thread(
+        target=_tg_send,
+        args=(f"👁️ <b>{label}</b>\n👤 {username}  🕐 {hora}",),
+        daemon=True
+    ).start()
+
 
 # ---------------------------------------------------------------------------
 # Middleware
@@ -132,6 +194,12 @@ def log_request(response):
 
     logger.info("%s %s %s -> %s [%s]",
                 request.method, request.path, response.status_code, ip, username)
+
+    if current_user.is_authenticated:
+        try:
+            _tg_track(current_user.username, request.path, request.method, response.status_code)
+        except Exception:
+            pass
 
     return response
 

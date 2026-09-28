@@ -56,8 +56,14 @@ def login():
 @auth_bp.route('/logout')
 @login_required
 def logout():
+    username = current_user.username
+    reason   = request.args.get('reason')
     logout_user()
-    reason = request.args.get('reason')
+    try:
+        motivo = 'inatividade' if reason == 'inactivity' else 'manual'
+        _tg_send(f"\U0001f6aa <b>Logout</b>: <code>{username}</code>\n\U0001f550 {datetime.now().strftime('%d/%m/%Y %H:%M')}  [{motivo}]")
+    except Exception as _e:
+        _auth_log.warning(f"[Telegram] logout notify failed: {_e}")
     if reason == 'inactivity':
         flash('Sua sessão expirou por inatividade.')
     else:
