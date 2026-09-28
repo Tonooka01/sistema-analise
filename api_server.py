@@ -148,9 +148,11 @@ def _tg_track(username: str, path: str, method: str, status: int):
     _tg_dedup[key] = now
 
     hora = datetime.now().strftime('%H:%M')
+    msg  = f"\U0001f441️ <b>{label}</b>\n\U0001f464 {username}  \U0001f550 {hora}"
     threading.Thread(
         target=_tg_send,
-        args=(f"👁️ <b>{label}</b>\n👤 {username}  🕐 {hora}",),
+        args=(msg,),
+        kwargs={'app': app},
         daemon=True
     ).start()
 
