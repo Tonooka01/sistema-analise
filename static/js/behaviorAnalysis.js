@@ -3341,7 +3341,7 @@ window._retColabCellModal = async function(colab, dia, mes, tableType) {
     const endpoint = tableType === 'atividade'
         ? `/api/behavior/retiradas/atividade-tecnico-os`
         : `/api/behavior/retiradas/producao-tecnico-os`;
-    const tituloTbl = tableType === 'atividade' ? 'Atividade (fotos/arquivos IXC)' : 'Produção (OS finalizadas)';
+    const tituloTbl = tableType === 'atividade' ? 'OS Finalizadas (todos os assuntos de retirada)' : 'Produção (OS finalizadas)';
     const diaFmt = String(dia).padStart(2, '0');
     const mesPartes = mes.split('-');
     const dataLabel = `${diaFmt}/${mesPartes[1]}/${mesPartes[0]}`;
@@ -3387,38 +3387,33 @@ window._retColabCellModal = async function(colab, dia, mes, tableType) {
         };
 
         if (tableType === 'atividade') {
-            // Layout de cards mostrando as interações (mensagens/fotos) do técnico
-            const cards = ordens.map(o => {
-                const msg = (o.mensagem || '').trim();
-                const statusCls = STATUS_CLS[o.status] || 'bg-gray-100 text-gray-600';
-                return `
-                <div class="border border-gray-100 rounded-lg p-3 mb-2 hover:bg-gray-50">
-                    <div class="flex items-start justify-between gap-2 mb-1">
-                        <span class="font-medium text-blue-700 hover:underline cursor-pointer text-xs"
+            const rows = ordens.map(o => `
+                <tr class="border-b border-gray-50 hover:bg-gray-50 text-xs">
+                    <td class="px-3 py-2 font-mono text-gray-500">${o.id}</td>
+                    <td class="px-3 py-2 max-w-[180px]">
+                        <span class="font-medium text-blue-700 hover:underline cursor-pointer truncate block" title="${o.cliente||''}"
                               onclick="window._retClientePerfil('${(o.cliente||'').replace(/'/g,"\\'")}')">
                             ${o.cliente||'—'}
                         </span>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            <span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${statusCls}">${o.status||'—'}</span>
-                            <span class="text-[10px] text-gray-400 font-mono">#${o.id}</span>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2 text-[10px] text-gray-400 mb-1.5">
-                        <span>${o.assunto||'—'}</span>
-                        <span>·</span>
-                        <span>${o.cidade||'—'}</span>
-                        <span>·</span>
-                        <span>Abertura: ${(o.abertura||'').slice(0,10)}</span>
-                    </div>
-                    ${msg
-                        ? `<div class="bg-blue-50 border border-blue-100 rounded p-2 text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">${msg}</div>`
-                        : `<div class="text-[10px] text-gray-300 italic">Sem mensagem registrada</div>`
-                    }
-                </div>`;
-            }).join('');
+                    </td>
+                    <td class="px-3 py-2 text-gray-500 max-w-[160px] truncate" title="${o.assunto||''}">${o.assunto||'—'}</td>
+                    <td class="px-3 py-2 text-gray-500">${o.cidade||'—'}</td>
+                    <td class="px-3 py-2 text-gray-400 whitespace-nowrap">${(o.fechamento||'').slice(0,10)}</td>
+                </tr>`).join('');
             body.innerHTML = `
-                <div class="text-xs text-gray-400 mb-3">${ordens.length} OS com atividade neste dia</div>
-                ${cards}`;
+                <div class="text-xs text-gray-400 mb-2">${ordens.length} OS finalizada${ordens.length !== 1 ? 's' : ''} neste dia</div>
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="bg-gray-50 text-xs text-gray-500 font-semibold">
+                            <th class="px-3 py-2">ID</th>
+                            <th class="px-3 py-2">Cliente</th>
+                            <th class="px-3 py-2">Assunto</th>
+                            <th class="px-3 py-2">Cidade</th>
+                            <th class="px-3 py-2">Finalização</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
         } else {
             // Layout de tabela para produção (OS finalizadas)
             const rows = ordens.map(o => `

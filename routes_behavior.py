@@ -4785,10 +4785,9 @@ def api_ret_producao_tecnico_os():
 
 @behavior_bp.route('/retiradas/atividade-tecnico-os')
 def api_ret_atividade_tecnico_os():
-    """OS com atividade (fotos/arquivos) de um técnico em um dia específico."""
+    """OS finalizadas por técnico em um dia específico (todos os assuntos de retirada)."""
     if not current_user.is_authenticated:
         return jsonify({'error': 'Não autenticado'}), 401
-    import json as _json
     colab = request.args.get('colab', '').strip()
     mes   = request.args.get('mes', '').strip()
     dia   = request.args.get('dia', '').strip()
@@ -4797,37 +4796,31 @@ def api_ret_atividade_tecnico_os():
     conn = None
     try:
         conn = current_app.config['GET_DB_CONNECTION']()
-        dia_fmt  = dia.zfill(2)
+        dia_fmt    = dia.zfill(2)
         data_exata = f"{mes}-{dia_fmt}"
-        # Busca os_ids do cache cuja lista de datas inclui data_exata para esse colaborador
-        cache_rows = conn.execute(
-            "SELECT os_id, datas FROM ret_atividade_cache WHERE colaborador = ?",
-            (colab,)
-        ).fetchall()
-        os_ids_com_ativ = []
-        for os_id, datas_json in cache_rows:
-            try:
-                datas = _json.loads(datas_json or '[]')
-                if data_exata in datas:
-                    os_ids_com_ativ.append(str(os_id))
-            except Exception:
-                continue
-        if not os_ids_com_ativ:
-            _tec_map = _get_tecnicos_map()
-            return jsonify({'ordens': [], 'tecnico': _tec_map.get(str(colab)) or f'#{colab}',
-                            'data': data_exata})
-        ph = ','.join('?' * len(os_ids_com_ativ))
+        ph_ass = ','.join('?' * len(RETIRADA_ASSUNTOS))
         rows = conn.execute(f"""
             SELECT o.ID, o.Cliente, o.Status, o.Bairro, o.Cidade,
-                   o.Assunto, o.Abertura, o.Mensagem
-            FROM OS o WHERE CAST(o.ID AS TEXT) IN ({ph})
-            ORDER BY o.Abertura DESC
-        """, os_ids_com_ativ).fetchall()
+                   o.Assunto, o.Abertura, o.Mensagem,
+                   CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                             AND o.Fechamento NOT LIKE '0000%'
+                        THEN o.Fechamento ELSE o.Final END AS data_fin
+            FROM OS o
+            WHERE CAST(o.Colaborador AS TEXT) = ?
+            AND o.Status = 'Finalizada'
+            AND o.Assunto IN ({ph_ass})
+            AND strftime('%Y-%m-%d',
+                CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                          AND o.Fechamento NOT LIKE '0000%'
+                     THEN o.Fechamento ELSE o.Final END
+            ) = ?
+            ORDER BY data_fin
+        """, [colab] + list(RETIRADA_ASSUNTOS) + [data_exata]).fetchall()
         _tec_map = _get_tecnicos_map()
         nome_tec = _tec_map.get(str(colab)) or f'#{colab}'
         ordens = [{'id': r[0], 'cliente': r[1], 'status': r[2], 'bairro': r[3],
                    'cidade': r[4], 'assunto': r[5], 'abertura': r[6],
-                   'mensagem': (r[7] or '').strip()}
+                   'mensagem': (r[7] or '').strip(), 'fechamento': r[8]}
                   for r in rows]
         return jsonify({'ordens': ordens, 'tecnico': nome_tec, 'data': data_exata})
     except Exception as e:
