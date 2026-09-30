@@ -1187,8 +1187,39 @@ def start_sync():
 # ── Agendamento diário ────────────────────────────────────────────────────────
 
 def start_weekly_scheduler(app):
-    """Mantém nome original para compatibilidade; agora executa todo dia às 23:59."""
+    """Mantém nome original para compatibilidade; agora executa todo dia às 23:59.
+    Ao iniciar, se a última sync tiver mais de 24 h, dispara catch-up imediato."""
     def _scheduler():
+        # ── Catch-up: sync atrasada? ──────────────────────────────────────────
+        try:
+            with app.app_context():
+                _cc = app.config['GET_DB_CONNECTION']()
+                _row = _cc.execute(
+                    "SELECT value FROM Settings WHERE key='ixc_last_sync_dt'"
+                ).fetchone()
+                _cc.close()
+            if _row and _row['value']:
+                from datetime import datetime as _dt
+                last = _dt.fromisoformat(_row['value'])
+                hours_ago = (datetime.now() - last).total_seconds() / 3600
+                if hours_ago > 24:
+                    logger.info(f"[Scheduler] Catch-up: última sync há {hours_ago:.0f}h — iniciando agora...")
+                    _tg_send(f"⏰ <b>Catch-up sync</b>: banco estava {hours_ago:.0f}h desatualizado.\nIniciando agora...", app=app)
+                    with app.app_context():
+                        _ct = app.config['GET_DB_CONNECTION']()
+                        _tok = _get_token(_ct)
+                        _ct.close()
+                    if _tok:
+                        _run_sync(app, _tok, 'full')
+                        with app.app_context():
+                            _cv = app.config['GET_DB_CONNECTION']()
+                            _st = _cv.execute("SELECT value FROM Settings WHERE key='ixc_sync_status'").fetchone()
+                            _cv.close()
+                        _status = _st['value'] if _st else 'error'
+                        _tg_send(f"{'✅' if _status=='success' else '❌'} Catch-up {'concluído' if _status=='success' else 'falhou'} ({_status})", app=app)
+        except Exception as _e:
+            logger.warning(f"[Scheduler] Catch-up erro: {_e}")
+
         while True:
             now    = datetime.now()
             target = now.replace(hour=23, minute=59, second=0, microsecond=0)
