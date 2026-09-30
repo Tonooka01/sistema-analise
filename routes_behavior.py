@@ -4839,10 +4839,10 @@ def api_ret_atividade_tecnico_os():
 
 @behavior_bp.route('/retiradas/atividade-tecnico')
 def api_ret_atividade_tecnico():
-    """Atividade dia-a-dia por técnico (fotos/arquivos IXC) para um mês, do cache."""
+    """Atividade dia-a-dia por técnico — finalizações de OS (todos os assuntos de retirada)."""
     if not current_user.is_authenticated:
         return jsonify({'error': 'Não autenticado'}), 401
-    import re as _re, calendar as _cal, json as _json
+    import re as _re, calendar as _cal
     mes = request.args.get('mes', '')
     if not mes or not _re.match(r'^\d{4}-\d{2}$', mes):
         from datetime import date as _d
@@ -4854,31 +4854,35 @@ def api_ret_atividade_tecnico():
             (os_id TEXT PRIMARY KEY, colaborador TEXT, datas TEXT, updated_at TEXT)""")
         year, month = int(mes[:4]), int(mes[5:])
         _, num_days = _cal.monthrange(year, month)
-        prefix = mes + '-'
 
-        rows = conn.execute(
-            "SELECT os_id, colaborador, datas FROM ret_atividade_cache"
-        ).fetchall()
-
-        # Técnicos com pelo menos uma OS Finalizada no mês (mesmo critério da tabela de Produção)
         _CIDADES_OP = ('Dom Pedro', 'Presidente Dutra', 'Tuntum', 'São Domingos do Maranhão')
         ph_ass = ','.join('?' * len(RETIRADA_ASSUNTOS))
         ph_cid = ','.join('?' * len(_CIDADES_OP))
-        fin_rows = conn.execute(f"""
-            SELECT DISTINCT o.Colaborador
+
+        # Conta finalizações por técnico/dia direto da tabela OS (todos os 5 assuntos de retirada)
+        rows = conn.execute(f"""
+            SELECT o.Colaborador,
+                   CAST(strftime('%d',
+                       CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                                 AND o.Fechamento NOT LIKE '0000%'
+                            THEN o.Fechamento ELSE o.Final END
+                   ) AS INTEGER) AS dia,
+                   COUNT(*) AS cnt
             FROM OS o
             WHERE o.Assunto IN ({ph_ass})
             AND o.Cidade IN ({ph_cid})
             AND o.Status = 'Finalizada'
+            AND o.Colaborador IS NOT NULL AND TRIM(o.Colaborador) != '' AND o.Colaborador != '0'
             AND strftime('%Y-%m',
                 CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
                           AND o.Fechamento NOT LIKE '0000%'
                      THEN o.Fechamento ELSE o.Final END
             ) = ?
+            GROUP BY o.Colaborador, dia
+            ORDER BY o.Colaborador, dia
         """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP) + [mes]).fetchall()
-        colab_com_fin = {str(r[0]).strip() for r in fin_rows if r[0]}
 
-        # Auto-sync: OS dos últimos 3 dias que não estão no cache ou estão com > 24h de staleness
+        # Auto-sync cache para OS recentes (mantém detalhe por clique atualizado)
         fresh_24h = set(
             r[0] for r in conn.execute(
                 "SELECT os_id FROM ret_atividade_cache WHERE updated_at >= datetime('now', '-1 day')"
@@ -4908,24 +4912,12 @@ def api_ret_atividade_tecnico():
 
         _tec_map = _get_tecnicos_map()
         _colab_dias = {}
-        for os_id, cid, datas_json in rows:
-            if not cid or cid == '0':
-                continue
-            cid = str(cid).strip()
-            if cid not in colab_com_fin:
-                continue  # só exibe técnicos com finalizada no mês
-            try:
-                datas = _json.loads(datas_json or '[]')
-            except Exception:
-                continue
-            dias_mes = [int(d[8:10]) for d in datas if d.startswith(prefix)]
-            if not dias_mes:
-                continue
+        for r in rows:
+            cid = str(r[0]).strip()
             if cid not in _colab_dias:
-                nome = _tec_map.get(cid) or f'#{cid}'
+                nome = _tec_map.get(cid) or _tec_map.get(cid.lstrip('0')) or f'#{cid}'
                 _colab_dias[cid] = {'id': cid, 'nome': nome, 'dias': {}}
-            for dia in dias_mes:
-                _colab_dias[cid]['dias'][dia] = _colab_dias[cid]['dias'].get(dia, 0) + 1
+            _colab_dias[cid]['dias'][r[1]] = r[2]
 
         por_colab = sorted(
             [{'id': v['id'], 'nome': v['nome'], 'dias': v['dias'],
@@ -4934,7 +4926,7 @@ def api_ret_atividade_tecnico():
             key=lambda x: -x['total']
         )
         return jsonify({'por_colaborador': por_colab, 'num_days': num_days, 'mes': mes,
-                        'cache_updated': bool(rows)})
+                        'cache_updated': True})
     except Exception as e:
         logger.error(f"Erro atividade-tecnico: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500

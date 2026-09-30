@@ -3472,9 +3472,9 @@ async function _retLoadAtividadeTecnico(mes, container) {
         if (!colab.length) {
             wrap.innerHTML = `<div class="bg-white border border-gray-100 rounded-xl p-4 mt-2">
               <div class="text-sm font-semibold text-gray-700 mb-2">Atividade Diária por Técnico
-                <span class="text-xs font-normal text-gray-400 ml-1">(fotos/arquivos enviados no IXC)</span>
+                <span class="text-xs font-normal text-gray-400 ml-1">(OS finalizadas · todos os assuntos de retirada)</span>
               </div>
-              <div class="text-xs text-gray-400 py-2">Nenhuma atividade no cache — clique em 🔄 Atualizar para buscar do IXC.</div>
+              <div class="text-xs text-gray-400 py-2">Nenhuma atividade encontrada para este mês.</div>
             </div>`;
             return;
         }
@@ -3482,7 +3482,7 @@ async function _retLoadAtividadeTecnico(mes, container) {
         <div class="bg-white border border-gray-100 rounded-xl p-4 mt-2">
           <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
             <span class="text-sm font-semibold text-gray-700">Atividade Diária por Técnico
-              <span class="text-xs font-normal text-gray-400 ml-1">(fotos/arquivos enviados no IXC · clique 🔄 Atualizar para sincronizar)</span>
+              <span class="text-xs font-normal text-gray-400 ml-1">(OS finalizadas · todos os assuntos de retirada · clique 🔄 Atualizar para sincronizar)</span>
             </span>
           </div>
           <div class="overflow-x-auto">${_renderColabTable(colab, numDays, mesSel, 'atividade')}</div>
