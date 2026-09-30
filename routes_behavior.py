@@ -4878,6 +4878,34 @@ def api_ret_atividade_tecnico():
         """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP) + [mes]).fetchall()
         colab_com_fin = {str(r[0]).strip() for r in fin_rows if r[0]}
 
+        # Auto-sync: OS dos últimos 3 dias que não estão no cache ou estão com > 24h de staleness
+        fresh_24h = set(
+            r[0] for r in conn.execute(
+                "SELECT os_id FROM ret_atividade_cache WHERE updated_at >= datetime('now', '-1 day')"
+            ).fetchall()
+        )
+        recent_os = conn.execute(f"""
+            SELECT o.ID, o.Colaborador FROM OS o
+            WHERE o.Assunto IN ({ph_ass})
+            AND o.Cidade IN ({ph_cid})
+            AND date(CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                              AND o.Fechamento NOT LIKE '0000%'
+                         THEN o.Fechamento ELSE o.Final END) >= date('now', '-3 days')
+        """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP)).fetchall()
+        auto_sync_ids = [str(r[0]) for r in recent_os if str(r[0]) not in fresh_24h]
+        if auto_sync_ids:
+            auto_colab_map = {str(r[0]): str(r[1] or '') for r in recent_os
+                              if str(r[0]) not in fresh_24h}
+            _app = current_app._get_current_object()
+            token = _ret_get_token()
+            if token:
+                import threading as _thr
+                _thr.Thread(
+                    target=_atividade_bg_sync,
+                    args=(_app, auto_sync_ids, auto_colab_map, token),
+                    daemon=True
+                ).start()
+
         _tec_map = _get_tecnicos_map()
         _colab_dias = {}
         for os_id, cid, datas_json in rows:
