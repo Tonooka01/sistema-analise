@@ -3645,6 +3645,7 @@ RETIRADA_ASSUNTOS = (
     'EQUIPAMENTO NÃO RETIRADO',
     'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
     'CANCELAMENTO RETIRADA',
+    'EQUIPAMENTO RENEGOCIADO',
 )
 
 # Filtro restrito para a tabela "Produção por Técnico" (apenas retiradas efetivas)
