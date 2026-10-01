@@ -4296,6 +4296,7 @@ function _retRenderMainDashboard(d) {
             } catch(e) {
                 if (wrap) wrap.innerHTML = '<div class="p-4 text-red-500">Erro ao carregar</div>';
             }
+            _retLoadAtividadeTecnico(_retColabMes, el);
         });
     }
 }
