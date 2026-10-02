@@ -70,6 +70,49 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selWrap) selWrap.style.display = 'none';
     }
 
+    // --- Filtra itens de análise na sidebar ---
+    if (!hasDashboard) {
+        // Esconde todos os data-val items que requerem dashboard
+        document.querySelectorAll('#analysisSidebar .sb-group .sb-item[data-val]').forEach(item => {
+            const val = item.dataset.val;
+            if (val === 'analise_comportamento' || val === 'retirada') return; // permissão própria
+            item.style.display = 'none';
+        });
+    }
+    // Esconde item de comportamento se não tem permissão
+    if (!hasBehavior) {
+        const el = document.getElementById('sbItemBehavior');
+        if (el) el.style.display = 'none';
+    }
+    // Esconde item de retirada se não tem permissão
+    if (!hasRetiradas) {
+        const el = document.getElementById('sbItemRetirada');
+        if (el) el.style.display = 'none';
+    }
+
+    // Esconde grupos sem nenhum item visível
+    document.querySelectorAll('#analysisSidebar .sb-group').forEach(grp => {
+        const anyVisible = [...grp.querySelectorAll('.sb-item')].some(el => el.style.display !== 'none');
+        if (!anyVisible) grp.style.display = 'none';
+    });
+
+    // Esconde label "Análises" se todos os grupos estão ocultos
+    const anyGroupVisible = [...document.querySelectorAll('#analysisSidebar .sb-group')]
+        .some(g => g.style.display !== 'none');
+    if (!anyGroupVisible) {
+        document.querySelectorAll('#analysisSidebar .sb-section-label').forEach((lbl, i) => {
+            if (i === 1) lbl.style.display = 'none';
+        });
+    }
+
+    // Esconde seção "Módulos" inteira se todos os botões estão ocultos
+    const moduleSection = document.querySelector('#analysisSidebar .sb-modules');
+    if (moduleSection) {
+        const anyModVisible = [...moduleSection.querySelectorAll('.sb-module-btn')]
+            .some(b => b.style.display !== 'none' && !b.style.display.includes('none'));
+        if (!anyModVisible) moduleSection.style.display = 'none';
+    }
+
     // --- Auto-navega quando acesso único ---
     const behaviorOnlyNow = hasBehavior && !hasDashboard && !hasRetiradas;
     const retiradaOnlyNow = hasRetiradas && !hasDashboard && !hasBehavior;
