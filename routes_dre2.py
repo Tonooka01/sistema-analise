@@ -124,9 +124,11 @@ def _import_excel(conn, file_bytes):
     for row in ws.iter_rows(min_row=4, values_only=True):
         if not row[0] or not isinstance(row[0], int):
             continue
+        anomes_str = str(row[2]) if row[2] else ''
+        ano_correto = int(anomes_str[:4]) if len(anomes_str) >= 7 and anomes_str[4] == '-' else int(row[0])
         conn.execute(
             "INSERT OR REPLACE INTO GC_DRE_Completo VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (row[2], row[0], row[1],
+            (row[2], ano_correto, row[1],
              _f(row[3]), _f(row[4]), _f(row[5]),
              _f(row[6]), _f(row[7]), _f(row[8]), _f(row[9]), _f(row[10]),
              _f(row[11]), _f(row[12]), _f(row[13]))
@@ -141,6 +143,9 @@ def _import_excel(conn, file_bytes):
     for row in ws.iter_rows(min_row=4, values_only=True):
         if not row[0] or not isinstance(row[0], int):
             continue
+        # Deriva o Ano do campo AnoMes (row[2]) para corrigir possíveis erros na coluna Ano
+        anomes_str = str(row[2]) if row[2] else ''
+        ano_correto = int(anomes_str[:4]) if len(anomes_str) >= 7 and anomes_str[4] == '-' else int(row[0])
         atendimento = _f(row[7])
         pessoal     = _f(row[8])
         enc_trabal  = _f(row[9])
@@ -159,7 +164,7 @@ def _import_excel(conn, file_bytes):
                 Pessoal, EncargosTrabalh, Marketing_DFC, Infraestrutura, Tecnologia,
                 Frota, DespAdmin, Atendimento, Impostos, IRPJCSLL)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (row[2], row[0], row[1],
+            (row[2], ano_correto, row[1],
              _f(row[3]), _f(row[4]), desp_op, encargos, _f(row[5]), _f(row[6]),
              _f(row[16]), _f(row[17]), _f(row[18]),
              pessoal, enc_trabal, marketing, infra, tecnologia,
@@ -194,9 +199,11 @@ def _import_excel(conn, file_bytes):
     for row in ws.iter_rows(min_row=4, values_only=True):
         if not row[0] or not isinstance(row[0], int):
             continue
+        anomes_str = str(row[2]) if row[2] else ''
+        ano_correto = int(anomes_str[:4]) if len(anomes_str) >= 7 and anomes_str[4] == '-' else int(row[0])
         conn.execute(
             "INSERT OR REPLACE INTO GC_CAC_Mensal VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (row[2], row[0], row[1],
+            (row[2], ano_correto, row[1],
              _f(row[3]), _f(row[4]), _f(row[5]), _f(row[6]),
              _f(row[7]), int(row[8] or 0), _f(row[9]))
         )
