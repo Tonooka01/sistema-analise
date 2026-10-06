@@ -2230,7 +2230,7 @@ async function renderAlertasAcaoTab() {
     if (!tabContent) return;
 
     let _alertaCurrentPage = 1;
-    let _alertaFilters = { city: '', tier: '', cliente: '' };
+    let _alertaFilters = { city: '', tier: '', cliente: '', retirada: '' };
 
     const TIER_STYLE = {
         'Crítico': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
@@ -2263,6 +2263,15 @@ async function renderAlertasAcaoTab() {
                     <option value="Baixo">Baixo</option>
                 </select>
             </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mr-1">Retirada:</label>
+                <select id="alertaRetiradaFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
+                    <option value="">Todas</option>
+                    <option value="retirada_aberta">🔧 Em aberto</option>
+                    <option value="retirada_fin_sem_neg">⚠️ Fin. s/ neg.</option>
+                    <option value="sem_retirada">Sem retirada</option>
+                </select>
+            </div>
             <button id="btnFilterAlerta" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
         </div>
         <div id="alerta-table-area"></div>
@@ -2277,10 +2286,11 @@ async function renderAlertasAcaoTab() {
         const rowsPerPage = 50;
         const offset = (page - 1) * rowsPerPage;
         const p = new URLSearchParams({
-            city:    _alertaFilters.city,
-            tier:    _alertaFilters.tier,
-            cliente: _alertaFilters.cliente,
-            limit:   rowsPerPage,
+            city:     _alertaFilters.city,
+            tier:     _alertaFilters.tier,
+            cliente:  _alertaFilters.cliente,
+            retirada: _alertaFilters.retirada,
+            limit:    rowsPerPage,
             offset
         });
 
@@ -2406,6 +2416,7 @@ async function renderAlertasAcaoTab() {
         _alertaFilters.city     = document.getElementById('alertaCityFilter')?.value || '';
         _alertaFilters.tier     = document.getElementById('alertaTierFilter')?.value || '';
         _alertaFilters.cliente  = document.getElementById('alertaClienteFilter')?.value.trim() || '';
+        _alertaFilters.retirada = document.getElementById('alertaRetiradaFilter')?.value || '';
         fetchAndRenderAlertaTable(1);
     });
 

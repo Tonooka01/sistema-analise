@@ -2216,11 +2216,23 @@ def api_behavior_action_alerts():
         city_cond    = "AND Cidade = ?" if city else ""
         city_p       = [city] if city else []
 
+        retirada     = request.args.get('retirada', '').strip()
+
         tier_cond    = "AND tier = ?" if tier else ""
         tier_p       = [tier] if tier else []
 
         cliente_cond = "AND A.cliente LIKE ?" if cliente else ""
         cliente_p    = [f"%{cliente}%"] if cliente else []
+
+        if retirada == 'sem_retirada':
+            retirada_cond = "AND (A.situacao_retirada IS NULL OR A.situacao_retirada = '')"
+            retirada_p    = []
+        elif retirada:
+            retirada_cond = "AND A.situacao_retirada = ?"
+            retirada_p    = [retirada]
+        else:
+            retirada_cond = ""
+            retirada_p    = []
 
         _ret_assuntos = (
             'RETIRADA DE EQUIPAMENTO', 'INADIMPLENCIA RETIRADA',
@@ -2375,7 +2387,7 @@ def api_behavior_action_alerts():
         """
 
         count_sql = base_cte + f"""
-            SELECT COUNT(*) AS cnt FROM Alerted A WHERE 1=1 {tier_cond} {cliente_cond}
+            SELECT COUNT(*) AS cnt FROM Alerted A WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond}
         """
 
         data_sql = base_cte + f"""
@@ -2386,7 +2398,7 @@ def api_behavior_action_alerts():
                    COALESCE(CLI.WhatsApp, '') AS whatsapp
             FROM Alerted A
             LEFT JOIN Clientes CLI ON CLI.Raz_o_social = A.cliente
-            WHERE 1=1 {tier_cond} {cliente_cond}
+            WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond}
             ORDER BY A.score DESC
             LIMIT ? OFFSET ?
         """
@@ -2401,8 +2413,8 @@ def api_behavior_action_alerts():
 
         base_p      = tuple(ret_params) + tuple(city_p)
         summary_row = conn.execute(summary_sql, base_p).fetchone()
-        total_rows  = conn.execute(count_sql,   base_p + tuple(tier_p) + tuple(cliente_p)).fetchone()[0]
-        data_rows   = conn.execute(data_sql,    base_p + tuple(tier_p) + tuple(cliente_p) + (limit, offset)).fetchall()
+        total_rows  = conn.execute(count_sql,   base_p + tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p)).fetchone()[0]
+        data_rows   = conn.execute(data_sql,    base_p + tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + (limit, offset)).fetchall()
         cities      = [r[0] for r in conn.execute(cities_sql).fetchall() if r[0]]
 
         summary = dict(summary_row) if summary_row else {
