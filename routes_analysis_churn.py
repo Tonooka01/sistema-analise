@@ -759,3 +759,126 @@ def api_cancellations_by_neighborhood():
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
+
+
+_BOLETOS_RETIRADA_ASSUNTOS = (
+    'RETIRADA DE EQUIPAMENTO',
+    'INADIMPLENCIA RETIRADA',
+    'EQUIPAMENTO NÃO RETIRADO',
+    'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
+    'CANCELAMENTO RETIRADA',
+    'EQUIPAMENTO RENEGOCIADO',
+)
+
+
+@churn_bp.route("/contratos_boletos_abertos")
+def api_contratos_boletos_abertos():
+    conn = None
+    try:
+        conn = get_db()
+        search_term = request.args.get('search_term', '').strip()
+        min_boletos = max(1, int(request.args.get('min_boletos', 3)))
+        limit = max(1, min(200, int(request.args.get('limit', 50))))
+        offset = max(0, int(request.args.get('offset', 0)))
+
+        ph_ass = ','.join('?' * len(_BOLETOS_RETIRADA_ASSUNTOS))
+
+        base_cte = f"""
+            WITH boletos AS (
+                SELECT
+                    CAST(ID_Contrato_Recorrente AS TEXT) AS contrato_id,
+                    COUNT(*) AS qtd_abertos,
+                    SUM(Valor_aberto) AS total_aberto,
+                    MIN(Vencimento) AS venc_mais_antigo
+                FROM Contas_a_Receber
+                WHERE Status = 'A receber'
+                  AND Vencimento < date('now')
+                  AND ID_Contrato_Recorrente IS NOT NULL
+                  AND TRIM(CAST(ID_Contrato_Recorrente AS TEXT)) NOT IN ('', '0')
+                GROUP BY ID_Contrato_Recorrente
+                HAVING COUNT(*) >= ?
+            ),
+            ret_os AS (
+                SELECT
+                    CAST(o.Contrato AS TEXT) AS contrato_id,
+                    MAX(CASE WHEN o.Status != 'Finalizada' THEN 1 ELSE 0 END) AS tem_aberta,
+                    MAX(CASE WHEN o.Status = 'Finalizada' THEN 1 ELSE 0 END) AS tem_finalizada,
+                    MAX(CASE WHEN o.Status != 'Finalizada' THEN o.Status ELSE NULL END) AS status_os_aberta,
+                    MAX(CASE WHEN o.Status != 'Finalizada' THEN CAST(o.ID AS TEXT) ELSE NULL END) AS id_os_aberta,
+                    MAX(CASE WHEN o.Status = 'Finalizada' THEN
+                        COALESCE(NULLIF(NULLIF(o.Fechamento,''),'0000-00-00 00:00:00'), o.Final)
+                    ELSE NULL END) AS data_retirada_fin
+                FROM OS o
+                WHERE o.Assunto IN ({ph_ass})
+                  AND o.Contrato IS NOT NULL
+                  AND TRIM(CAST(o.Contrato AS TEXT)) NOT IN ('', '0')
+                GROUP BY CAST(o.Contrato AS TEXT)
+            )
+        """
+
+        search_clause = ""
+        search_params = []
+        if search_term:
+            search_clause = " AND (LOWER(C.Cliente) LIKE LOWER(?) OR CAST(C.ID AS TEXT) LIKE ?)"
+            search_params = [f'%{search_term}%', f'%{search_term}%']
+
+        base_params = [min_boletos] + list(_BOLETOS_RETIRADA_ASSUNTOS)
+
+        total = conn.execute(
+            base_cte + f"""
+                SELECT COUNT(*) FROM boletos B
+                JOIN Contratos C ON CAST(C.ID AS TEXT) = B.contrato_id
+                WHERE C.Status_contrato NOT IN ('Inativo')
+                {search_clause}
+            """,
+            base_params + search_params
+        ).fetchone()[0]
+
+        rows = conn.execute(
+            base_cte + f"""
+                SELECT
+                    C.ID AS Contrato_ID,
+                    C.Cliente,
+                    C.Cidade,
+                    C.Bairro,
+                    C.Status_contrato,
+                    C.Status_acesso,
+                    B.qtd_abertos AS Qtd_Boletos_Abertos,
+                    ROUND(B.total_aberto, 2) AS Total_Em_Aberto,
+                    B.venc_mais_antigo AS Vencimento_Mais_Antigo,
+                    COALESCE(R.tem_aberta, 0) AS Tem_Retirada_Aberta,
+                    COALESCE(R.tem_finalizada, 0) AS Tem_Retirada_Finalizada,
+                    R.status_os_aberta AS Status_OS_Retirada,
+                    R.id_os_aberta AS ID_OS_Retirada,
+                    R.data_retirada_fin AS Data_Retirada_Finalizada
+                FROM boletos B
+                JOIN Contratos C ON CAST(C.ID AS TEXT) = B.contrato_id
+                LEFT JOIN ret_os R ON R.contrato_id = CAST(C.ID AS TEXT)
+                WHERE C.Status_contrato NOT IN ('Inativo')
+                {search_clause}
+                ORDER BY B.qtd_abertos DESC, B.total_aberto DESC
+                LIMIT ? OFFSET ?
+            """,
+            base_params + search_params + [limit, offset]
+        ).fetchall()
+
+        def _situacao(r):
+            if r['Tem_Retirada_Finalizada'] and r['Status_contrato'] not in ('Negativado', 'Inativo'):
+                return 'retirada_fin_sem_neg'
+            if r['Tem_Retirada_Aberta']:
+                return 'retirada_aberta'
+            if r['Tem_Retirada_Finalizada']:
+                return 'retirada_fin_ok'
+            return 'sem_retirada'
+
+        data = []
+        for r in rows:
+            d = dict(r)
+            d['Situacao_Retirada'] = _situacao(d)
+            data.append(d)
+
+        return jsonify({"data": data, "total_rows": total})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()

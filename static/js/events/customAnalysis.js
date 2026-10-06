@@ -274,6 +274,13 @@ export function handleCustomAnalysisChange(page = 1, triggerFetch = true) {
             }
             break;
 
+        case 'contratos_boletos_abertos':
+            if (dom.customSearchFilterDiv) dom.customSearchFilterDiv.classList.remove('hidden');
+            if (dom.customDateFilterContainer) dom.customDateFilterContainer.classList.add('hidden');
+            if (dom.relevanceFilterContainer) dom.relevanceFilterContainer.classList.add('hidden');
+            if (shouldFetch) customTables.fetchAndRenderContratosBoletosAbertos(searchTerm, page);
+            break;
+
         default:
             if (shouldFetch) {
                 console.warn(`Análise personalizada não reconhecida: ${selectedAnalysis}`);

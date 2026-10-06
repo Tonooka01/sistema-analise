@@ -10,3 +10,4 @@ export { fetchAndRenderRealPermanenceAnalysis } from './permanence.js';
 export { fetchAndRenderCancellationAnalysis } from './cancellations.js';
 export { fetchAndRenderNegativacaoAnalysis } from './negativacao.js';
 export { fetchAndRenderDailyComparison } from './comparison.js';
+export { fetchAndRenderContratosBoletosAbertos } from './inadimplencia_retirada.js';

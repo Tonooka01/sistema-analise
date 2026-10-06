@@ -13,5 +13,6 @@ export {
     fetchAndRenderRealPermanenceAnalysis,
     fetchAndRenderCancellationAnalysis,
     fetchAndRenderNegativacaoAnalysis,
-    fetchAndRenderDailyComparison
+    fetchAndRenderDailyComparison,
+    fetchAndRenderContratosBoletosAbertos
 } from './tables/index.js';
