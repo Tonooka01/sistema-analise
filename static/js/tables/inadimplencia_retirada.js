@@ -217,7 +217,6 @@ function _setupFilterBar(parent, cidades) {
             { value: 'sem_retirada',         label: '❌ Sem OS de retirada'                 },
             { value: 'retirada_aberta',      label: '🔧 Retirada em aberto'                 },
             { value: 'retirada_fin_sem_neg', label: '⚠️ Retirada finalizada — não negativado'},
-            { value: 'retirada_fin_ok',      label: '✅ Retirada finalizada (ok)'            },
         ])}
         ${_mkMultiSel('bf-cid', 'Cidade', cidades.map(c => ({ value: c, label: c })))}
         <div class="flex flex-col gap-1">

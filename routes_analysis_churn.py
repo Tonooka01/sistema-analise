@@ -849,6 +849,11 @@ def api_contratos_boletos_abertos():
                 JOIN Contratos C ON C.ID = B.contrato_id
                 LEFT JOIN ret_os R ON R.contrato_id = C.ID
                 WHERE C.Status_contrato NOT IN ('Inativo')
+                  AND NOT (
+                    COALESCE(R.tem_finalizada, 0) = 1
+                    AND COALESCE(R.tem_aberta,  0) = 0
+                    AND C.Status_contrato = 'Negativado'
+                  )
             )
         """
 
