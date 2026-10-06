@@ -783,10 +783,14 @@ def api_contratos_boletos_abertos():
 
         ph_ass = ','.join('?' * len(_BOLETOS_RETIRADA_ASSUNTOS))
 
-        f_status_contrato   = request.args.get('status_contrato', '').strip()
-        f_status_acesso     = request.args.get('status_acesso', '').strip()
-        f_situacao_retirada = request.args.get('situacao_retirada', '').strip()
-        f_cidade            = request.args.get('cidade', '').strip()
+        def _multi(key):
+            raw = request.args.get(key, '').strip()
+            return [v.strip() for v in raw.split(',') if v.strip()] if raw else []
+
+        f_status_contrato   = _multi('status_contrato')
+        f_status_acesso     = _multi('status_acesso')
+        f_situacao_retirada = _multi('situacao_retirada')
+        f_cidade            = _multi('cidade')
 
         base_cte = f"""
             WITH boletos AS (
@@ -861,18 +865,22 @@ def api_contratos_boletos_abertos():
         if search_term:
             where_parts.append("(LOWER(Cliente) LIKE LOWER(?) OR CAST(Contrato_ID AS TEXT) LIKE ?)")
             where_params += [f'%{search_term}%', f'%{search_term}%']
+        def _in_clause(col, vals):
+            ph = ','.join('?' * len(vals))
+            return f"{col} IN ({ph})", vals
+
         if f_status_contrato:
-            where_parts.append("Status_contrato = ?")
-            where_params.append(f_status_contrato)
+            clause, params = _in_clause("Status_contrato", f_status_contrato)
+            where_parts.append(clause); where_params += params
         if f_status_acesso:
-            where_parts.append("Status_acesso = ?")
-            where_params.append(f_status_acesso)
+            clause, params = _in_clause("Status_acesso", f_status_acesso)
+            where_parts.append(clause); where_params += params
         if f_situacao_retirada:
-            where_parts.append("Situacao_Retirada = ?")
-            where_params.append(f_situacao_retirada)
+            clause, params = _in_clause("Situacao_Retirada", f_situacao_retirada)
+            where_parts.append(clause); where_params += params
         if f_cidade:
-            where_parts.append("Cidade = ?")
-            where_params.append(f_cidade)
+            clause, params = _in_clause("Cidade", f_cidade)
+            where_parts.append(clause); where_params += params
 
         where_sql = "WHERE " + " AND ".join(where_parts)
 
