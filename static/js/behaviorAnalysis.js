@@ -2369,7 +2369,7 @@ async function renderAlertasAcaoTab() {
                                 return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#ffedd5;color:#c2410c;border:1px solid #fdba74;white-space:nowrap;">⚠️ Fin. s/ neg.</span>';
                             if (r.situacao_retirada === 'retirada_aberta')
                                 return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#fef9c3;color:#854d0e;border:1px solid #fde047;white-space:nowrap;">🔧 Em aberto</span>';
-                            return '-';
+                            return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:600;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;white-space:nowrap;">Sem retirada</span>';
                         })()}</td>
                         <td style="padding:6px 10px;font-size:.78rem;">${waCell}</td>
                     </tr>`;
