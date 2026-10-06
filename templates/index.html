@@ -71,40 +71,33 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selWrap) selWrap.style.display = 'none';
     }
 
-    // Itens com permissão própria (visíveis independente de hasDashboard)
-    // Mapeamento: data-val → permissão necessária
-    const _itemPermMap = {
-        'analise_comportamento':    'behavior',
-        'retirada':                 'retiradas',
-        'contratos_boletos_abertos':'retiradas',
+    // Itens com permissão própria: visíveis com 'dashboard' OU com sua perm específica
+    // Todos os outros itens requerem 'dashboard'.
+    const _ownPerm = {
+        'analise_comportamento':     'behavior',
+        'retirada':                  'retiradas',
+        'contratos_boletos_abertos': 'retiradas',
     };
 
     // --- Filtra itens de análise na sidebar ---
     if (!hasDashboard) {
         document.querySelectorAll('#analysisSidebar .sb-group .sb-item[data-val]').forEach(item => {
-            const val = item.dataset.val;
-            const reqPerm = _itemPermMap[val];
-            if (reqPerm && perms.includes(reqPerm)) return; // tem permissão própria
-            if (!reqPerm) item.style.display = 'none';      // requer dashboard
-            else if (!perms.includes(reqPerm)) item.style.display = 'none';
+            const val     = item.dataset.val;
+            const reqPerm = _ownPerm[val];
+            if (reqPerm && perms.includes(reqPerm)) return; // perm específica presente → mantém
+            item.style.display = 'none';                    // requer dashboard → esconde
         });
-    }
-    // Esconde cada item com permissão própria se não tiver essa permissão
-    Object.entries(_itemPermMap).forEach(([val, reqPerm]) => {
-        if (!perms.includes(reqPerm)) {
-            document.querySelectorAll(`#analysisSidebar .sb-item[data-val="${val}"]`)
-                .forEach(el => { el.style.display = 'none'; });
+        // Botões operacionais também exigem dashboard
+        if (!hasBehavior) {
+            const el = document.getElementById('sbItemBehavior');
+            if (el) el.style.display = 'none';
         }
-    });
-    // Também garante pelo ID (itens com id estático)
-    if (!hasBehavior) {
-        const el = document.getElementById('sbItemBehavior');
-        if (el) el.style.display = 'none';
+        if (!hasRetiradas) {
+            const el = document.getElementById('sbItemRetirada');
+            if (el) el.style.display = 'none';
+        }
     }
-    if (!hasRetiradas) {
-        const el = document.getElementById('sbItemRetirada');
-        if (el) el.style.display = 'none';
-    }
+    // Com dashboard: todos os itens ficam visíveis (sem restrição adicional por item)
 
     // Esconde grupos sem nenhum item visível
     document.querySelectorAll('#analysisSidebar .sb-group').forEach(grp => {
