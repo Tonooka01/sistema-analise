@@ -2253,8 +2253,9 @@ def api_behavior_action_alerts():
         base_cte = f"""
             WITH ret_os AS (
                 SELECT CAST(o.Contrato AS INTEGER) AS contrato_id,
-                       MAX(CASE WHEN o.Status != 'Finalizada' THEN 1 ELSE 0 END) AS tem_aberta,
-                       MAX(CASE WHEN o.Status  = 'Finalizada' THEN 1 ELSE 0 END) AS tem_finalizada,
+                       MAX(CASE WHEN o.Status = 'Aberta'      THEN 1 ELSE 0 END) AS tem_aberta,
+                       MAX(CASE WHEN o.Status = 'Encaminhada' THEN 1 ELSE 0 END) AS tem_encaminhada,
+                       MAX(CASE WHEN o.Status = 'Finalizada'  THEN 1 ELSE 0 END) AS tem_finalizada,
                        SUM(CASE WHEN o.Status != 'Finalizada' THEN 1 ELSE 0 END) AS qtd_abertas,
                        MAX(CASE WHEN o.Status != 'Finalizada' THEN o.Assunto ELSE NULL END) AS assunto_aberta,
                        MAX(CASE WHEN o.Status != 'Finalizada' THEN o.Abertura ELSE NULL END) AS data_aberta
@@ -2269,13 +2270,15 @@ def api_behavior_action_alerts():
                        R.assunto_aberta              AS ret_assunto_aberta,
                        R.data_aberta                 AS ret_data_aberta,
                        CASE
-                           WHEN COALESCE(R.tem_aberta,0)=1 THEN 'retirada_aberta'
+                           WHEN COALESCE(R.tem_aberta,0)=1      THEN 'ret_aberta'
+                           WHEN COALESCE(R.tem_encaminhada,0)=1 THEN 'ret_encaminhada'
                            WHEN COALESCE(R.tem_finalizada,0)=1
                                 AND C.Status_contrato = 'Negativado' THEN 'neg_com_retirada'
                            WHEN COALESCE(R.tem_finalizada,0)=1
-                                AND C.Status_contrato NOT IN ('Negativado','Inativo') THEN 'retirada_fin_sem_neg'
+                                AND C.Status_contrato NOT IN ('Negativado','Inativo') THEN 'ret_fin_sem_neg'
                            WHEN C.Status_contrato = 'Negativado'
                                 AND COALESCE(R.tem_aberta,0)=0
+                                AND COALESCE(R.tem_encaminhada,0)=0
                                 AND COALESCE(R.tem_finalizada,0)=0 THEN 'neg_sem_retirada'
                            ELSE NULL
                        END AS situacao_retirada
@@ -2287,6 +2290,7 @@ def api_behavior_action_alerts():
                       C.Status_contrato = 'Ativo'
                       OR C.Status_contrato = 'Negativado'
                       OR COALESCE(R.tem_aberta,0) = 1
+                      OR COALESCE(R.tem_encaminhada,0) = 1
                       OR (COALESCE(R.tem_finalizada,0)=1 AND C.Status_contrato NOT IN ('Negativado'))
                   )
                   {city_cond}
@@ -2365,9 +2369,10 @@ def api_behavior_action_alerts():
                         + CASE WHEN COALESCE(CS.Dias_Sem_Conexao, 0) > 30 THEN 20
                                WHEN COALESCE(CS.Dias_Sem_Conexao, 0) > 14 THEN 10
                                ELSE 0 END
-                        + CASE WHEN AC.situacao_retirada = 'retirada_fin_sem_neg' THEN 50
-                               WHEN AC.situacao_retirada = 'neg_sem_retirada'     THEN 45
-                               WHEN AC.situacao_retirada = 'retirada_aberta'      THEN 35
+                        + CASE WHEN AC.situacao_retirada = 'ret_fin_sem_neg'  THEN 50
+                               WHEN AC.situacao_retirada = 'neg_sem_retirada' THEN 45
+                               WHEN AC.situacao_retirada = 'ret_aberta'       THEN 35
+                               WHEN AC.situacao_retirada = 'ret_encaminhada'  THEN 30
                                ELSE 0 END
                     ) AS score
                 FROM ActiveContracts AC
@@ -2387,10 +2392,11 @@ def api_behavior_action_alerts():
                     CASE
                         WHEN sem_conexao >= 30 AND fat_vencidas >= 1   THEN 'Crítico'
                         WHEN fat_vencidas >= 3 OR dias_vencido >= 60   THEN 'Alto'
-                        WHEN situacao_retirada = 'retirada_fin_sem_neg' THEN 'Alto'
-                        WHEN situacao_retirada = 'neg_sem_retirada'     THEN 'Alto'
+                        WHEN situacao_retirada = 'ret_fin_sem_neg'  THEN 'Alto'
+                        WHEN situacao_retirada = 'neg_sem_retirada' THEN 'Alto'
                         WHEN fat_vencidas >= 2 OR (fat_vencidas >= 1 AND atend_30d >= 2) THEN 'Médio'
-                        WHEN situacao_retirada = 'retirada_aberta'      THEN 'Médio'
+                        WHEN situacao_retirada = 'ret_aberta'       THEN 'Médio'
+                        WHEN situacao_retirada = 'ret_encaminhada'  THEN 'Médio'
                         WHEN fat_vencidas >= 1                          THEN 'Baixo'
                         ELSE 'Baixo'
                     END AS tier
@@ -2468,7 +2474,16 @@ def api_behavior_action_alerts():
             ret_aberta_detail = (f'{qtd_ab} OS em aberto'
                                  + (f' — {assunto}' if assunto else '')
                                  + (f'{dias_ab_str}' if dias_ab_str else '') + '.')
-            ret_note = ''
+            _RET_ACAO = {
+                'ret_aberta':      f'Verificar andamento — OS em aberto: {ret_aberta_detail} Cobrar devolução do equipamento.',
+                'ret_encaminhada': f'Acompanhar equipe de campo — OS encaminhada: {ret_aberta_detail}',
+                'ret_fin_sem_neg': 'Negativar contrato — retirada já finalizada, negativação pendente.',
+                'neg_com_retirada':'Retirada finalizada e contrato negativado.',
+                'neg_sem_retirada':'Acionar equipe de campo para retirada do equipamento — cliente negativado sem OS.',
+            }
+            if ret in _RET_ACAO and fat == 0 and sem_cx < 30:
+                return _RET_ACAO[ret]
+            ret_note = f' | {_RET_ACAO[ret]}' if ret in _RET_ACAO else ''
 
             if r['tier'] == 'Crítico':
                 return (f"Ligar AGORA — cliente offline há {sem_cx} dias com {fat} fatura(s) vencida(s) "

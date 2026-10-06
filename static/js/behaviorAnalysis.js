@@ -2271,10 +2271,13 @@ async function renderAlertasAcaoTab() {
                 </button>
                 <div id="alertaRetiradaMenu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:white;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:200;min-width:185px;padding:6px 0;">
                     <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
-                        <input type="checkbox" value="retirada_aberta" class="retirada-chk"> 🔧 Em aberto
+                        <input type="checkbox" value="ret_aberta" class="retirada-chk"> 🔴 Aberta
                     </label>
                     <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
-                        <input type="checkbox" value="retirada_fin_sem_neg" class="retirada-chk"> ⚠️ Fin. s/ neg.
+                        <input type="checkbox" value="ret_encaminhada" class="retirada-chk"> 🟡 Encaminhada
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="ret_fin_sem_neg" class="retirada-chk"> ⚠️ Fin. s/ neg.
                     </label>
                     <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
                         <input type="checkbox" value="neg_com_retirada" class="retirada-chk"> ✅ Fin. c/ neg.
@@ -2375,30 +2378,30 @@ async function renderAlertasAcaoTab() {
                                 const diff = Math.floor((Date.now() - new Date(dtRaw).getTime()) / 86400000);
                                 diasAb = diff > 0 ? `há ${diff} dias` : '';
                             }
-                            if (sit === 'retirada_aberta') {
+                            if (sit === 'ret_aberta' || sit === 'ret_encaminhada') {
                                 const qtd = r.ret_qtd_abertas || 1;
-                                return `<span style="color:#854d0e;font-weight:600;">${qtd} OS em aberto</span>`
-                                     + (assunto ? `<br><span style="color:#92400e;font-size:.7rem;">${assunto}</span>` : '')
-                                     + (diasAb  ? `<br><span style="color:#b45309;font-size:.68rem;">${diasAb}</span>` : '');
+                                const cor = sit === 'ret_aberta' ? '#991b1b' : '#854d0e';
+                                return `<span style="color:${cor};font-weight:600;">${qtd} OS — ${sit === 'ret_aberta' ? 'Aberta' : 'Encaminhada'}</span>`
+                                     + (assunto ? `<br><span style="color:#6b7280;font-size:.7rem;">${assunto}</span>` : '')
+                                     + (diasAb  ? `<br><span style="color:#9ca3af;font-size:.68rem;">${diasAb}</span>` : '');
                             }
-                            if (sit === 'retirada_fin_sem_neg') return '<span style="color:#c2410c;font-weight:600;">Finalizada — neg. pendente</span>';
-                            if (sit === 'neg_com_retirada')     return '<span style="color:#065f46;font-weight:600;">Finalizada c/ neg.</span>';
-                            if (sit === 'neg_sem_retirada')     return '<span style="color:#991b1b;font-weight:600;">Sem OS cadastrada</span>';
+                            if (sit === 'ret_fin_sem_neg')  return '<span style="color:#c2410c;font-weight:600;">Finalizada — neg. pendente</span>';
+                            if (sit === 'neg_com_retirada') return '<span style="color:#065f46;font-weight:600;">Finalizada c/ neg.</span>';
+                            if (sit === 'neg_sem_retirada') return '<span style="color:#991b1b;font-weight:600;">Sem OS cadastrada</span>';
                             return '<span style="color:#9ca3af;">—</span>';
                         })()}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.fat_vencidas > 0 ? 'color:#dc2626;font-weight:700;' : ''}">${r.fat_vencidas || 0}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>
                         <td style="padding:6px 10px;">${(() => {
-                            if (r.situacao_retirada === 'retirada_fin_sem_neg')
-                                return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#ffedd5;color:#c2410c;border:1px solid #fdba74;white-space:nowrap;">⚠️ Fin. s/ neg.</span>';
-                            if (r.situacao_retirada === 'retirada_aberta')
-                                return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#fef9c3;color:#854d0e;border:1px solid #fde047;white-space:nowrap;">🔧 Em aberto</span>';
-                            if (r.situacao_retirada === 'neg_com_retirada')
-                                return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;white-space:nowrap;">✅ Fin. c/ neg.</span>';
-                            if (r.situacao_retirada === 'neg_sem_retirada')
-                                return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;white-space:nowrap;">🔴 Neg. s/ retirada</span>';
-                            return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:600;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;white-space:nowrap;">Sem retirada</span>';
+                            const _SIT_BADGE = {
+                                ret_aberta:      '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;white-space:nowrap;">🔴 Aberta</span>',
+                                ret_encaminhada: '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#fef9c3;color:#854d0e;border:1px solid #fde047;white-space:nowrap;">🟡 Encaminhada</span>',
+                                ret_fin_sem_neg: '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#ffedd5;color:#c2410c;border:1px solid #fdba74;white-space:nowrap;">⚠️ Fin. s/ neg.</span>',
+                                neg_com_retirada:'<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;white-space:nowrap;">✅ Fin. c/ neg.</span>',
+                                neg_sem_retirada:'<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;white-space:nowrap;">🔴 Neg. s/ ret.</span>',
+                            };
+                            return _SIT_BADGE[r.situacao_retirada] || '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:600;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;white-space:nowrap;">Sem retirada</span>';
                         })()}</td>
                         <td style="padding:6px 10px;font-size:.78rem;">${waCell}</td>
                     </tr>`;
@@ -2455,7 +2458,7 @@ async function renderAlertasAcaoTab() {
     const _retBtn  = tabContent.querySelector('#alertaRetiradaBtn');
     const _retMenu = tabContent.querySelector('#alertaRetiradaMenu');
     const _retLbl  = tabContent.querySelector('#alertaRetiradaLabel');
-    const _RET_LABELS = { retirada_aberta: '🔧 Em aberto', retirada_fin_sem_neg: '⚠️ Fin. s/ neg.', neg_com_retirada: '✅ Fin. c/ neg.', neg_sem_retirada: '🔴 Neg. s/ retirada', sem_retirada: 'Sem retirada' };
+    const _RET_LABELS = { ret_aberta: '🔴 Aberta', ret_encaminhada: '🟡 Encaminhada', ret_fin_sem_neg: '⚠️ Fin. s/ neg.', neg_com_retirada: '✅ Fin. c/ neg.', neg_sem_retirada: '🔴 Neg. s/ ret.', sem_retirada: 'Sem retirada' };
     _retBtn.addEventListener('click', e => {
         e.stopPropagation();
         _retMenu.style.display = _retMenu.style.display === 'none' ? 'block' : 'none';
