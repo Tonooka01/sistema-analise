@@ -2222,18 +2222,46 @@ def api_behavior_action_alerts():
         cliente_cond = "AND A.cliente LIKE ?" if cliente else ""
         cliente_p    = [f"%{cliente}%"] if cliente else []
 
-        # Identical base CTE to /contact_list, extended with the Alerted tier CTE
+        _ret_assuntos = (
+            'RETIRADA DE EQUIPAMENTO', 'INADIMPLENCIA RETIRADA',
+            'EQUIPAMENTO NÃO RETIRADO', 'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
+            'CANCELAMENTO RETIRADA', 'EQUIPAMENTO RENEGOCIADO',
+        )
+        _ph_ret    = ','.join('?' * len(_ret_assuntos))
+        ret_params = list(_ret_assuntos)
+
         base_cte = f"""
-            WITH ActiveContracts AS (
-                SELECT ID, Cliente, Cidade, Data_ativa_o, Status_contrato, Status_acesso
-                FROM Contratos
-                WHERE Status_contrato = 'Ativo'
-                  AND Status_acesso != 'Desativado'
+            WITH ret_os AS (
+                SELECT CAST(o.Contrato AS INTEGER) AS contrato_id,
+                       MAX(CASE WHEN o.Status != 'Finalizada' THEN 1 ELSE 0 END) AS tem_aberta,
+                       MAX(CASE WHEN o.Status  = 'Finalizada' THEN 1 ELSE 0 END) AS tem_finalizada
+                FROM OS o
+                WHERE o.Assunto IN ({_ph_ret})
+                  AND CAST(o.Contrato AS INTEGER) > 0
+                GROUP BY CAST(o.Contrato AS INTEGER)
+            ),
+            ActiveContracts AS (
+                SELECT C.ID, C.Cliente, C.Cidade, C.Data_ativa_o, C.Status_contrato, C.Status_acesso,
+                       CASE
+                           WHEN COALESCE(R.tem_finalizada,0)=1
+                                AND C.Status_contrato NOT IN ('Negativado','Inativo') THEN 'retirada_fin_sem_neg'
+                           WHEN COALESCE(R.tem_aberta,0)=1 THEN 'retirada_aberta'
+                           ELSE NULL
+                       END AS situacao_retirada
+                FROM Contratos C
+                LEFT JOIN ret_os R ON R.contrato_id = C.ID
+                WHERE C.Status_contrato NOT IN ('Inativo')
+                  AND C.Status_acesso != 'Desativado'
+                  AND (
+                      C.Status_contrato = 'Ativo'
+                      OR COALESCE(R.tem_aberta,0) = 1
+                      OR (COALESCE(R.tem_finalizada,0)=1 AND C.Status_contrato NOT IN ('Negativado'))
+                  )
                   {city_cond}
                   AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
                   AND NOT EXISTS (
                       SELECT 1 FROM Acompanhamento_Clientes
-                      WHERE contrato_id = ID
+                      WHERE contrato_id = C.ID
                         AND snooze_ate IS NOT NULL
                         AND snooze_ate > date('now')
                   )
@@ -2278,10 +2306,11 @@ def api_behavior_action_alerts():
             ),
             Scored AS (
                 SELECT
-                    AC.ID            AS contrato,
-                    AC.Cliente       AS cliente,
-                    AC.Cidade        AS cidade,
-                    AC.Status_acesso AS status_acesso,
+                    AC.ID                AS contrato,
+                    AC.Cliente           AS cliente,
+                    AC.Cidade            AS cidade,
+                    AC.Status_acesso     AS status_acesso,
+                    AC.situacao_retirada,
                     COALESCE(PP.Faturas_Vencidas, 0) AS fat_vencidas,
                     COALESCE(PP.Dias_Vencido, 0)     AS dias_vencido,
                     COALESCE(PP.Atrasos_90d, 0)      AS atrasos_90d,
@@ -2301,6 +2330,9 @@ def api_behavior_action_alerts():
                         + CASE WHEN COALESCE(CS.Dias_Sem_Conexao, 0) > 30 THEN 20
                                WHEN COALESCE(CS.Dias_Sem_Conexao, 0) > 14 THEN 10
                                ELSE 0 END
+                        + CASE WHEN AC.situacao_retirada = 'retirada_fin_sem_neg' THEN 50
+                               WHEN AC.situacao_retirada = 'retirada_aberta'      THEN 35
+                               ELSE 0 END
                     ) AS score
                 FROM ActiveContracts AC
                 LEFT JOIN PaymentProfile PP ON AC.ID = PP.ID_Contrato_Recorrente
@@ -2311,18 +2343,24 @@ def api_behavior_action_alerts():
                     OR COALESCE(PP.Atrasos_90d, 0) > 1
                     OR COALESCE(RT.Atendimentos_30d, 0) > 1
                     OR COALESCE(CS.Dias_Sem_Conexao, 0) > 14
+                    OR AC.situacao_retirada IS NOT NULL
                 )
             ),
             Alerted AS (
                 SELECT *,
                     CASE
-                        WHEN sem_conexao >= 30 AND fat_vencidas >= 1 THEN 'Crítico'
-                        WHEN fat_vencidas >= 3 OR dias_vencido >= 60 THEN 'Alto'
+                        WHEN sem_conexao >= 30 AND fat_vencidas >= 1   THEN 'Crítico'
+                        WHEN fat_vencidas >= 3 OR dias_vencido >= 60   THEN 'Alto'
+                        WHEN situacao_retirada = 'retirada_fin_sem_neg' THEN 'Alto'
                         WHEN fat_vencidas >= 2 OR (fat_vencidas >= 1 AND atend_30d >= 2) THEN 'Médio'
-                        WHEN fat_vencidas >= 1 THEN 'Baixo'
+                        WHEN situacao_retirada = 'retirada_aberta'      THEN 'Médio'
+                        WHEN fat_vencidas >= 1                          THEN 'Baixo'
+                        ELSE 'Baixo'
                     END AS tier
                 FROM Scored
-                WHERE (sem_conexao >= 30 AND fat_vencidas >= 1) OR fat_vencidas >= 1
+                WHERE (sem_conexao >= 30 AND fat_vencidas >= 1)
+                   OR fat_vencidas >= 1
+                   OR situacao_retirada IS NOT NULL
             )
         """
 
@@ -2343,6 +2381,7 @@ def api_behavior_action_alerts():
         data_sql = base_cte + f"""
             SELECT A.contrato, A.cliente, A.cidade, A.fat_vencidas, A.dias_vencido,
                    A.atend_30d, A.sem_conexao, A.score, A.tier,
+                   COALESCE(A.situacao_retirada, '') AS situacao_retirada,
                    COALESCE(CLI.Telefone, '') AS telefone,
                    COALESCE(CLI.WhatsApp, '') AS whatsapp
             FROM Alerted A
@@ -2360,9 +2399,10 @@ def api_behavior_action_alerts():
             ORDER BY Cidade
         """
 
-        summary_row = conn.execute(summary_sql, tuple(city_p)).fetchone()
-        total_rows  = conn.execute(count_sql,   tuple(city_p) + tuple(tier_p) + tuple(cliente_p)).fetchone()[0]
-        data_rows   = conn.execute(data_sql,    tuple(city_p) + tuple(tier_p) + tuple(cliente_p) + (limit, offset)).fetchall()
+        base_p      = tuple(ret_params) + tuple(city_p)
+        summary_row = conn.execute(summary_sql, base_p).fetchone()
+        total_rows  = conn.execute(count_sql,   base_p + tuple(tier_p) + tuple(cliente_p)).fetchone()[0]
+        data_rows   = conn.execute(data_sql,    base_p + tuple(tier_p) + tuple(cliente_p) + (limit, offset)).fetchall()
         cities      = [r[0] for r in conn.execute(cities_sql).fetchall() if r[0]]
 
         summary = dict(summary_row) if summary_row else {
@@ -2370,17 +2410,25 @@ def api_behavior_action_alerts():
         }
 
         def make_acao(r):
+            ret = r.get('situacao_retirada', '')
+            ret_note = (' ⚠️ Retirada finalizada — negativação pendente.' if ret == 'retirada_fin_sem_neg'
+                        else ' ⚠️ Retirada de equipamento em aberto.' if ret == 'retirada_aberta'
+                        else '')
             if r['tier'] == 'Crítico':
                 return (f"Ligar AGORA — cliente offline há {r['sem_conexao']} dias com fatura vencida. "
-                        f"Ofereça desconto de reativação ou plano mais acessível.")
+                        f"Ofereça desconto de reativação ou plano mais acessível.") + ret_note
             elif r['tier'] == 'Alto':
+                if r['fat_vencidas'] == 0:
+                    return f"Negativar contrato — retirada finalizada sem negativação." + ret_note
                 return (f"Negociar parcelamento urgente antes da suspensão. "
-                        f"{r['fat_vencidas']} fatura(s) vencida(s), maior atraso: {r['dias_vencido']} dias.")
+                        f"{r['fat_vencidas']} fatura(s) vencida(s), maior atraso: {r['dias_vencido']} dias.") + ret_note
             elif r['tier'] == 'Médio':
+                if r['fat_vencidas'] == 0:
+                    return f"Verificar situação e acionar processo de retirada." + ret_note
                 return (f"Enviar WhatsApp + verificar qualidade técnica. "
-                        f"{r['fat_vencidas']} fatura(s) vencida(s) e {r['atend_30d']} atendimento(s) recente(s).")
+                        f"{r['fat_vencidas']} fatura(s) vencida(s) e {r['atend_30d']} atendimento(s) recente(s).") + ret_note
             else:
-                return f"Enviar lembrete amigável pelo WhatsApp — 1ª fatura em atraso há {r['dias_vencido']} dias."
+                return f"Enviar lembrete amigável pelo WhatsApp — 1ª fatura em atraso há {r['dias_vencido']} dias." + ret_note
 
         data = []
         for r in data_rows:

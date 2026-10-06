@@ -2345,6 +2345,13 @@ async function renderAlertasAcaoTab() {
                         <td style="padding:6px 10px;font-size:.78rem;${r.fat_vencidas > 0 ? 'color:#dc2626;font-weight:700;' : ''}">${r.fat_vencidas || 0}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>
+                        <td style="padding:6px 10px;">${(() => {
+                            if (r.situacao_retirada === 'retirada_fin_sem_neg')
+                                return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#ffedd5;color:#c2410c;border:1px solid #fdba74;white-space:nowrap;">⚠️ Fin. s/ neg.</span>';
+                            if (r.situacao_retirada === 'retirada_aberta')
+                                return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#fef9c3;color:#854d0e;border:1px solid #fde047;white-space:nowrap;">🔧 Em aberto</span>';
+                            return '-';
+                        })()}</td>
                         <td style="padding:6px 10px;font-size:.78rem;">${waCell}</td>
                     </tr>`;
                 }).join('');
@@ -2362,6 +2369,7 @@ async function renderAlertasAcaoTab() {
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Fat. Vencidas</th>
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Dias Venc.</th>
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Sem Conexão</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Sit. Retirada</th>
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">WhatsApp</th>
                             </tr></thead>
                             <tbody>${rows}</tbody>
