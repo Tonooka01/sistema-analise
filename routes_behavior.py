@@ -4461,19 +4461,20 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
         'Content-Type': 'application/json',
     }
     payload = {
-        'tipo':             'C',
-        'titulo':           titulo or mensagem or '',
-        'id_cliente':       str(id_cliente_ixc),
-        'id_filial':        '2',
-        'id_contrato':      str(id_contrato),
-        'id_ticket_setor':  id_ticket_setor,
-        'origem_endereco':  'M',
-        'prioridade':       'M',
-        'menssagem':        mensagem or titulo or '',
-        'status':           'A',
-        'su_status':        'N',
-        'atualizar_cliente':'N',
-        'atualizar_login':  'N',
+        'tipo':                   'C',
+        'titulo':                 titulo or mensagem or '',
+        'id_cliente':             str(id_cliente_ixc),
+        'id_filial':              '2',
+        'id_contrato':            str(id_contrato),
+        'id_ticket_setor':        id_ticket_setor,
+        'origem_endereco':        'CC',
+        'prioridade':             'M',
+        'menssagem':              mensagem or titulo or '',
+        'status':                 'A',
+        'su_status':              'N',
+        'atualizar_cliente':      'N',
+        'atualizar_login':        'N',
+        'id_responsavel_tecnico': '170',
     }
     if id_assunto_ixc:
         payload['id_assunto'] = str(id_assunto_ixc)
