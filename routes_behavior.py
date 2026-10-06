@@ -2265,6 +2265,8 @@ def api_behavior_action_alerts():
                        CASE
                            WHEN COALESCE(R.tem_aberta,0)=1 THEN 'retirada_aberta'
                            WHEN COALESCE(R.tem_finalizada,0)=1
+                                AND C.Status_contrato = 'Negativado' THEN 'neg_com_retirada'
+                           WHEN COALESCE(R.tem_finalizada,0)=1
                                 AND C.Status_contrato NOT IN ('Negativado','Inativo') THEN 'retirada_fin_sem_neg'
                            WHEN C.Status_contrato = 'Negativado'
                                 AND COALESCE(R.tem_aberta,0)=0
