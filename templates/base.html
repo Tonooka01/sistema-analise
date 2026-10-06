@@ -276,6 +276,8 @@ document.addEventListener('DOMContentLoaded', () => {
             { id: 'cancellations',                 label: 'Análise de Cancelamento' },
             { id: 'negativacao',                   label: 'Análise de Negativação' },
             { id: 'vendedores',                    label: 'Vendedores (Churn)' },
+            { id: 'retirada',                      label: '📦 Retirada de Equipamento' },
+            { id: 'contratos_boletos_abertos',     label: '📋 Boletos Abertos + Retirada' },
         ]},
     ];
 
@@ -301,21 +303,38 @@ document.addEventListener('DOMContentLoaded', () => {
         { id: 'acompanhamento',   label: 'Acompanhamento de Clientes' },
     ];
 
-    window.toggleBehaviorTabs = function(checked) {
-        const sec = document.getElementById('perm-behavior-tabs');
-        if (sec) sec.style.display = checked ? '' : 'none';
-        if (checked) window.setAllBehaviorTabs(true);
-    };
+    // ── Helpers de sub-itens ────────────────────────────────────────────────
     window.setAllBehaviorTabs = function(val) {
         document.querySelectorAll('.perm-btab').forEach(c => c.checked = val);
     };
-    window.toggleGroupItems = function(groupId, checked) {
-        const sec = document.getElementById('perm-grp-' + groupId);
-        if (sec) sec.style.display = checked ? '' : 'none';
-        if (checked) window.setAllGroupItems(groupId, true);
-    };
     window.setAllGroupItems = function(groupId, val) {
         document.querySelectorAll('.perm-grp-item[data-group="' + groupId + '"]').forEach(c => c.checked = val);
+    };
+
+    // ── Painel direito ───────────────────────────────────────────────────────
+    window._showGrpDetail = function(groupId) {
+        document.querySelectorAll('.perm-detail-pnl').forEach(el => el.style.display = 'none');
+        const empty = document.getElementById('perm-detail-empty');
+        const panel = document.getElementById('perm-detail-' + groupId);
+        if (panel) { panel.style.display = 'flex'; if (empty) empty.style.display = 'none'; }
+        else if (empty) empty.style.display = 'flex';
+        // highlight active row
+        document.querySelectorAll('.perm-grp-row').forEach(r => {
+            const isBhv = r.dataset.group === 'behavior';
+            r.style.background     = r.dataset.group === groupId
+                ? (isBhv ? '#c7d2fe' : '#6ee7b7')
+                : (isBhv ? '#eef2ff' : '#ecfdf5');
+            r.style.borderColor    = r.dataset.group === groupId
+                ? (isBhv ? '#818cf8' : '#34d399')
+                : (isBhv ? '#c7d2fe' : '#6ee7b7');
+        });
+    };
+    window._onGrpCheck = function(groupId, checked) {
+        if (checked) {
+            if (groupId === 'behavior') window.setAllBehaviorTabs(true);
+            else window.setAllGroupItems(groupId, true);
+            window._showGrpDetail(groupId);
+        }
     };
 
     window.openPermissions = function(userId) {
@@ -326,101 +345,141 @@ document.addEventListener('DOMContentLoaded', () => {
         let perms = null;
         try { perms = u.permissions ? JSON.parse(u.permissions) : null; } catch(e) {}
 
-        const hasBehavior    = !perms || perms.includes('behavior');
-        const btabPerms      = perms ? perms.filter(p => p.startsWith('behavior:')) : [];
-        const allBtabs       = !perms || btabPerms.length === 0; // null or no specific tabs = all
+        const hasBehavior = !perms || perms.includes('behavior');
+        const btabPerms   = perms ? perms.filter(p => p.startsWith('behavior:')) : [];
+        const allBtabs    = !perms || btabPerms.length === 0;
 
-        const modulesHtml = _MODULES.map(m => `
-            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.4rem .6rem;
-                          border:1px solid #e5e7eb;border-radius:.375rem;background:#f9fafb;">
+        // ── Coluna esquerda ────────────────────────────────────────────────
+        const modRowHtml = _MODULES.map(m => `
+            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.35rem .6rem;
+                          border:1px solid #e5e7eb;border-radius:.375rem;background:#f9fafb;margin-bottom:.2rem;">
                 <input type="checkbox" class="perm-mod" value="${m.id}"
                        style="width:1rem;height:1rem;cursor:pointer;"
                        ${!perms || perms.includes(m.id) ? 'checked' : ''}>
-                <span style="font-size:.85rem;color:#374151;">${m.label}</span>
+                <span style="font-size:.82rem;color:#374151;">${m.label}</span>
             </label>`).join('');
 
-        const analysisGroupsHtml = `
-            <div style="margin-top:.4rem;border-top:1px solid #e5e7eb;padding-top:.5rem;">
-                <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
-                            color:#9ca3af;margin-bottom:.35rem;padding-left:.2rem;">Análises por Categoria</div>
-                ${_ANALYSIS_GROUPS.map(g => {
-                    const hasGrp  = !perms || perms.includes(g.id);
-                    const subPerms = perms ? perms.filter(p => p.startsWith(g.id + ':')) : [];
-                    const allSubs  = !perms || subPerms.length === 0;
-                    const itemsHtml = g.items.map(item => `
-                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.3rem .5rem;
-                                      border:1px solid #d1fae5;border-radius:.25rem;background:#f0fdf4;">
-                            <input type="checkbox" class="perm-grp-item" data-group="${g.id}" value="${item.id}"
-                                   style="width:.85rem;height:.85rem;cursor:pointer;"
-                                   ${hasGrp && (allSubs || perms.includes(g.id + ':' + item.id)) ? 'checked' : ''}>
-                            <span style="font-size:.78rem;color:#065f46;">${item.label}</span>
-                        </label>`).join('');
-                    return `
-                    <div style="border:1px solid #6ee7b7;border-radius:.375rem;overflow:hidden;margin-bottom:.3rem;">
-                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.4rem .6rem;background:#ecfdf5;">
-                            <input type="checkbox" class="perm-mod" value="${g.id}"
-                                   style="width:1rem;height:1rem;cursor:pointer;"
-                                   onchange="toggleGroupItems('${g.id}', this.checked)"
-                                   ${hasGrp ? 'checked' : ''}>
-                            <span style="font-size:.85rem;font-weight:600;color:#065f46;">${g.label}</span>
-                        </label>
-                        <div id="perm-grp-${g.id}" style="padding:.5rem .6rem;display:${hasGrp ? '' : 'none'}">
-                            <div style="display:flex;gap:.4rem;margin-bottom:.4rem;align-items:center;">
-                                <button type="button" onclick="setAllGroupItems('${g.id}', true)"
-                                        style="font-size:.72rem;padding:.2rem .5rem;border:1px solid #6ee7b7;border-radius:.25rem;background:#ecfdf5;color:#065f46;cursor:pointer;">
-                                    Todas
-                                </button>
-                                <button type="button" onclick="setAllGroupItems('${g.id}', false)"
-                                        style="font-size:.72rem;padding:.2rem .5rem;border:1px solid #e5e7eb;border-radius:.25rem;background:#fff;color:#6b7280;cursor:pointer;">
-                                    Nenhuma
-                                </button>
-                                <span style="font-size:.7rem;color:#9ca3af;">Sem seleção = acesso a todas</span>
-                            </div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem;">
-                                ${itemsHtml}
-                            </div>
-                        </div>
-                    </div>`;
-                }).join('')}
+        const grpRowHtml = _ANALYSIS_GROUPS.map(g => {
+            const hasGrp = !perms || perms.includes(g.id);
+            return `
+            <div class="perm-grp-row" data-group="${g.id}"
+                 style="display:flex;align-items:center;border:1px solid #6ee7b7;border-radius:.375rem;
+                        background:#ecfdf5;margin-bottom:.2rem;cursor:pointer;transition:background .15s;"
+                 onclick="window._showGrpDetail('${g.id}')">
+                <label style="display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;flex:1;cursor:pointer;"
+                       onclick="event.stopPropagation()">
+                    <input type="checkbox" class="perm-mod" value="${g.id}"
+                           style="width:1rem;height:1rem;cursor:pointer;"
+                           onchange="window._onGrpCheck('${g.id}',this.checked)"
+                           ${hasGrp ? 'checked' : ''}>
+                    <span style="font-size:.82rem;font-weight:600;color:#065f46;">${g.label}</span>
+                </label>
+                <span style="padding:0 .45rem;color:#34d399;font-size:.65rem;flex-shrink:0;">▶</span>
             </div>`;
+        }).join('');
 
-        const btabsHtml = _BEHAVIOR_TABS.map(t => `
-            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.3rem .5rem;
-                          border:1px solid #e0e7ff;border-radius:.25rem;background:#f5f3ff;">
-                <input type="checkbox" class="perm-btab" value="${t.id}"
-                       style="width:.85rem;height:.85rem;cursor:pointer;"
-                       ${hasBehavior && (allBtabs || perms.includes('behavior:' + t.id)) ? 'checked' : ''}>
-                <span style="font-size:.78rem;color:#4338ca;">${t.label}</span>
-            </label>`).join('');
-
-        const behaviorHtml = `
-            <div style="border:1px solid #c7d2fe;border-radius:.375rem;overflow:hidden;">
-                <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.4rem .6rem;background:#eef2ff;">
+        const bhvRowHtml = `
+            <div class="perm-grp-row" data-group="behavior"
+                 style="display:flex;align-items:center;border:1px solid #c7d2fe;border-radius:.375rem;
+                        background:#eef2ff;margin-bottom:.2rem;cursor:pointer;transition:background .15s;"
+                 onclick="window._showGrpDetail('behavior')">
+                <label style="display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;flex:1;cursor:pointer;"
+                       onclick="event.stopPropagation()">
                     <input type="checkbox" class="perm-mod" id="permBehaviorCheck" value="behavior"
                            style="width:1rem;height:1rem;cursor:pointer;"
-                           onchange="toggleBehaviorTabs(this.checked)"
+                           onchange="window._onGrpCheck('behavior',this.checked)"
                            ${hasBehavior ? 'checked' : ''}>
-                    <span style="font-size:.85rem;font-weight:600;color:#4338ca;">🧠 Análise de Comportamento</span>
+                    <span style="font-size:.82rem;font-weight:600;color:#4338ca;">🧠 Análise de Comportamento</span>
                 </label>
-                <div id="perm-behavior-tabs" style="padding:.5rem .6rem;display:${hasBehavior ? '' : 'none'}">
-                    <div style="display:flex;gap:.4rem;margin-bottom:.4rem;align-items:center;">
-                        <button type="button" onclick="setAllBehaviorTabs(true)"
-                                style="font-size:.72rem;padding:.2rem .5rem;border:1px solid #c7d2fe;border-radius:.25rem;background:#eef2ff;color:#4338ca;cursor:pointer;">
-                            Todas
-                        </button>
-                        <button type="button" onclick="setAllBehaviorTabs(false)"
-                                style="font-size:.72rem;padding:.2rem .5rem;border:1px solid #e5e7eb;border-radius:.25rem;background:#fff;color:#6b7280;cursor:pointer;">
-                            Nenhuma
-                        </button>
-                        <span style="font-size:.7rem;color:#9ca3af;">Sem seleção = acesso a todas as abas</span>
-                    </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem;">
-                        ${btabsHtml}
+                <span style="padding:0 .45rem;color:#818cf8;font-size:.65rem;flex-shrink:0;">▶</span>
+            </div>`;
+
+        // ── Coluna direita — painéis de detalhe ────────────────────────────
+        function _mkDetailPanel(id, label, borderClr, bgClr, txtClr, itemsHtml, tabNote) {
+            return `
+            <div class="perm-detail-pnl" id="perm-detail-${id}"
+                 style="display:none;flex-direction:column;height:100%;">
+                <div style="font-size:.78rem;font-weight:700;color:${txtClr};margin-bottom:.4rem;">${label}</div>
+                <div style="display:flex;gap:.35rem;margin-bottom:.45rem;align-items:center;">
+                    <button type="button" data-all="${id}"
+                            style="font-size:.7rem;padding:.15rem .5rem;border:1px solid ${borderClr};
+                                   border-radius:.25rem;background:${bgClr};color:${txtClr};cursor:pointer;">Todas</button>
+                    <button type="button" data-none="${id}"
+                            style="font-size:.7rem;padding:.15rem .5rem;border:1px solid #e5e7eb;
+                                   border-radius:.25rem;background:#fff;color:#6b7280;cursor:pointer;">Nenhuma</button>
+                    <span style="font-size:.68rem;color:#9ca3af;">${tabNote}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.28rem;overflow-y:auto;flex:1;">
+                    ${itemsHtml}
+                </div>
+            </div>`;
+        }
+
+        const grpDetailHtml = _ANALYSIS_GROUPS.map(g => {
+            const hasGrp   = !perms || perms.includes(g.id);
+            const subPerms = perms ? perms.filter(p => p.startsWith(g.id + ':')) : [];
+            const allSubs  = !perms || subPerms.length === 0;
+            const itemsHtml = g.items.map(item => `
+                <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;padding:.28rem .45rem;
+                              border:1px solid #d1fae5;border-radius:.25rem;background:#f0fdf4;">
+                    <input type="checkbox" class="perm-grp-item" data-group="${g.id}" value="${item.id}"
+                           style="width:.82rem;height:.82rem;cursor:pointer;"
+                           ${hasGrp && (allSubs || perms.includes(g.id + ':' + item.id)) ? 'checked' : ''}>
+                    <span style="font-size:.76rem;color:#065f46;">${item.label}</span>
+                </label>`).join('');
+            return _mkDetailPanel(g.id, g.label, '#6ee7b7', '#ecfdf5', '#065f46', itemsHtml, 'Sem seleção = acesso a todas');
+        }).join('');
+
+        const btabItemsHtml = _BEHAVIOR_TABS.map(t => `
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;padding:.28rem .45rem;
+                          border:1px solid #e0e7ff;border-radius:.25rem;background:#f5f3ff;">
+                <input type="checkbox" class="perm-btab" value="${t.id}"
+                       style="width:.82rem;height:.82rem;cursor:pointer;"
+                       ${hasBehavior && (allBtabs || perms.includes('behavior:' + t.id)) ? 'checked' : ''}>
+                <span style="font-size:.76rem;color:#4338ca;">${t.label}</span>
+            </label>`).join('');
+        const bhvDetailHtml = _mkDetailPanel('behavior', '🧠 Análise de Comportamento',
+            '#c7d2fe', '#eef2ff', '#4338ca', btabItemsHtml, 'Sem seleção = acesso a todas as abas');
+
+        // ── Monta HTML final ───────────────────────────────────────────────
+        document.getElementById('permCheckboxes').innerHTML = `
+            <div style="display:flex;gap:0;min-height:360px;max-height:480px;">
+                <div style="width:220px;flex-shrink:0;overflow-y:auto;padding-right:.6rem;
+                            border-right:2px solid #f3f4f6;">
+                    ${modRowHtml}
+                    <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+                                color:#9ca3af;margin:.45rem 0 .3rem .2rem;">Análises por Categoria</div>
+                    ${grpRowHtml}
+                    ${bhvRowHtml}
+                </div>
+                <div style="flex:1;padding-left:.75rem;overflow-y:auto;display:flex;flex-direction:column;">
+                    ${grpDetailHtml}
+                    ${bhvDetailHtml}
+                    <div id="perm-detail-empty"
+                         style="display:flex;align-items:center;justify-content:center;
+                                flex:1;color:#9ca3af;font-size:.82rem;text-align:center;padding:2rem;">
+                        ← Selecione um grupo para ver e configurar suas análises
                     </div>
                 </div>
             </div>`;
 
-        document.getElementById('permCheckboxes').innerHTML = modulesHtml + analysisGroupsHtml + behaviorHtml;
+        // Wire Todas/Nenhuma via delegation
+        document.getElementById('permCheckboxes').addEventListener('click', e => {
+            const all  = e.target.dataset.all;
+            const none = e.target.dataset.none;
+            if (all)  { if (all === 'behavior') window.setAllBehaviorTabs(true);  else window.setAllGroupItems(all, true);  }
+            if (none) { if (none === 'behavior') window.setAllBehaviorTabs(false); else window.setAllGroupItems(none, false); }
+        }, { once: false });
+
+        // Ativa automaticamente o primeiro grupo/behavior marcado
+        const allEntries = [..._ANALYSIS_GROUPS, { id: 'behavior' }];
+        const firstOn = allEntries.find(g => !perms || perms.includes(g.id));
+        if (firstOn) window._showGrpDetail(firstOn.id);
+
+        // Alarga o modal para acomodar o layout de duas colunas
+        const modalBox = document.getElementById('permissionsModal')?.querySelector(':scope > div');
+        if (modalBox) modalBox.style.minWidth = '680px';
+
         document.getElementById('permissionsModal').style.display = 'flex';
     };
 

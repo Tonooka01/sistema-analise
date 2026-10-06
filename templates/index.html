@@ -49,17 +49,28 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!opt.value) return;
             const val = opt.value;
 
-            // Perm de módulo própria
+            // Dual-access
+            if (_dualPerm[val]) {
+                const { mod, grp } = _dualPerm[val];
+                if (perms.includes(mod)) return;
+                if (perms.includes(grp)) {
+                    const sub = perms.filter(p => p.startsWith(grp + ':'));
+                    if (sub.length === 0 || sub.includes(grp + ':' + val)) return;
+                }
+                opt.remove(); return;
+            }
+
+            // Módulo próprio
             if (_ownPerm[val]) {
                 if (perms.includes(_ownPerm[val])) return;
                 opt.remove(); return;
             }
 
-            // Perm de grupo
+            // Grupo
             const grp = _valToGroup[val];
             if (grp && perms.includes(grp)) {
-                const subPerms = perms.filter(p => p.startsWith(grp + ':'));
-                if (subPerms.length === 0 || subPerms.includes(grp + ':' + val)) return;
+                const sub = perms.filter(p => p.startsWith(grp + ':'));
+                if (sub.length === 0 || sub.includes(grp + ':' + val)) return;
             }
 
             opt.remove();
@@ -104,11 +115,14 @@ document.addEventListener('DOMContentLoaded', () => {
         'negativacao':                        'analises_cancelamento',
         'vendedores':                         'analises_cancelamento',
     };
-    // Itens com permissão de módulo própria (não grupo)
+    // Itens com perm de módulo (não grupo)
     const _ownPerm = {
-        'analise_comportamento':     'behavior',
-        'retirada':                  'retiradas',
-        'contratos_boletos_abertos': 'retiradas',
+        'analise_comportamento': 'behavior',
+    };
+    // Itens acessíveis via módulo OU via grupo (dual-access)
+    const _dualPerm = {
+        'retirada':                  { mod: 'retiradas', grp: 'analises_cancelamento' },
+        'contratos_boletos_abertos': { mod: 'retiradas', grp: 'analises_cancelamento' },
     };
 
     // --- Filtra itens de análise na sidebar ---
@@ -116,25 +130,32 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('#analysisSidebar .sb-group .sb-item[data-val]').forEach(item => {
             const val = item.dataset.val;
 
-            // Itens com perm de módulo própria (behavior / retiradas)
+            // Dual-access: retiradas OU analises_cancelamento
+            if (_dualPerm[val]) {
+                const { mod, grp } = _dualPerm[val];
+                if (perms.includes(mod)) return;
+                if (perms.includes(grp)) {
+                    const sub = perms.filter(p => p.startsWith(grp + ':'));
+                    if (sub.length === 0 || sub.includes(grp + ':' + val)) return;
+                }
+                item.style.display = 'none'; return;
+            }
+
+            // Perm de módulo própria (behavior)
             if (_ownPerm[val]) {
                 if (!perms.includes(_ownPerm[val])) item.style.display = 'none';
                 return;
             }
 
-            // Itens controlados por grupo de análise
+            // Grupo de análise
             const grp = _valToGroup[val];
             if (grp) {
                 if (!perms.includes(grp)) { item.style.display = 'none'; return; }
-                // Grupo presente — verifica sub-itens específicos
-                const subPerms = perms.filter(p => p.startsWith(grp + ':'));
-                if (subPerms.length > 0 && !subPerms.includes(grp + ':' + val)) {
-                    item.style.display = 'none';
-                }
+                const sub = perms.filter(p => p.startsWith(grp + ':'));
+                if (sub.length > 0 && !sub.includes(grp + ':' + val)) item.style.display = 'none';
                 return;
             }
 
-            // Item sem mapeamento: requer dashboard
             item.style.display = 'none';
         });
 
