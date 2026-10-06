@@ -2230,7 +2230,7 @@ async function renderAlertasAcaoTab() {
     if (!tabContent) return;
 
     let _alertaCurrentPage = 1;
-    let _alertaFilters = { city: '', tier: '', cliente: '', retirada: '' };
+    let _alertaFilters = { city: '', tier: '', cliente: '', retirada: [] };
 
     const TIER_STYLE = {
         'Crítico': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
@@ -2263,14 +2263,23 @@ async function renderAlertasAcaoTab() {
                     <option value="Baixo">Baixo</option>
                 </select>
             </div>
-            <div>
+            <div style="position:relative;">
                 <label class="text-sm font-medium text-gray-700 mr-1">Retirada:</label>
-                <select id="alertaRetiradaFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
-                    <option value="">Todas</option>
-                    <option value="retirada_aberta">🔧 Em aberto</option>
-                    <option value="retirada_fin_sem_neg">⚠️ Fin. s/ neg.</option>
-                    <option value="sem_retirada">Sem retirada</option>
-                </select>
+                <button type="button" id="alertaRetiradaBtn"
+                    style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;background:white;border-radius:6px;font-size:0.875rem;cursor:pointer;min-width:130px;justify-content:space-between;box-shadow:0 1px 2px rgba(0,0,0,.05);">
+                    <span id="alertaRetiradaLabel">Todas</span><span style="font-size:0.7em;">▾</span>
+                </button>
+                <div id="alertaRetiradaMenu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:white;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:200;min-width:185px;padding:6px 0;">
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="retirada_aberta" class="retirada-chk"> 🔧 Em aberto
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="retirada_fin_sem_neg" class="retirada-chk"> ⚠️ Fin. s/ neg.
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="sem_retirada" class="retirada-chk"> Sem retirada
+                    </label>
+                </div>
             </div>
             <button id="btnFilterAlerta" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
         </div>
@@ -2286,13 +2295,13 @@ async function renderAlertasAcaoTab() {
         const rowsPerPage = 50;
         const offset = (page - 1) * rowsPerPage;
         const p = new URLSearchParams({
-            city:     _alertaFilters.city,
-            tier:     _alertaFilters.tier,
-            cliente:  _alertaFilters.cliente,
-            retirada: _alertaFilters.retirada,
-            limit:    rowsPerPage,
+            city:    _alertaFilters.city,
+            tier:    _alertaFilters.tier,
+            cliente: _alertaFilters.cliente,
+            limit:   rowsPerPage,
             offset
         });
+        _alertaFilters.retirada.forEach(v => p.append('retirada', v));
 
         try {
             const response = await fetch(`${state.API_BASE_URL}/api/behavior/action_alerts?${p}`);
@@ -2412,11 +2421,25 @@ async function renderAlertasAcaoTab() {
         }
     }
 
+    // Retirada dropdown toggle
+    const _retBtn  = tabContent.querySelector('#alertaRetiradaBtn');
+    const _retMenu = tabContent.querySelector('#alertaRetiradaMenu');
+    const _retLbl  = tabContent.querySelector('#alertaRetiradaLabel');
+    const _RET_LABELS = { retirada_aberta: '🔧 Em aberto', retirada_fin_sem_neg: '⚠️ Fin. s/ neg.', sem_retirada: 'Sem retirada' };
+    _retBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        _retMenu.style.display = _retMenu.style.display === 'none' ? 'block' : 'none';
+    });
+    document.addEventListener('click', () => { _retMenu.style.display = 'none'; });
+    _retMenu.addEventListener('click', e => e.stopPropagation());
+
     tabContent.querySelector('#btnFilterAlerta').addEventListener('click', () => {
-        _alertaFilters.city     = document.getElementById('alertaCityFilter')?.value || '';
-        _alertaFilters.tier     = document.getElementById('alertaTierFilter')?.value || '';
-        _alertaFilters.cliente  = document.getElementById('alertaClienteFilter')?.value.trim() || '';
-        _alertaFilters.retirada = document.getElementById('alertaRetiradaFilter')?.value || '';
+        _alertaFilters.city    = document.getElementById('alertaCityFilter')?.value || '';
+        _alertaFilters.tier    = document.getElementById('alertaTierFilter')?.value || '';
+        _alertaFilters.cliente = document.getElementById('alertaClienteFilter')?.value.trim() || '';
+        const checked = [...tabContent.querySelectorAll('.retirada-chk:checked')].map(c => c.value);
+        _alertaFilters.retirada = checked;
+        _retLbl.textContent = checked.length === 0 ? 'Todas' : checked.length === 1 ? _RET_LABELS[checked[0]] : `${checked.length} selecionados`;
         fetchAndRenderAlertaTable(1);
     });
 

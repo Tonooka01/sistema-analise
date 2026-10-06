@@ -2216,7 +2216,7 @@ def api_behavior_action_alerts():
         city_cond    = "AND Cidade = ?" if city else ""
         city_p       = [city] if city else []
 
-        retirada     = request.args.get('retirada', '').strip()
+        retirada_vals = request.args.getlist('retirada')
 
         tier_cond    = "AND tier = ?" if tier else ""
         tier_p       = [tier] if tier else []
@@ -2224,12 +2224,20 @@ def api_behavior_action_alerts():
         cliente_cond = "AND A.cliente LIKE ?" if cliente else ""
         cliente_p    = [f"%{cliente}%"] if cliente else []
 
-        if retirada == 'sem_retirada':
-            retirada_cond = "AND (A.situacao_retirada IS NULL OR A.situacao_retirada = '')"
-            retirada_p    = []
-        elif retirada:
-            retirada_cond = "AND A.situacao_retirada = ?"
-            retirada_p    = [retirada]
+        if retirada_vals:
+            sem_ret   = 'sem_retirada' in retirada_vals
+            real_vals = [v for v in retirada_vals if v != 'sem_retirada']
+            if sem_ret and real_vals:
+                ph = ','.join('?' * len(real_vals))
+                retirada_cond = f"AND (A.situacao_retirada IN ({ph}) OR COALESCE(A.situacao_retirada,'') = '')"
+                retirada_p    = real_vals
+            elif sem_ret:
+                retirada_cond = "AND COALESCE(A.situacao_retirada,'') = ''"
+                retirada_p    = []
+            else:
+                ph = ','.join('?' * len(real_vals))
+                retirada_cond = f"AND A.situacao_retirada IN ({ph})"
+                retirada_p    = real_vals
         else:
             retirada_cond = ""
             retirada_p    = []
