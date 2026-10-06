@@ -2456,17 +2456,23 @@ def api_behavior_action_alerts():
             atend = r['atend_30d']
             sem_cx = r['sem_conexao']
 
+            from datetime import date as _date
             qtd_ab  = r.get('ret_qtd_abertas', 0) or 0
             assunto = r.get('ret_assunto_aberta', '') or ''
             dt_ab   = (r.get('ret_data_aberta', '') or '')[:10]
-            ret_aberta_detail = (f" {qtd_ab} OS aberta(s)"
-                                 + (f" — {assunto}" if assunto else '')
-                                 + (f" (desde {dt_ab})" if dt_ab else '') + '.')
+            try:
+                dias_aberta = (_date.today() - _date.fromisoformat(dt_ab)).days if dt_ab else None
+            except Exception:
+                dias_aberta = None
+            dias_ab_str = f', aberta há {dias_aberta} dias' if dias_aberta is not None else ''
+            ret_aberta_detail = (f'{qtd_ab} OS em aberto'
+                                 + (f' — {assunto}' if assunto else '')
+                                 + (f'{dias_ab_str}' if dias_ab_str else '') + '.')
             _RET_SUFFIX = {
-                'retirada_aberta':      f' | 🔧 OS de retirada em aberto —{ret_aberta_detail} Cobrar devolução do equipamento.',
-                'retirada_fin_sem_neg': ' | ⚠️ Retirada finalizada — negativar contrato imediatamente.',
-                'neg_com_retirada':     ' | ✅ Retirada finalizada e contrato já negativado.',
-                'neg_sem_retirada':     ' | 🔴 Negativado sem OS — acionar equipe para recolher equipamento.',
+                'retirada_aberta':      f'<br>🔧 {ret_aberta_detail} Cobrar devolução do equipamento.',
+                'retirada_fin_sem_neg': '<br>⚠️ Retirada finalizada — negativar contrato imediatamente.',
+                'neg_com_retirada':     '<br>✅ Retirada finalizada e contrato já negativado.',
+                'neg_sem_retirada':     '<br>🔴 Negativado sem OS de retirada — acionar equipe de campo.',
             }
             ret_note = _RET_SUFFIX.get(ret, '')
 
