@@ -2365,7 +2365,27 @@ async function renderAlertasAcaoTab() {
                         <td style="padding:6px 10px;">
                             <span style="padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap;${tierStyle}">${r.tier || ''}</span>
                         </td>
-                        <td style="padding:6px 10px;font-size:.78rem;max-width:320px;line-height:1.5;">${acaoText}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;max-width:260px;line-height:1.5;">${acaoText}</td>
+                        <td style="padding:6px 10px;font-size:.75rem;max-width:180px;line-height:1.4;">${(() => {
+                            const sit = r.situacao_retirada || '';
+                            const assunto = r.ret_assunto_aberta || '';
+                            const dtRaw = (r.ret_data_aberta || '').slice(0,10);
+                            let diasAb = '';
+                            if (dtRaw) {
+                                const diff = Math.floor((Date.now() - new Date(dtRaw).getTime()) / 86400000);
+                                diasAb = diff > 0 ? `há ${diff} dias` : '';
+                            }
+                            if (sit === 'retirada_aberta') {
+                                const qtd = r.ret_qtd_abertas || 1;
+                                return `<span style="color:#854d0e;font-weight:600;">${qtd} OS em aberto</span>`
+                                     + (assunto ? `<br><span style="color:#92400e;font-size:.7rem;">${assunto}</span>` : '')
+                                     + (diasAb  ? `<br><span style="color:#b45309;font-size:.68rem;">${diasAb}</span>` : '');
+                            }
+                            if (sit === 'retirada_fin_sem_neg') return '<span style="color:#c2410c;font-weight:600;">Finalizada — neg. pendente</span>';
+                            if (sit === 'neg_com_retirada')     return '<span style="color:#065f46;font-weight:600;">Finalizada c/ neg.</span>';
+                            if (sit === 'neg_sem_retirada')     return '<span style="color:#991b1b;font-weight:600;">Sem OS cadastrada</span>';
+                            return '<span style="color:#9ca3af;">—</span>';
+                        })()}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.fat_vencidas > 0 ? 'color:#dc2626;font-weight:700;' : ''}">${r.fat_vencidas || 0}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>
@@ -2394,6 +2414,7 @@ async function renderAlertasAcaoTab() {
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Cidade</th>
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Urgência</th>
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Ação Recomendada</th>
+                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">OS Retirada</th>
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Fat. Vencidas</th>
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Dias Venc.</th>
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Sem Conexão</th>

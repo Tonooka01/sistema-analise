@@ -2468,13 +2468,7 @@ def api_behavior_action_alerts():
             ret_aberta_detail = (f'{qtd_ab} OS em aberto'
                                  + (f' — {assunto}' if assunto else '')
                                  + (f'{dias_ab_str}' if dias_ab_str else '') + '.')
-            _RET_SUFFIX = {
-                'retirada_aberta':      f'<br>🔧 {ret_aberta_detail} Cobrar devolução do equipamento.',
-                'retirada_fin_sem_neg': '<br>⚠️ Retirada finalizada — negativar contrato imediatamente.',
-                'neg_com_retirada':     '<br>✅ Retirada finalizada e contrato já negativado.',
-                'neg_sem_retirada':     '<br>🔴 Negativado sem OS de retirada — acionar equipe de campo.',
-            }
-            ret_note = _RET_SUFFIX.get(ret, '')
+            ret_note = ''
 
             if r['tier'] == 'Crítico':
                 return (f"Ligar AGORA — cliente offline há {sem_cx} dias com {fat} fatura(s) vencida(s) "
