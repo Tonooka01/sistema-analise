@@ -786,21 +786,20 @@ def api_contratos_boletos_abertos():
         base_cte = f"""
             WITH boletos AS (
                 SELECT
-                    CAST(ID_Contrato_Recorrente AS TEXT) AS contrato_id,
+                    CAST(ID_Contrato_Recorrente AS INTEGER) AS contrato_id,
                     COUNT(*) AS qtd_abertos,
                     SUM(Valor_aberto) AS total_aberto,
                     MIN(Vencimento) AS venc_mais_antigo
                 FROM Contas_a_Receber
                 WHERE Status = 'A receber'
                   AND Vencimento < date('now')
-                  AND ID_Contrato_Recorrente IS NOT NULL
-                  AND TRIM(CAST(ID_Contrato_Recorrente AS TEXT)) NOT IN ('', '0')
-                GROUP BY ID_Contrato_Recorrente
+                  AND CAST(ID_Contrato_Recorrente AS INTEGER) > 0
+                GROUP BY CAST(ID_Contrato_Recorrente AS INTEGER)
                 HAVING COUNT(*) >= ?
             ),
             ret_os AS (
                 SELECT
-                    CAST(o.Contrato AS TEXT) AS contrato_id,
+                    CAST(o.Contrato AS INTEGER) AS contrato_id,
                     MAX(CASE WHEN o.Status != 'Finalizada' THEN 1 ELSE 0 END) AS tem_aberta,
                     MAX(CASE WHEN o.Status = 'Finalizada' THEN 1 ELSE 0 END) AS tem_finalizada,
                     MAX(CASE WHEN o.Status != 'Finalizada' THEN o.Status ELSE NULL END) AS status_os_aberta,
@@ -810,9 +809,8 @@ def api_contratos_boletos_abertos():
                     ELSE NULL END) AS data_retirada_fin
                 FROM OS o
                 WHERE o.Assunto IN ({ph_ass})
-                  AND o.Contrato IS NOT NULL
-                  AND TRIM(CAST(o.Contrato AS TEXT)) NOT IN ('', '0')
-                GROUP BY CAST(o.Contrato AS TEXT)
+                  AND CAST(o.Contrato AS INTEGER) > 0
+                GROUP BY CAST(o.Contrato AS INTEGER)
             )
         """
 
@@ -827,7 +825,7 @@ def api_contratos_boletos_abertos():
         total = conn.execute(
             base_cte + f"""
                 SELECT COUNT(*) FROM boletos B
-                JOIN Contratos C ON CAST(C.ID AS TEXT) = B.contrato_id
+                JOIN Contratos C ON C.ID = B.contrato_id
                 WHERE C.Status_contrato NOT IN ('Inativo')
                 {search_clause}
             """,
@@ -852,8 +850,8 @@ def api_contratos_boletos_abertos():
                     R.id_os_aberta AS ID_OS_Retirada,
                     R.data_retirada_fin AS Data_Retirada_Finalizada
                 FROM boletos B
-                JOIN Contratos C ON CAST(C.ID AS TEXT) = B.contrato_id
-                LEFT JOIN ret_os R ON R.contrato_id = CAST(C.ID AS TEXT)
+                JOIN Contratos C ON C.ID = B.contrato_id
+                LEFT JOIN ret_os R ON R.contrato_id = C.ID
                 WHERE C.Status_contrato NOT IN ('Inativo')
                 {search_clause}
                 ORDER BY B.qtd_abertos DESC, B.total_aberto DESC
