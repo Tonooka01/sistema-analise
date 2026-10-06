@@ -47,8 +47,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!hasDashboard) {
         document.querySelectorAll('#customAnalysisSelector option').forEach(opt => {
             if (!opt.value) return; // mantém o placeholder desabilitado
-            if (opt.value === 'retirada' && hasRetiradas) return;
-            if (opt.value === 'analise_comportamento' && hasBehavior) return;
+            if (opt.value === 'retirada'                 && hasRetiradas) return;
+            if (opt.value === 'contratos_boletos_abertos'&& hasRetiradas) return;
+            if (opt.value === 'analise_comportamento'    && hasBehavior)  return;
             opt.remove();
         });
     }
@@ -70,21 +71,36 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selWrap) selWrap.style.display = 'none';
     }
 
+    // Itens com permissão própria (visíveis independente de hasDashboard)
+    // Mapeamento: data-val → permissão necessária
+    const _itemPermMap = {
+        'analise_comportamento':    'behavior',
+        'retirada':                 'retiradas',
+        'contratos_boletos_abertos':'retiradas',
+    };
+
     // --- Filtra itens de análise na sidebar ---
     if (!hasDashboard) {
-        // Esconde todos os data-val items que requerem dashboard
         document.querySelectorAll('#analysisSidebar .sb-group .sb-item[data-val]').forEach(item => {
             const val = item.dataset.val;
-            if (val === 'analise_comportamento' || val === 'retirada') return; // permissão própria
-            item.style.display = 'none';
+            const reqPerm = _itemPermMap[val];
+            if (reqPerm && perms.includes(reqPerm)) return; // tem permissão própria
+            if (!reqPerm) item.style.display = 'none';      // requer dashboard
+            else if (!perms.includes(reqPerm)) item.style.display = 'none';
         });
     }
-    // Esconde item de comportamento se não tem permissão
+    // Esconde cada item com permissão própria se não tiver essa permissão
+    Object.entries(_itemPermMap).forEach(([val, reqPerm]) => {
+        if (!perms.includes(reqPerm)) {
+            document.querySelectorAll(`#analysisSidebar .sb-item[data-val="${val}"]`)
+                .forEach(el => { el.style.display = 'none'; });
+        }
+    });
+    // Também garante pelo ID (itens com id estático)
     if (!hasBehavior) {
         const el = document.getElementById('sbItemBehavior');
         if (el) el.style.display = 'none';
     }
-    // Esconde item de retirada se não tem permissão
     if (!hasRetiradas) {
         const el = document.getElementById('sbItemRetirada');
         if (el) el.style.display = 'none';
