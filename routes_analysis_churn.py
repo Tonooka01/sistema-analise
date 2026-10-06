@@ -783,6 +783,11 @@ def api_contratos_boletos_abertos():
 
         ph_ass = ','.join('?' * len(_BOLETOS_RETIRADA_ASSUNTOS))
 
+        f_status_contrato   = request.args.get('status_contrato', '').strip()
+        f_status_acesso     = request.args.get('status_acesso', '').strip()
+        f_situacao_retirada = request.args.get('situacao_retirada', '').strip()
+        f_cidade            = request.args.get('cidade', '').strip()
+
         base_cte = f"""
             WITH boletos AS (
                 SELECT
@@ -811,29 +816,8 @@ def api_contratos_boletos_abertos():
                 WHERE o.Assunto IN ({ph_ass})
                   AND CAST(o.Contrato AS INTEGER) > 0
                 GROUP BY CAST(o.Contrato AS INTEGER)
-            )
-        """
-
-        search_clause = ""
-        search_params = []
-        if search_term:
-            search_clause = " AND (LOWER(C.Cliente) LIKE LOWER(?) OR CAST(C.ID AS TEXT) LIKE ?)"
-            search_params = [f'%{search_term}%', f'%{search_term}%']
-
-        base_params = [min_boletos] + list(_BOLETOS_RETIRADA_ASSUNTOS)
-
-        total = conn.execute(
-            base_cte + f"""
-                SELECT COUNT(*) FROM boletos B
-                JOIN Contratos C ON C.ID = B.contrato_id
-                WHERE C.Status_contrato NOT IN ('Inativo')
-                {search_clause}
-            """,
-            base_params + search_params
-        ).fetchone()[0]
-
-        rows = conn.execute(
-            base_cte + f"""
+            ),
+            resultado AS (
                 SELECT
                     C.ID AS Contrato_ID,
                     C.Cliente,
@@ -841,41 +825,72 @@ def api_contratos_boletos_abertos():
                     C.Bairro,
                     C.Status_contrato,
                     C.Status_acesso,
-                    B.qtd_abertos AS Qtd_Boletos_Abertos,
+                    B.qtd_abertos  AS Qtd_Boletos_Abertos,
                     ROUND(B.total_aberto, 2) AS Total_Em_Aberto,
                     B.venc_mais_antigo AS Vencimento_Mais_Antigo,
-                    COALESCE(R.tem_aberta, 0) AS Tem_Retirada_Aberta,
-                    COALESCE(R.tem_finalizada, 0) AS Tem_Retirada_Finalizada,
-                    R.status_os_aberta AS Status_OS_Retirada,
-                    R.id_os_aberta AS ID_OS_Retirada,
-                    R.data_retirada_fin AS Data_Retirada_Finalizada
+                    COALESCE(R.tem_aberta,    0) AS Tem_Retirada_Aberta,
+                    COALESCE(R.tem_finalizada,0) AS Tem_Retirada_Finalizada,
+                    R.status_os_aberta  AS Status_OS_Retirada,
+                    R.id_os_aberta      AS ID_OS_Retirada,
+                    R.data_retirada_fin AS Data_Retirada_Finalizada,
+                    CASE
+                        WHEN COALESCE(R.tem_finalizada,0)=1
+                             AND C.Status_contrato NOT IN ('Negativado','Inativo')
+                            THEN 'retirada_fin_sem_neg'
+                        WHEN COALESCE(R.tem_aberta,0)=1 THEN 'retirada_aberta'
+                        WHEN COALESCE(R.tem_finalizada,0)=1 THEN 'retirada_fin_ok'
+                        ELSE 'sem_retirada'
+                    END AS Situacao_Retirada
                 FROM boletos B
                 JOIN Contratos C ON C.ID = B.contrato_id
                 LEFT JOIN ret_os R ON R.contrato_id = C.ID
                 WHERE C.Status_contrato NOT IN ('Inativo')
-                {search_clause}
-                ORDER BY B.qtd_abertos DESC, B.total_aberto DESC
+            )
+        """
+
+        base_params = [min_boletos] + list(_BOLETOS_RETIRADA_ASSUNTOS)
+
+        # Cidades disponíveis (sem filtros aplicados, para popular o dropdown)
+        cidades = [r[0] for r in conn.execute(
+            base_cte + "SELECT DISTINCT Cidade FROM resultado WHERE Cidade IS NOT NULL ORDER BY Cidade",
+            base_params
+        ).fetchall() if r[0]]
+
+        # WHERE dinâmico aplicado sobre resultado
+        where_parts, where_params = ['1=1'], []
+        if search_term:
+            where_parts.append("(LOWER(Cliente) LIKE LOWER(?) OR CAST(Contrato_ID AS TEXT) LIKE ?)")
+            where_params += [f'%{search_term}%', f'%{search_term}%']
+        if f_status_contrato:
+            where_parts.append("Status_contrato = ?")
+            where_params.append(f_status_contrato)
+        if f_status_acesso:
+            where_parts.append("Status_acesso = ?")
+            where_params.append(f_status_acesso)
+        if f_situacao_retirada:
+            where_parts.append("Situacao_Retirada = ?")
+            where_params.append(f_situacao_retirada)
+        if f_cidade:
+            where_parts.append("Cidade = ?")
+            where_params.append(f_cidade)
+
+        where_sql = "WHERE " + " AND ".join(where_parts)
+
+        total = conn.execute(
+            base_cte + f"SELECT COUNT(*) FROM resultado {where_sql}",
+            base_params + where_params
+        ).fetchone()[0]
+
+        rows = conn.execute(
+            base_cte + f"""
+                SELECT * FROM resultado {where_sql}
+                ORDER BY Qtd_Boletos_Abertos DESC, Total_Em_Aberto DESC
                 LIMIT ? OFFSET ?
             """,
-            base_params + search_params + [limit, offset]
+            base_params + where_params + [limit, offset]
         ).fetchall()
 
-        def _situacao(r):
-            if r['Tem_Retirada_Finalizada'] and r['Status_contrato'] not in ('Negativado', 'Inativo'):
-                return 'retirada_fin_sem_neg'
-            if r['Tem_Retirada_Aberta']:
-                return 'retirada_aberta'
-            if r['Tem_Retirada_Finalizada']:
-                return 'retirada_fin_ok'
-            return 'sem_retirada'
-
-        data = []
-        for r in rows:
-            d = dict(r)
-            d['Situacao_Retirada'] = _situacao(d)
-            data.append(d)
-
-        return jsonify({"data": data, "total_rows": total})
+        return jsonify({"data": [dict(r) for r in rows], "total_rows": total, "cidades": cidades})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
