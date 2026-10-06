@@ -2263,9 +2263,12 @@ def api_behavior_action_alerts():
             ActiveContracts AS (
                 SELECT C.ID, C.Cliente, C.Cidade, C.Data_ativa_o, C.Status_contrato, C.Status_acesso,
                        CASE
+                           WHEN COALESCE(R.tem_aberta,0)=1 THEN 'retirada_aberta'
                            WHEN COALESCE(R.tem_finalizada,0)=1
                                 AND C.Status_contrato NOT IN ('Negativado','Inativo') THEN 'retirada_fin_sem_neg'
-                           WHEN COALESCE(R.tem_aberta,0)=1 THEN 'retirada_aberta'
+                           WHEN C.Status_contrato = 'Negativado'
+                                AND COALESCE(R.tem_aberta,0)=0
+                                AND COALESCE(R.tem_finalizada,0)=0 THEN 'neg_sem_retirada'
                            ELSE NULL
                        END AS situacao_retirada
                 FROM Contratos C
@@ -2274,6 +2277,7 @@ def api_behavior_action_alerts():
                   AND C.Status_acesso != 'Desativado'
                   AND (
                       C.Status_contrato = 'Ativo'
+                      OR C.Status_contrato = 'Negativado'
                       OR COALESCE(R.tem_aberta,0) = 1
                       OR (COALESCE(R.tem_finalizada,0)=1 AND C.Status_contrato NOT IN ('Negativado'))
                   )
@@ -2351,6 +2355,7 @@ def api_behavior_action_alerts():
                                WHEN COALESCE(CS.Dias_Sem_Conexao, 0) > 14 THEN 10
                                ELSE 0 END
                         + CASE WHEN AC.situacao_retirada = 'retirada_fin_sem_neg' THEN 50
+                               WHEN AC.situacao_retirada = 'neg_sem_retirada'     THEN 45
                                WHEN AC.situacao_retirada = 'retirada_aberta'      THEN 35
                                ELSE 0 END
                     ) AS score
@@ -2372,6 +2377,7 @@ def api_behavior_action_alerts():
                         WHEN sem_conexao >= 30 AND fat_vencidas >= 1   THEN 'Crítico'
                         WHEN fat_vencidas >= 3 OR dias_vencido >= 60   THEN 'Alto'
                         WHEN situacao_retirada = 'retirada_fin_sem_neg' THEN 'Alto'
+                        WHEN situacao_retirada = 'neg_sem_retirada'     THEN 'Alto'
                         WHEN fat_vencidas >= 2 OR (fat_vencidas >= 1 AND atend_30d >= 2) THEN 'Médio'
                         WHEN situacao_retirada = 'retirada_aberta'      THEN 'Médio'
                         WHEN fat_vencidas >= 1                          THEN 'Baixo'

@@ -2277,6 +2277,9 @@ async function renderAlertasAcaoTab() {
                         <input type="checkbox" value="retirada_fin_sem_neg" class="retirada-chk"> ⚠️ Fin. s/ neg.
                     </label>
                     <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="neg_sem_retirada" class="retirada-chk"> 🔴 Negativado s/ retirada
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
                         <input type="checkbox" value="sem_retirada" class="retirada-chk"> Sem retirada
                     </label>
                 </div>
@@ -2369,6 +2372,8 @@ async function renderAlertasAcaoTab() {
                                 return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#ffedd5;color:#c2410c;border:1px solid #fdba74;white-space:nowrap;">⚠️ Fin. s/ neg.</span>';
                             if (r.situacao_retirada === 'retirada_aberta')
                                 return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#fef9c3;color:#854d0e;border:1px solid #fde047;white-space:nowrap;">🔧 Em aberto</span>';
+                            if (r.situacao_retirada === 'neg_sem_retirada')
+                                return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:700;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;white-space:nowrap;">🔴 Neg. s/ retirada</span>';
                             return '<span style="padding:2px 7px;border-radius:999px;font-size:.7rem;font-weight:600;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;white-space:nowrap;">Sem retirada</span>';
                         })()}</td>
                         <td style="padding:6px 10px;font-size:.78rem;">${waCell}</td>
@@ -2425,7 +2430,7 @@ async function renderAlertasAcaoTab() {
     const _retBtn  = tabContent.querySelector('#alertaRetiradaBtn');
     const _retMenu = tabContent.querySelector('#alertaRetiradaMenu');
     const _retLbl  = tabContent.querySelector('#alertaRetiradaLabel');
-    const _RET_LABELS = { retirada_aberta: '🔧 Em aberto', retirada_fin_sem_neg: '⚠️ Fin. s/ neg.', sem_retirada: 'Sem retirada' };
+    const _RET_LABELS = { retirada_aberta: '🔧 Em aberto', retirada_fin_sem_neg: '⚠️ Fin. s/ neg.', neg_sem_retirada: '🔴 Neg. s/ retirada', sem_retirada: 'Sem retirada' };
     _retBtn.addEventListener('click', e => {
         e.stopPropagation();
         _retMenu.style.display = _retMenu.style.display === 'none' ? 'block' : 'none';
