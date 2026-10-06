@@ -2269,24 +2269,24 @@ async function renderAlertasAcaoTab() {
                     style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;background:white;border-radius:6px;font-size:0.875rem;cursor:pointer;min-width:130px;justify-content:space-between;box-shadow:0 1px 2px rgba(0,0,0,.05);">
                     <span id="alertaRetiradaLabel">Todas</span><span style="font-size:0.7em;">▾</span>
                 </button>
-                <div id="alertaRetiradaMenu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:white;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:200;min-width:185px;padding:6px 0;">
-                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
-                        <input type="checkbox" value="ret_aberta" class="retirada-chk"> 🔴 Aberta
+                <div id="alertaRetiradaMenu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:white;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:200;min-width:310px;padding:6px 0;">
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="ret_aberta" class="retirada-chk"> 🔴 Aberta — OS gerada, não encaminhada
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
-                        <input type="checkbox" value="ret_encaminhada" class="retirada-chk"> 🟡 Encaminhada
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="ret_encaminhada" class="retirada-chk"> 🟡 Encaminhada — equipe de campo acionada
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
-                        <input type="checkbox" value="ret_fin_sem_neg" class="retirada-chk"> ⚠️ Fin. s/ neg.
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="ret_fin_sem_neg" class="retirada-chk"> ⚠️ Finalizada — negativação pendente
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
-                        <input type="checkbox" value="neg_com_retirada" class="retirada-chk"> ✅ Fin. c/ neg.
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="neg_com_retirada" class="retirada-chk"> ✅ Finalizada — processo completo
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
-                        <input type="checkbox" value="neg_sem_retirada" class="retirada-chk"> 🔴 Neg. s/ retirada
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="neg_sem_retirada" class="retirada-chk"> 🔴 Negativado — sem OS de retirada
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.875rem;white-space:nowrap;" class="hover:bg-gray-50">
-                        <input type="checkbox" value="sem_retirada" class="retirada-chk"> Sem retirada
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="sem_retirada" class="retirada-chk"> Sem retirada — contrato ativo sem processo
                     </label>
                 </div>
             </div>
@@ -2460,7 +2460,7 @@ async function renderAlertasAcaoTab() {
     const _retBtn  = tabContent.querySelector('#alertaRetiradaBtn');
     const _retMenu = tabContent.querySelector('#alertaRetiradaMenu');
     const _retLbl  = tabContent.querySelector('#alertaRetiradaLabel');
-    const _RET_LABELS = { ret_aberta: '🔴 Aberta', ret_encaminhada: '🟡 Encaminhada', ret_fin_sem_neg: '⚠️ Fin. s/ neg.', neg_com_retirada: '✅ Fin. c/ neg.', neg_sem_retirada: '🔴 Neg. s/ ret.', sem_retirada: 'Sem retirada' };
+    const _RET_LABELS = { ret_aberta: '🔴 Aberta', ret_encaminhada: '🟡 Encaminhada', ret_fin_sem_neg: '⚠️ Finalizada — neg. pendente', neg_com_retirada: '✅ Finalizada — completo', neg_sem_retirada: '🔴 Negativado — sem OS', sem_retirada: 'Sem retirada' };
     _retBtn.addEventListener('click', e => {
         e.stopPropagation();
         _retMenu.style.display = _retMenu.style.display === 'none' ? 'block' : 'none';
