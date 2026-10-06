@@ -2394,15 +2394,16 @@ async function renderAlertasAcaoTab() {
                         <td style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>
                         <td style="padding:6px 10px;">${(() => {
-                            const _s = 'padding:3px 8px;border-radius:6px;font-size:.7rem;font-weight:600;white-space:nowrap;display:inline-block;line-height:1.4;';
+                            const _b = (bg, cor, bdr, icon, title, sub) =>
+                                `<span style="padding:3px 7px;border-radius:6px;font-size:.68rem;font-weight:700;display:inline-block;line-height:1.5;background:${bg};color:${cor};border:1px solid ${bdr};">${icon} ${title}<br><span style="font-weight:400;font-size:.62rem;opacity:.85;">${sub}</span></span>`;
                             const _SIT_BADGE = {
-                                ret_aberta:      `<span style="${_s}background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">🔴 Aberta — OS gerada, não encaminhada</span>`,
-                                ret_encaminhada: `<span style="${_s}background:#fef9c3;color:#854d0e;border:1px solid #fde047;">🟡 Encaminhada — equipe de campo acionada</span>`,
-                                ret_fin_sem_neg: `<span style="${_s}background:#ffedd5;color:#c2410c;border:1px solid #fdba74;">⚠️ Finalizada — negativação pendente</span>`,
-                                neg_com_retirada:`<span style="${_s}background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;">✅ Finalizada — processo completo</span>`,
-                                neg_sem_retirada:`<span style="${_s}background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">🔴 Negativado — sem OS de retirada</span>`,
+                                ret_aberta:      _b('#fee2e2','#991b1b','#fca5a5','🔴','Aberta','OS gerada, não encaminhada'),
+                                ret_encaminhada: _b('#fef9c3','#854d0e','#fde047','🟡','Encaminhada','equipe de campo acionada'),
+                                ret_fin_sem_neg: _b('#ffedd5','#c2410c','#fdba74','⚠️','Finalizada','negativação pendente'),
+                                neg_com_retirada:_b('#d1fae5','#065f46','#6ee7b7','✅','Finalizada','processo completo'),
+                                neg_sem_retirada:_b('#fee2e2','#991b1b','#fca5a5','🔴','Negativado','sem OS de retirada'),
                             };
-                            return _SIT_BADGE[r.situacao_retirada] || `<span style="${_s}background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;">Sem retirada — contrato ativo sem processo</span>`;
+                            return _SIT_BADGE[r.situacao_retirada] || _b('#f3f4f6','#6b7280','#e5e7eb','','Sem retirada','contrato ativo sem processo');
                         })()}</td>
                         <td style="padding:6px 10px;font-size:.78rem;">${waCell}</td>
                     </tr>`;
