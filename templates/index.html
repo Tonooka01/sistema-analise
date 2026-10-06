@@ -44,34 +44,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Filtra o seletor: sem dashboard, só mostra o que o usuário tem acesso ---
-    // (usa o mesmo _ownPerm definido abaixo — declarado antes para uso aqui via hoisting-safe closure)
     if (!hasDashboard) {
         document.querySelectorAll('#customAnalysisSelector option').forEach(opt => {
             if (!opt.value) return;
-            const reqPerm = {
-                'activations_by_seller':              'analises_vendas',
-                'real_permanence':                    'analises_financeiro',
-                'analise_juros_atraso':               'analises_financeiro',
-                'faturamento_por_cidade':             'analises_financeiro',
-                'saude_financeira_contrato_atraso':   'analises_financeiro',
-                'saude_financeira_contrato_bloqueio': 'analises_financeiro',
-                'atrasos_e_nao_pagos':                'analises_financeiro',
-                'daily_evolution_by_city':            'analises_financeiro',
-                'comparativo_diario':                 'analises_financeiro',
-                'active_clients_evolution':           'analises_clientes',
-                'equipment_by_olt':                   'analises_clientes',
-                'cohort_retention':                   'analises_clientes',
-                'cancellations_by_city':              'analises_cancelamento',
-                'cancellations_by_neighborhood':      'analises_cancelamento',
-                'cancellations_by_equipment':         'analises_cancelamento',
-                'cancellations':                      'analises_cancelamento',
-                'negativacao':                        'analises_cancelamento',
-                'vendedores':                         'analises_cancelamento',
-                'analise_comportamento':              'behavior',
-                'retirada':                           'retiradas',
-                'contratos_boletos_abertos':          'retiradas',
-            }[opt.value];
-            if (reqPerm && perms.includes(reqPerm)) return;
+            const val = opt.value;
+
+            // Perm de módulo própria
+            if (_ownPerm[val]) {
+                if (perms.includes(_ownPerm[val])) return;
+                opt.remove(); return;
+            }
+
+            // Perm de grupo
+            const grp = _valToGroup[val];
+            if (grp && perms.includes(grp)) {
+                const subPerms = perms.filter(p => p.startsWith(grp + ':'));
+                if (subPerms.length === 0 || subPerms.includes(grp + ':' + val)) return;
+            }
+
             opt.remove();
         });
     }
@@ -93,11 +83,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selWrap) selWrap.style.display = 'none';
     }
 
-    // Mapeamento item → permissão necessária (dashboard sempre sobrepõe)
-    const _ownPerm = {
-        // Grupo Vendas
+    // Mapeamento val → grupo (para itens controlados por grupo)
+    const _valToGroup = {
         'activations_by_seller':              'analises_vendas',
-        // Grupo Financeiro
         'real_permanence':                    'analises_financeiro',
         'analise_juros_atraso':               'analises_financeiro',
         'faturamento_por_cidade':             'analises_financeiro',
@@ -106,32 +94,50 @@ document.addEventListener('DOMContentLoaded', () => {
         'atrasos_e_nao_pagos':                'analises_financeiro',
         'daily_evolution_by_city':            'analises_financeiro',
         'comparativo_diario':                 'analises_financeiro',
-        // Grupo Clientes
         'active_clients_evolution':           'analises_clientes',
         'equipment_by_olt':                   'analises_clientes',
         'cohort_retention':                   'analises_clientes',
-        // Grupo Cancelamento
         'cancellations_by_city':              'analises_cancelamento',
         'cancellations_by_neighborhood':      'analises_cancelamento',
         'cancellations_by_equipment':         'analises_cancelamento',
         'cancellations':                      'analises_cancelamento',
         'negativacao':                        'analises_cancelamento',
         'vendedores':                         'analises_cancelamento',
-        // Módulos com perm própria
-        'analise_comportamento':              'behavior',
-        'retirada':                           'retiradas',
-        'contratos_boletos_abertos':          'retiradas',
+    };
+    // Itens com permissão de módulo própria (não grupo)
+    const _ownPerm = {
+        'analise_comportamento':     'behavior',
+        'retirada':                  'retiradas',
+        'contratos_boletos_abertos': 'retiradas',
     };
 
     // --- Filtra itens de análise na sidebar ---
     if (!hasDashboard) {
         document.querySelectorAll('#analysisSidebar .sb-group .sb-item[data-val]').forEach(item => {
-            const val     = item.dataset.val;
-            const reqPerm = _ownPerm[val];
-            if (reqPerm && perms.includes(reqPerm)) return; // perm específica presente → mantém
-            item.style.display = 'none';                    // requer dashboard → esconde
+            const val = item.dataset.val;
+
+            // Itens com perm de módulo própria (behavior / retiradas)
+            if (_ownPerm[val]) {
+                if (!perms.includes(_ownPerm[val])) item.style.display = 'none';
+                return;
+            }
+
+            // Itens controlados por grupo de análise
+            const grp = _valToGroup[val];
+            if (grp) {
+                if (!perms.includes(grp)) { item.style.display = 'none'; return; }
+                // Grupo presente — verifica sub-itens específicos
+                const subPerms = perms.filter(p => p.startsWith(grp + ':'));
+                if (subPerms.length > 0 && !subPerms.includes(grp + ':' + val)) {
+                    item.style.display = 'none';
+                }
+                return;
+            }
+
+            // Item sem mapeamento: requer dashboard
+            item.style.display = 'none';
         });
-        // Botões operacionais também exigem dashboard
+
         if (!hasBehavior) {
             const el = document.getElementById('sbItemBehavior');
             if (el) el.style.display = 'none';
@@ -141,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (el) el.style.display = 'none';
         }
     }
-    // Com dashboard: todos os itens ficam visíveis (sem restrição adicional por item)
+    // Com dashboard: todos os itens ficam visíveis
 
     // Esconde grupos sem nenhum item visível
     document.querySelectorAll('#analysisSidebar .sb-group').forEach(grp => {

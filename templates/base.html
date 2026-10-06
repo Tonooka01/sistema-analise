@@ -251,10 +251,32 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
 
     const _ANALYSIS_GROUPS = [
-        { id: 'analises_vendas',       label: '📈 Análises de Vendas' },
-        { id: 'analises_financeiro',   label: '💰 Análises Financeiras' },
-        { id: 'analises_clientes',     label: '👥 Análises de Clientes' },
-        { id: 'analises_cancelamento', label: '🚨 Análises de Cancelamento' },
+        { id: 'analises_vendas', label: '📈 Análises de Vendas', items: [
+            { id: 'activations_by_seller', label: 'Ativação por Vendedor' },
+        ]},
+        { id: 'analises_financeiro', label: '💰 Análises Financeiras', items: [
+            { id: 'real_permanence',                    label: 'Permanência Real (Paga)' },
+            { id: 'analise_juros_atraso',               label: 'Juros por Atraso' },
+            { id: 'faturamento_por_cidade',             label: 'Faturamento por Período/Cidade' },
+            { id: 'saude_financeira_contrato_atraso',   label: 'Saúde Financeira (Atraso)' },
+            { id: 'saude_financeira_contrato_bloqueio', label: 'Saúde Financeira (Bloqueio)' },
+            { id: 'atrasos_e_nao_pagos',                label: 'Atrasos e Faturas Não Pagas' },
+            { id: 'daily_evolution_by_city',            label: 'Evolução Diária por Cidade' },
+            { id: 'comparativo_diario',                 label: 'Comparativo Diário' },
+        ]},
+        { id: 'analises_clientes', label: '👥 Análises de Clientes', items: [
+            { id: 'active_clients_evolution', label: 'Evolução de Clientes Ativos' },
+            { id: 'equipment_by_olt',         label: 'Equipamentos por OLT' },
+            { id: 'cohort_retention',         label: 'Retenção (Coorte)' },
+        ]},
+        { id: 'analises_cancelamento', label: '🚨 Análises de Cancelamento', items: [
+            { id: 'cancellations_by_city',         label: 'Canc./Neg. por Cidade' },
+            { id: 'cancellations_by_neighborhood', label: 'Canc./Neg. por Bairro' },
+            { id: 'cancellations_by_equipment',    label: 'Canc. por Equipamento' },
+            { id: 'cancellations',                 label: 'Análise de Cancelamento' },
+            { id: 'negativacao',                   label: 'Análise de Negativação' },
+            { id: 'vendedores',                    label: 'Vendedores (Churn)' },
+        ]},
     ];
 
     const _BEHAVIOR_TABS = [
@@ -287,6 +309,14 @@ document.addEventListener('DOMContentLoaded', () => {
     window.setAllBehaviorTabs = function(val) {
         document.querySelectorAll('.perm-btab').forEach(c => c.checked = val);
     };
+    window.toggleGroupItems = function(groupId, checked) {
+        const sec = document.getElementById('perm-grp-' + groupId);
+        if (sec) sec.style.display = checked ? '' : 'none';
+        if (checked) window.setAllGroupItems(groupId, true);
+    };
+    window.setAllGroupItems = function(groupId, val) {
+        document.querySelectorAll('.perm-grp-item[data-group="' + groupId + '"]').forEach(c => c.checked = val);
+    };
 
     window.openPermissions = function(userId) {
         const u = window._usersData[userId];
@@ -313,14 +343,45 @@ document.addEventListener('DOMContentLoaded', () => {
             <div style="margin-top:.4rem;border-top:1px solid #e5e7eb;padding-top:.5rem;">
                 <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
                             color:#9ca3af;margin-bottom:.35rem;padding-left:.2rem;">Análises por Categoria</div>
-                ${_ANALYSIS_GROUPS.map(g => `
-                <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.4rem .6rem;
-                              border:1px solid #d1fae5;border-radius:.375rem;background:#f0fdf4;margin-bottom:.25rem;">
-                    <input type="checkbox" class="perm-mod" value="${g.id}"
-                           style="width:1rem;height:1rem;cursor:pointer;"
-                           ${!perms || perms.includes(g.id) ? 'checked' : ''}>
-                    <span style="font-size:.85rem;color:#374151;">${g.label}</span>
-                </label>`).join('')}
+                ${_ANALYSIS_GROUPS.map(g => {
+                    const hasGrp  = !perms || perms.includes(g.id);
+                    const subPerms = perms ? perms.filter(p => p.startsWith(g.id + ':')) : [];
+                    const allSubs  = !perms || subPerms.length === 0;
+                    const itemsHtml = g.items.map(item => `
+                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.3rem .5rem;
+                                      border:1px solid #d1fae5;border-radius:.25rem;background:#f0fdf4;">
+                            <input type="checkbox" class="perm-grp-item" data-group="${g.id}" value="${item.id}"
+                                   style="width:.85rem;height:.85rem;cursor:pointer;"
+                                   ${hasGrp && (allSubs || perms.includes(g.id + ':' + item.id)) ? 'checked' : ''}>
+                            <span style="font-size:.78rem;color:#065f46;">${item.label}</span>
+                        </label>`).join('');
+                    return `
+                    <div style="border:1px solid #6ee7b7;border-radius:.375rem;overflow:hidden;margin-bottom:.3rem;">
+                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.4rem .6rem;background:#ecfdf5;">
+                            <input type="checkbox" class="perm-mod" value="${g.id}"
+                                   style="width:1rem;height:1rem;cursor:pointer;"
+                                   onchange="toggleGroupItems('${g.id}', this.checked)"
+                                   ${hasGrp ? 'checked' : ''}>
+                            <span style="font-size:.85rem;font-weight:600;color:#065f46;">${g.label}</span>
+                        </label>
+                        <div id="perm-grp-${g.id}" style="padding:.5rem .6rem;display:${hasGrp ? '' : 'none'}">
+                            <div style="display:flex;gap:.4rem;margin-bottom:.4rem;align-items:center;">
+                                <button type="button" onclick="setAllGroupItems('${g.id}', true)"
+                                        style="font-size:.72rem;padding:.2rem .5rem;border:1px solid #6ee7b7;border-radius:.25rem;background:#ecfdf5;color:#065f46;cursor:pointer;">
+                                    Todas
+                                </button>
+                                <button type="button" onclick="setAllGroupItems('${g.id}', false)"
+                                        style="font-size:.72rem;padding:.2rem .5rem;border:1px solid #e5e7eb;border-radius:.25rem;background:#fff;color:#6b7280;cursor:pointer;">
+                                    Nenhuma
+                                </button>
+                                <span style="font-size:.7rem;color:#9ca3af;">Sem seleção = acesso a todas</span>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem;">
+                                ${itemsHtml}
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('')}
             </div>`;
 
         const btabsHtml = _BEHAVIOR_TABS.map(t => `
@@ -370,15 +431,34 @@ document.addEventListener('DOMContentLoaded', () => {
         const tabChecks  = Array.from(document.querySelectorAll('.perm-btab:checked')).map(c => c.value);
         const allTabs    = tabChecks.length === _BEHAVIOR_TABS.length;
 
-        let perms = modChecks.filter(v => v !== 'behavior');
+        // IDs que não são grupos de análise (são módulos ou behavior)
+        const _grpIds = new Set(_ANALYSIS_GROUPS.map(g => g.id));
+        let perms = modChecks.filter(v => v !== 'behavior' && !_grpIds.has(v));
+
+        // Adiciona grupos com seus sub-itens
+        _ANALYSIS_GROUPS.forEach(g => {
+            if (!modChecks.includes(g.id)) return;
+            perms.push(g.id);
+            const subChecks = Array.from(
+                document.querySelectorAll(`.perm-grp-item[data-group="${g.id}"]:checked`)
+            ).map(c => c.value);
+            if (subChecks.length < g.items.length) {
+                perms.push(...subChecks.map(s => g.id + ':' + s));
+            }
+        });
+
         if (behaviorOn) {
             perms.push('behavior');
             if (!allTabs) perms.push(...tabChecks.map(t => 'behavior:' + t));
         }
 
-        // null = pleno acesso (todos módulos + todos grupos + behavior + todas as abas)
+        // null = pleno acesso (todos módulos + todos grupos completos + behavior + todas as abas)
         const allMods   = _MODULES.every(m => modChecks.includes(m.id));
-        const allGroups = _ANALYSIS_GROUPS.every(g => modChecks.includes(g.id));
+        const allGroups = _ANALYSIS_GROUPS.every(g => {
+            if (!modChecks.includes(g.id)) return false;
+            const subChecks = document.querySelectorAll(`.perm-grp-item[data-group="${g.id}"]:checked`);
+            return subChecks.length === g.items.length;
+        });
         const sendNull  = allMods && allGroups && behaviorOn && allTabs;
 
         try {
