@@ -2428,9 +2428,10 @@ def api_behavior_action_alerts():
                    A.ret_qtd_abertas,
                    COALESCE(A.ret_assunto_aberta, '') AS ret_assunto_aberta,
                    COALESCE(A.ret_data_aberta, '')    AS ret_data_aberta,
-                   COALESCE(CLI.WhatsApp, CLI.Telefone, '') AS whatsapp
+                   COALESCE(CTR.Telefone_celular, CLI.WhatsApp, CLI.Telefone, '') AS whatsapp
             FROM Alerted A
             LEFT JOIN Clientes CLI ON CLI.Raz_o_social = A.cliente
+            LEFT JOIN Contratos CTR ON CTR.ID = A.contrato
             WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond}
             ORDER BY A.score DESC
             LIMIT ? OFFSET ?
