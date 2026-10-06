@@ -2357,7 +2357,6 @@ async function renderAlertasAcaoTab() {
                         : '-';
                     const tierStyle = TIER_STYLE[r.tier] || '';
                     const acaoText = (r.acao || '');
-                    const acaoShort = acaoText.length > 80 ? acaoText.slice(0, 80) + '…' : acaoText;
                     return `<tr data-contrato="${r.contrato}" style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;cursor:pointer;" title="Clique para ver detalhes">
                         <td style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${(page - 1) * rowsPerPage + i + 1}</td>
                         <td style="padding:6px 10px;font-size:.78rem;font-family:monospace;">#${r.contrato || ''}</td>
@@ -2366,7 +2365,7 @@ async function renderAlertasAcaoTab() {
                         <td style="padding:6px 10px;">
                             <span style="padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap;${tierStyle}">${r.tier || ''}</span>
                         </td>
-                        <td style="padding:6px 10px;font-size:.78rem;" title="${acaoText}">${acaoShort}</td>
+                        <td style="padding:6px 10px;font-size:.78rem;max-width:320px;line-height:1.5;">${acaoText}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.fat_vencidas > 0 ? 'color:#dc2626;font-weight:700;' : ''}">${r.fat_vencidas || 0}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
                         <td style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>

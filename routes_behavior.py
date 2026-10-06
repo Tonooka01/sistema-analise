@@ -2254,7 +2254,10 @@ def api_behavior_action_alerts():
             WITH ret_os AS (
                 SELECT CAST(o.Contrato AS INTEGER) AS contrato_id,
                        MAX(CASE WHEN o.Status != 'Finalizada' THEN 1 ELSE 0 END) AS tem_aberta,
-                       MAX(CASE WHEN o.Status  = 'Finalizada' THEN 1 ELSE 0 END) AS tem_finalizada
+                       MAX(CASE WHEN o.Status  = 'Finalizada' THEN 1 ELSE 0 END) AS tem_finalizada,
+                       SUM(CASE WHEN o.Status != 'Finalizada' THEN 1 ELSE 0 END) AS qtd_abertas,
+                       MAX(CASE WHEN o.Status != 'Finalizada' THEN o.Assunto ELSE NULL END) AS assunto_aberta,
+                       MAX(CASE WHEN o.Status != 'Finalizada' THEN o.Abertura ELSE NULL END) AS data_aberta
                 FROM OS o
                 WHERE o.Assunto IN ({_ph_ret})
                   AND CAST(o.Contrato AS INTEGER) > 0
@@ -2262,6 +2265,9 @@ def api_behavior_action_alerts():
             ),
             ActiveContracts AS (
                 SELECT C.ID, C.Cliente, C.Cidade, C.Data_ativa_o, C.Status_contrato, C.Status_acesso,
+                       COALESCE(R.qtd_abertas, 0)   AS ret_qtd_abertas,
+                       R.assunto_aberta              AS ret_assunto_aberta,
+                       R.data_aberta                 AS ret_data_aberta,
                        CASE
                            WHEN COALESCE(R.tem_aberta,0)=1 THEN 'retirada_aberta'
                            WHEN COALESCE(R.tem_finalizada,0)=1
@@ -2337,6 +2343,9 @@ def api_behavior_action_alerts():
                     AC.Cidade            AS cidade,
                     AC.Status_acesso     AS status_acesso,
                     AC.situacao_retirada,
+                    AC.ret_qtd_abertas,
+                    AC.ret_assunto_aberta,
+                    AC.ret_data_aberta,
                     COALESCE(PP.Faturas_Vencidas, 0) AS fat_vencidas,
                     COALESCE(PP.Dias_Vencido, 0)     AS dias_vencido,
                     COALESCE(PP.Atrasos_90d, 0)      AS atrasos_90d,
@@ -2410,6 +2419,9 @@ def api_behavior_action_alerts():
             SELECT A.contrato, A.cliente, A.cidade, A.fat_vencidas, A.dias_vencido,
                    A.atend_30d, A.sem_conexao, A.score, A.tier,
                    COALESCE(A.situacao_retirada, '') AS situacao_retirada,
+                   A.ret_qtd_abertas,
+                   COALESCE(A.ret_assunto_aberta, '') AS ret_assunto_aberta,
+                   COALESCE(A.ret_data_aberta, '')    AS ret_data_aberta,
                    COALESCE(CLI.Telefone, '') AS telefone,
                    COALESCE(CLI.WhatsApp, '') AS whatsapp
             FROM Alerted A
@@ -2438,25 +2450,49 @@ def api_behavior_action_alerts():
         }
 
         def make_acao(r):
-            ret = r.get('situacao_retirada', '')
-            ret_note = (' ⚠️ Retirada finalizada — negativação pendente.' if ret == 'retirada_fin_sem_neg'
-                        else ' ⚠️ Retirada de equipamento em aberto.' if ret == 'retirada_aberta'
-                        else '')
+            ret  = r.get('situacao_retirada', '')
+            fat  = r['fat_vencidas']
+            dias = r['dias_vencido']
+            atend = r['atend_30d']
+            sem_cx = r['sem_conexao']
+
+            qtd_ab  = r.get('ret_qtd_abertas', 0) or 0
+            assunto = r.get('ret_assunto_aberta', '') or ''
+            dt_ab   = (r.get('ret_data_aberta', '') or '')[:10]
+            ret_aberta_detail = (f" {qtd_ab} OS aberta(s)"
+                                 + (f" — {assunto}" if assunto else '')
+                                 + (f" (desde {dt_ab})" if dt_ab else '') + '.')
+            _RET_SUFFIX = {
+                'retirada_aberta':      f' | 🔧 OS de retirada em aberto —{ret_aberta_detail} Cobrar devolução do equipamento.',
+                'retirada_fin_sem_neg': ' | ⚠️ Retirada finalizada — negativar contrato imediatamente.',
+                'neg_com_retirada':     ' | ✅ Retirada finalizada e contrato já negativado.',
+                'neg_sem_retirada':     ' | 🔴 Negativado sem OS — acionar equipe para recolher equipamento.',
+            }
+            ret_note = _RET_SUFFIX.get(ret, '')
+
             if r['tier'] == 'Crítico':
-                return (f"Ligar AGORA — cliente offline há {r['sem_conexao']} dias com fatura vencida. "
-                        f"Ofereça desconto de reativação ou plano mais acessível.") + ret_note
+                return (f"Ligar AGORA — cliente offline há {sem_cx} dias com {fat} fatura(s) vencida(s) "
+                        f"({dias} dias de atraso). Ofereça desconto de reativação ou plano mais acessível.") + ret_note
             elif r['tier'] == 'Alto':
-                if r['fat_vencidas'] == 0:
-                    return f"Negativar contrato — retirada finalizada sem negativação." + ret_note
-                return (f"Negociar parcelamento urgente antes da suspensão. "
-                        f"{r['fat_vencidas']} fatura(s) vencida(s), maior atraso: {r['dias_vencido']} dias.") + ret_note
+                if ret == 'retirada_fin_sem_neg':
+                    return (f"Negativar contrato urgente — retirada finalizada sem negativação. "
+                            f"{fat} fatura(s) vencida(s), {dias} dias de atraso.") + ret_note
+                if ret == 'neg_sem_retirada':
+                    return (f"Cliente negativado sem OS de retirada — acionar equipe de campo para recolher equipamento. "
+                            f"{fat} fatura(s) vencida(s), {dias} dias de atraso.") + ret_note
+                return (f"Negociar parcelamento urgente — {fat} fatura(s) vencida(s), "
+                        f"atraso máximo: {dias} dias, {atend} atendimento(s) recente(s). "
+                        f"Risco de suspensão iminente.") + ret_note
             elif r['tier'] == 'Médio':
-                if r['fat_vencidas'] == 0:
-                    return f"Verificar situação e acionar processo de retirada." + ret_note
+                if fat == 0:
+                    return (f"Verificar situação técnica — {atend} atendimento(s) recente(s), "
+                            f"sem faturas vencidas no momento.") + ret_note
                 return (f"Enviar WhatsApp + verificar qualidade técnica. "
-                        f"{r['fat_vencidas']} fatura(s) vencida(s) e {r['atend_30d']} atendimento(s) recente(s).") + ret_note
+                        f"{fat} fatura(s) vencida(s), {dias} dias de atraso, "
+                        f"{atend} atendimento(s) nos últimos 30 dias.") + ret_note
             else:
-                return f"Enviar lembrete amigável pelo WhatsApp — 1ª fatura em atraso há {r['dias_vencido']} dias." + ret_note
+                return (f"Enviar lembrete amigável — {fat} fatura(s) vencida(s) "
+                        f"há {dias} dias. Primeira abordagem pelo WhatsApp.") + ret_note
 
         data = []
         for r in data_rows:
