@@ -44,12 +44,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Filtra o seletor: sem dashboard, só mostra o que o usuário tem acesso ---
+    // (usa o mesmo _ownPerm definido abaixo — declarado antes para uso aqui via hoisting-safe closure)
     if (!hasDashboard) {
         document.querySelectorAll('#customAnalysisSelector option').forEach(opt => {
-            if (!opt.value) return; // mantém o placeholder desabilitado
-            if (opt.value === 'retirada'                 && hasRetiradas) return;
-            if (opt.value === 'contratos_boletos_abertos'&& hasRetiradas) return;
-            if (opt.value === 'analise_comportamento'    && hasBehavior)  return;
+            if (!opt.value) return;
+            const reqPerm = {
+                'activations_by_seller':              'analises_vendas',
+                'real_permanence':                    'analises_financeiro',
+                'analise_juros_atraso':               'analises_financeiro',
+                'faturamento_por_cidade':             'analises_financeiro',
+                'saude_financeira_contrato_atraso':   'analises_financeiro',
+                'saude_financeira_contrato_bloqueio': 'analises_financeiro',
+                'atrasos_e_nao_pagos':                'analises_financeiro',
+                'daily_evolution_by_city':            'analises_financeiro',
+                'comparativo_diario':                 'analises_financeiro',
+                'active_clients_evolution':           'analises_clientes',
+                'equipment_by_olt':                   'analises_clientes',
+                'cohort_retention':                   'analises_clientes',
+                'cancellations_by_city':              'analises_cancelamento',
+                'cancellations_by_neighborhood':      'analises_cancelamento',
+                'cancellations_by_equipment':         'analises_cancelamento',
+                'cancellations':                      'analises_cancelamento',
+                'negativacao':                        'analises_cancelamento',
+                'vendedores':                         'analises_cancelamento',
+                'analise_comportamento':              'behavior',
+                'retirada':                           'retiradas',
+                'contratos_boletos_abertos':          'retiradas',
+            }[opt.value];
+            if (reqPerm && perms.includes(reqPerm)) return;
             opt.remove();
         });
     }
@@ -71,12 +93,34 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selWrap) selWrap.style.display = 'none';
     }
 
-    // Itens com permissão própria: visíveis com 'dashboard' OU com sua perm específica
-    // Todos os outros itens requerem 'dashboard'.
+    // Mapeamento item → permissão necessária (dashboard sempre sobrepõe)
     const _ownPerm = {
-        'analise_comportamento':     'behavior',
-        'retirada':                  'retiradas',
-        'contratos_boletos_abertos': 'retiradas',
+        // Grupo Vendas
+        'activations_by_seller':              'analises_vendas',
+        // Grupo Financeiro
+        'real_permanence':                    'analises_financeiro',
+        'analise_juros_atraso':               'analises_financeiro',
+        'faturamento_por_cidade':             'analises_financeiro',
+        'saude_financeira_contrato_atraso':   'analises_financeiro',
+        'saude_financeira_contrato_bloqueio': 'analises_financeiro',
+        'atrasos_e_nao_pagos':                'analises_financeiro',
+        'daily_evolution_by_city':            'analises_financeiro',
+        'comparativo_diario':                 'analises_financeiro',
+        // Grupo Clientes
+        'active_clients_evolution':           'analises_clientes',
+        'equipment_by_olt':                   'analises_clientes',
+        'cohort_retention':                   'analises_clientes',
+        // Grupo Cancelamento
+        'cancellations_by_city':              'analises_cancelamento',
+        'cancellations_by_neighborhood':      'analises_cancelamento',
+        'cancellations_by_equipment':         'analises_cancelamento',
+        'cancellations':                      'analises_cancelamento',
+        'negativacao':                        'analises_cancelamento',
+        'vendedores':                         'analises_cancelamento',
+        // Módulos com perm própria
+        'analise_comportamento':              'behavior',
+        'retirada':                           'retiradas',
+        'contratos_boletos_abertos':          'retiradas',
     };
 
     // --- Filtra itens de análise na sidebar ---

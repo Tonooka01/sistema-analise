@@ -250,6 +250,13 @@ document.addEventListener('DOMContentLoaded', () => {
         { id: 'retiradas',   label: '📦 Retirada de Equipamentos' },
     ];
 
+    const _ANALYSIS_GROUPS = [
+        { id: 'analises_vendas',       label: '📈 Análises de Vendas' },
+        { id: 'analises_financeiro',   label: '💰 Análises Financeiras' },
+        { id: 'analises_clientes',     label: '👥 Análises de Clientes' },
+        { id: 'analises_cancelamento', label: '🚨 Análises de Cancelamento' },
+    ];
+
     const _BEHAVIOR_TABS = [
         { id: 'reclamacoes',      label: 'Padrão de Reclamações' },
         { id: 'churn',            label: 'Padrão de Churn' },
@@ -302,6 +309,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span style="font-size:.85rem;color:#374151;">${m.label}</span>
             </label>`).join('');
 
+        const analysisGroupsHtml = `
+            <div style="margin-top:.4rem;border-top:1px solid #e5e7eb;padding-top:.5rem;">
+                <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+                            color:#9ca3af;margin-bottom:.35rem;padding-left:.2rem;">Análises por Categoria</div>
+                ${_ANALYSIS_GROUPS.map(g => `
+                <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.4rem .6rem;
+                              border:1px solid #d1fae5;border-radius:.375rem;background:#f0fdf4;margin-bottom:.25rem;">
+                    <input type="checkbox" class="perm-mod" value="${g.id}"
+                           style="width:1rem;height:1rem;cursor:pointer;"
+                           ${!perms || perms.includes(g.id) ? 'checked' : ''}>
+                    <span style="font-size:.85rem;color:#374151;">${g.label}</span>
+                </label>`).join('')}
+            </div>`;
+
         const btabsHtml = _BEHAVIOR_TABS.map(t => `
             <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.3rem .5rem;
                           border:1px solid #e0e7ff;border-radius:.25rem;background:#f5f3ff;">
@@ -338,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>`;
 
-        document.getElementById('permCheckboxes').innerHTML = modulesHtml + behaviorHtml;
+        document.getElementById('permCheckboxes').innerHTML = modulesHtml + analysisGroupsHtml + behaviorHtml;
         document.getElementById('permissionsModal').style.display = 'flex';
     };
 
@@ -355,9 +376,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!allTabs) perms.push(...tabChecks.map(t => 'behavior:' + t));
         }
 
-        // null = pleno acesso (todos módulos + behavior + todas as abas)
-        const allMods = _MODULES.every(m => modChecks.includes(m.id));
-        const sendNull = allMods && behaviorOn && allTabs;
+        // null = pleno acesso (todos módulos + todos grupos + behavior + todas as abas)
+        const allMods   = _MODULES.every(m => modChecks.includes(m.id));
+        const allGroups = _ANALYSIS_GROUPS.every(g => modChecks.includes(g.id));
+        const sendNull  = allMods && allGroups && behaviorOn && allTabs;
 
         try {
             const res = await fetch('/api/admin/users/permissions', {
