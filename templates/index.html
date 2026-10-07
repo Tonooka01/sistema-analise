@@ -23,77 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const behaviorOnly   = hasBehavior && !hasDashboard && !hasOtherMods && !hasRetiradas;
     const retiradaOnly   = hasRetiradas && !hasDashboard && !hasOtherMods && !hasBehavior;
 
-    // --- Botões de módulo (Cashflow, DRE, Gestão, Crescimento) ---
-    const moduleMap = { cashflow: 'btnCashflow', dre: 'btnDRE', dre2: 'btnDRE2', crescimento: 'btnCrescimento' };
-    Object.entries(moduleMap).forEach(([mod, id]) => {
-        const btn = document.getElementById(id);
-        if (btn && !perms.includes(mod)) btn.style.display = 'none';
-    });
-
-    // --- Botões operacionais (Clientes, OS, Logins, etc.) ---
-    if (!hasDashboard) {
-        document.querySelectorAll('.collection-selector button').forEach(btn => {
-            if (!['btnCashflow','btnDRE','btnDRE2','btnCrescimento'].includes(btn.id))
-                btn.style.display = 'none';
-        });
-        // Botões movidos para sidebar (fora de .collection-selector)
-        ['btnClientes','btnContratos','btnContasAReceber','btnAtendimentos','btnOS','btnLogins'].forEach(id => {
-            const btn = document.getElementById(id);
-            if (btn) btn.style.display = 'none';
-        });
-    }
-
-    // --- Filtra o seletor: sem dashboard, só mostra o que o usuário tem acesso ---
-    if (!hasDashboard) {
-        document.querySelectorAll('#customAnalysisSelector option').forEach(opt => {
-            if (!opt.value) return;
-            const val = opt.value;
-
-            // Dual-access
-            if (_dualPerm[val]) {
-                const { mod, grp } = _dualPerm[val];
-                if (perms.includes(mod)) return;
-                if (perms.includes(grp)) {
-                    const sub = perms.filter(p => p.startsWith(grp + ':'));
-                    if (sub.length === 0 || sub.includes(grp + ':' + val)) return;
-                }
-                opt.remove(); return;
-            }
-
-            // Módulo próprio
-            if (_ownPerm[val]) {
-                if (perms.includes(_ownPerm[val])) return;
-                opt.remove(); return;
-            }
-
-            // Grupo
-            const grp = _valToGroup[val];
-            if (grp && perms.includes(grp)) {
-                const sub = perms.filter(p => p.startsWith(grp + ':'));
-                if (sub.length === 0 || sub.includes(grp + ':' + val)) return;
-            }
-
-            opt.remove();
-        });
-    }
-
-    // --- Análise de Comportamento: filtra abas internas ---
-    if (hasBehavior) {
-        const btabPerms = perms.filter(p => p.startsWith('behavior:'));
-        if (btabPerms.length > 0) {
-            document.querySelectorAll('#behavior-analysis-tabs .tab-link').forEach(link => {
-                const tab = link.dataset.tab;
-                if (tab && !perms.includes('behavior:' + tab)) link.style.display = 'none';
-            });
-        }
-    }
-
-    // --- Esconde seletor inteiro se não sobrou nada útil ---
-    if (!hasDashboard && !hasBehavior && !hasRetiradas) {
-        const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
-        if (selWrap) selWrap.style.display = 'none';
-    }
-
     // Mapeamento val → grupo (para itens controlados por grupo)
     const _valToGroup = {
         'activations_by_seller':              'analises_vendas',
@@ -124,6 +53,69 @@ document.addEventListener('DOMContentLoaded', () => {
         'retirada':                  { mod: 'retiradas', grp: 'analises_cancelamento' },
         'contratos_boletos_abertos': { mod: 'retiradas', grp: 'analises_cancelamento' },
     };
+
+    // --- Botões de módulo (Cashflow, DRE, Gestão, Crescimento) ---
+    const moduleMap = { cashflow: 'btnCashflow', dre: 'btnDRE', dre2: 'btnDRE2', crescimento: 'btnCrescimento' };
+    Object.entries(moduleMap).forEach(([mod, id]) => {
+        const btn = document.getElementById(id);
+        if (btn && !perms.includes(mod)) btn.style.display = 'none';
+    });
+
+    // --- Botões operacionais (Clientes, OS, Logins, etc.) ---
+    if (!hasDashboard) {
+        document.querySelectorAll('.collection-selector button').forEach(btn => {
+            if (!['btnCashflow','btnDRE','btnDRE2','btnCrescimento'].includes(btn.id))
+                btn.style.display = 'none';
+        });
+        ['btnClientes','btnContratos','btnContasAReceber','btnAtendimentos','btnOS','btnLogins'].forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) btn.style.display = 'none';
+        });
+    }
+
+    // --- Filtra o seletor: sem dashboard, só mostra o que o usuário tem acesso ---
+    if (!hasDashboard) {
+        document.querySelectorAll('#customAnalysisSelector option').forEach(opt => {
+            if (!opt.value) return;
+            const val = opt.value;
+            if (_dualPerm[val]) {
+                const { mod, grp } = _dualPerm[val];
+                if (perms.includes(mod)) return;
+                if (perms.includes(grp)) {
+                    const sub = perms.filter(p => p.startsWith(grp + ':'));
+                    if (sub.length === 0 || sub.includes(grp + ':' + val)) return;
+                }
+                opt.remove(); return;
+            }
+            if (_ownPerm[val]) {
+                if (perms.includes(_ownPerm[val])) return;
+                opt.remove(); return;
+            }
+            const grp = _valToGroup[val];
+            if (grp && perms.includes(grp)) {
+                const sub = perms.filter(p => p.startsWith(grp + ':'));
+                if (sub.length === 0 || sub.includes(grp + ':' + val)) return;
+            }
+            opt.remove();
+        });
+    }
+
+    // --- Análise de Comportamento: filtra abas internas ---
+    if (hasBehavior) {
+        const btabPerms = perms.filter(p => p.startsWith('behavior:'));
+        if (btabPerms.length > 0) {
+            document.querySelectorAll('#behavior-analysis-tabs .tab-link').forEach(link => {
+                const tab = link.dataset.tab;
+                if (tab && !perms.includes('behavior:' + tab)) link.style.display = 'none';
+            });
+        }
+    }
+
+    // --- Esconde seletor inteiro se não sobrou nada útil ---
+    if (!hasDashboard && !hasBehavior && !hasRetiradas) {
+        const selWrap = document.getElementById('customAnalysisSelector')?.closest('div.flex');
+        if (selWrap) selWrap.style.display = 'none';
+    }
 
     // --- Filtra itens de análise na sidebar ---
     if (!hasDashboard) {
