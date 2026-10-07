@@ -5318,7 +5318,9 @@ def api_ret_sync_visitas():
 # ---------------------------------------------------------------------------
 
 def _ensure_chatmix_tables():
-    conn = get_db()
+    import sqlite3 as _sqlite3, os as _os
+    db_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'analise_dados.db')
+    conn = _sqlite3.connect(db_path, timeout=30)
     try:
         conn.execute('''CREATE TABLE IF NOT EXISTS chatmix_templates (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -5336,7 +5338,6 @@ def _ensure_chatmix_tables():
             enviado_em  DATETIME DEFAULT CURRENT_TIMESTAMP
         )''')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_cslog_contrato ON chatmix_send_log(contrato)')
-        # migration: add intervalo_dias if missing
         cols = [r[1] for r in conn.execute("PRAGMA table_info(chatmix_templates)").fetchall()]
         if cols and 'intervalo_dias' not in cols:
             conn.execute("ALTER TABLE chatmix_templates ADD COLUMN intervalo_dias INTEGER NOT NULL DEFAULT 10")
@@ -5344,7 +5345,7 @@ def _ensure_chatmix_tables():
     finally:
         conn.close()
 
-_ensure_chatmix_tables()
+_ensure_chatmix_tables()  # roda no import — sqlite3 direto, sem contexto Flask
 
 
 @behavior_bp.route('/chatmix/templates', methods=['GET'])
