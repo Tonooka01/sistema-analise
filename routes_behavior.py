@@ -5317,6 +5317,36 @@ def api_ret_sync_visitas():
 # ChatMix — Mensagens Prontas (templates e envio via WhatsApp Business)
 # ---------------------------------------------------------------------------
 
+def _ensure_chatmix_tables():
+    conn = get_db()
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS chatmix_templates (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome           TEXT NOT NULL,
+            template_id    TEXT NOT NULL,
+            corpo          TEXT NOT NULL DEFAULT '',
+            variaveis      TEXT NOT NULL DEFAULT '[]',
+            intervalo_dias INTEGER NOT NULL DEFAULT 10,
+            criado_em      DATETIME DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS chatmix_send_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            contrato    TEXT NOT NULL,
+            template_id TEXT NOT NULL,
+            enviado_em  DATETIME DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_cslog_contrato ON chatmix_send_log(contrato)')
+        # migration: add intervalo_dias if missing
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(chatmix_templates)").fetchall()]
+        if cols and 'intervalo_dias' not in cols:
+            conn.execute("ALTER TABLE chatmix_templates ADD COLUMN intervalo_dias INTEGER NOT NULL DEFAULT 10")
+        conn.commit()
+    finally:
+        conn.close()
+
+_ensure_chatmix_tables()
+
+
 @behavior_bp.route('/chatmix/templates', methods=['GET'])
 def api_chatmix_templates_list():
     conn = get_db()
