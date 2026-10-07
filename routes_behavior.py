@@ -2288,6 +2288,8 @@ def api_behavior_action_alerts():
                        COALESCE(RO.qtd_abertas, 0) AS ret_qtd_abertas,
                        RO.assunto_aberta            AS ret_assunto_aberta,
                        RO.data_aberta               AS ret_data_aberta,
+                       RL.ultimo_assunto            AS ret_ultimo_assunto,
+                       RL.ultima_abertura           AS ret_ultima_data,
                        CASE
                            WHEN RL.ultimo_status = 'Aberta'      THEN 'ret_aberta'
                            WHEN RL.ultimo_status = 'Encaminhada' THEN 'ret_encaminhada'
@@ -2368,6 +2370,8 @@ def api_behavior_action_alerts():
                     AC.ret_qtd_abertas,
                     AC.ret_assunto_aberta,
                     AC.ret_data_aberta,
+                    AC.ret_ultimo_assunto,
+                    AC.ret_ultima_data,
                     COALESCE(PP.Faturas_Vencidas, 0) AS fat_vencidas,
                     COALESCE(PP.Dias_Vencido, 0)     AS dias_vencido,
                     COALESCE(PP.Atrasos_90d, 0)      AS atrasos_90d,
@@ -2446,6 +2450,8 @@ def api_behavior_action_alerts():
                    A.ret_qtd_abertas,
                    COALESCE(A.ret_assunto_aberta, '') AS ret_assunto_aberta,
                    COALESCE(A.ret_data_aberta, '')    AS ret_data_aberta,
+                   COALESCE(A.ret_ultimo_assunto, '') AS ret_ultimo_assunto,
+                   COALESCE(A.ret_ultima_data, '')    AS ret_ultima_data,
                    COALESCE(CTR.Telefone_celular, CLI.WhatsApp, CLI.Telefone, '') AS whatsapp
             FROM Alerted A
             LEFT JOIN Clientes CLI ON CLI.Raz_o_social = A.cliente

@@ -2378,6 +2378,13 @@ async function renderAlertasAcaoTab() {
                                 const diff = Math.floor((Date.now() - new Date(dtRaw).getTime()) / 86400000);
                                 diasAb = diff > 0 ? `há ${diff} dias` : '';
                             }
+                            const ultiAssunto = r.ret_ultimo_assunto || '';
+                            const ultiData    = (r.ret_ultima_data || '').slice(0,10);
+                            let ultiDias = '';
+                            if (ultiData) {
+                                const diff2 = Math.floor((Date.now() - new Date(ultiData).getTime()) / 86400000);
+                                ultiDias = diff2 > 0 ? `há ${diff2} dias` : '';
+                            }
                             if (sit === 'ret_aberta' || sit === 'ret_encaminhada') {
                                 const qtd = r.ret_qtd_abertas || 1;
                                 const cor = sit === 'ret_aberta' ? '#991b1b' : '#854d0e';
@@ -2385,8 +2392,14 @@ async function renderAlertasAcaoTab() {
                                      + (assunto ? `<br><span style="color:#6b7280;font-size:.7rem;">${assunto}</span>` : '')
                                      + (diasAb  ? `<br><span style="color:#9ca3af;font-size:.68rem;">${diasAb}</span>` : '');
                             }
-                            if (sit === 'ret_fin_sem_neg')  return '<span style="color:#c2410c;font-weight:600;">Finalizada — neg. pendente</span>';
-                            if (sit === 'neg_com_retirada') return '<span style="color:#065f46;font-weight:600;">Finalizada c/ neg.</span>';
+                            if (sit === 'ret_fin_sem_neg')
+                                return '<span style="color:#c2410c;font-weight:600;">Finalizada — neg. pendente</span>'
+                                     + (ultiAssunto ? `<br><span style="color:#6b7280;font-size:.7rem;">${ultiAssunto}</span>` : '')
+                                     + (ultiDias    ? `<br><span style="color:#9ca3af;font-size:.68rem;">${ultiDias}</span>` : '');
+                            if (sit === 'neg_com_retirada')
+                                return '<span style="color:#065f46;font-weight:600;">Finalizada c/ neg.</span>'
+                                     + (ultiAssunto ? `<br><span style="color:#6b7280;font-size:.7rem;">${ultiAssunto}</span>` : '')
+                                     + (ultiDias    ? `<br><span style="color:#9ca3af;font-size:.68rem;">${ultiDias}</span>` : '');
                             if (sit === 'neg_sem_retirada') return '<span style="color:#991b1b;font-weight:600;">Sem OS cadastrada</span>';
                             return '<span style="color:#9ca3af;">—</span>';
                         })()}</td>
