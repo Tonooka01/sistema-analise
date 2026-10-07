@@ -41,7 +41,8 @@ def _next_ver(v):
 def _list_zips():
     if not _VERSIONS_DIR.exists():
         return []
-    return sorted(_VERSIONS_DIR.glob('v*.zip'), key=lambda p: p.stat().st_mtime)
+    files = list(_VERSIONS_DIR.glob('v*.zip')) + list(_VERSIONS_DIR.glob('v*.tar.gz'))
+    return sorted(files, key=lambda p: p.stat().st_mtime)
 
 
 @admin_bp.route('/api/admin/settings', methods=['GET', 'POST'])
@@ -231,15 +232,20 @@ def restore_version():
         return jsonify({'error': 'Acesso negado'}), 403
 
     filename = (request.json or {}).get('filename', '')
-    if not filename.endswith('.zip') or '/' in filename or '..' in filename:
+    if not (filename.endswith('.zip') or filename.endswith('.tar.gz')) or '/' in filename or '..' in filename:
         return jsonify({'error': 'Arquivo inválido'}), 400
 
     zip_path = _VERSIONS_DIR / filename
     if not zip_path.exists():
         return jsonify({'error': 'Versão não encontrada'}), 404
 
-    with zipfile.ZipFile(zip_path, 'r') as zf:
-        zf.extractall(_APP_DIR)
+    import tarfile
+    if filename.endswith('.tar.gz'):
+        with tarfile.open(zip_path, 'r:gz') as tf:
+            tf.extractall(_APP_DIR)
+    else:
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            zf.extractall(_APP_DIR)
 
     # Tenta reiniciar o serviço
     try:
@@ -253,7 +259,8 @@ def restore_version():
     except Exception:
         pass
 
-    return jsonify({'ok': True, 'restored': filename.replace('.zip', '')})
+    label = filename.replace('.tar.gz', '').replace('.zip', '')
+    return jsonify({'ok': True, 'restored': label})
 
 
 @admin_bp.route('/api/admin/version/download/<filename>', methods=['GET'])
@@ -261,7 +268,7 @@ def restore_version():
 def download_version(filename):
     if current_user.username != 'admin':
         abort(403)
-    if not filename.endswith('.zip') or '/' in filename or '..' in filename:
+    if not (filename.endswith('.zip') or filename.endswith('.tar.gz')) or '/' in filename or '..' in filename:
         abort(400)
     zip_path = _VERSIONS_DIR / filename
     if not zip_path.exists():
