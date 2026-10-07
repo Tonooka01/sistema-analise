@@ -2251,47 +2251,65 @@ def api_behavior_action_alerts():
         ret_params = list(_ret_assuntos)
 
         base_cte = f"""
-            WITH ret_os AS (
+            WITH ret_all AS (
                 SELECT CAST(o.Contrato AS INTEGER) AS contrato_id,
-                       MAX(CASE WHEN o.Status = 'Aberta'      THEN 1 ELSE 0 END) AS tem_aberta,
-                       MAX(CASE WHEN o.Status = 'Encaminhada' THEN 1 ELSE 0 END) AS tem_encaminhada,
-                       MAX(CASE WHEN o.Status = 'Finalizada'  THEN 1 ELSE 0 END) AS tem_finalizada,
-                       SUM(CASE WHEN o.Status != 'Finalizada' THEN 1 ELSE 0 END) AS qtd_abertas,
-                       MAX(CASE WHEN o.Status != 'Finalizada' THEN o.Assunto ELSE NULL END) AS assunto_aberta,
-                       MAX(CASE WHEN o.Status != 'Finalizada' THEN o.Abertura ELSE NULL END) AS data_aberta
+                       o.Status,
+                       o.Assunto,
+                       o.Abertura
                 FROM OS o
                 WHERE o.Assunto IN ({_ph_ret})
                   AND CAST(o.Contrato AS INTEGER) > 0
-                GROUP BY CAST(o.Contrato AS INTEGER)
+            ),
+            ret_max AS (
+                SELECT contrato_id, MAX(Abertura) AS max_abertura
+                FROM ret_all
+                GROUP BY contrato_id
+            ),
+            ret_last AS (
+                SELECT a.contrato_id,
+                       a.Status  AS ultimo_status,
+                       a.Assunto AS ultimo_assunto,
+                       a.Abertura AS ultima_abertura
+                FROM ret_all a
+                JOIN ret_max m ON m.contrato_id = a.contrato_id
+                              AND a.Abertura = m.max_abertura
+                GROUP BY a.contrato_id
+            ),
+            ret_open AS (
+                SELECT contrato_id,
+                       SUM(CASE WHEN Status != 'Finalizada' THEN 1 ELSE 0 END) AS qtd_abertas,
+                       MAX(CASE WHEN Status != 'Finalizada' THEN Assunto ELSE NULL END) AS assunto_aberta,
+                       MAX(CASE WHEN Status != 'Finalizada' THEN Abertura ELSE NULL END) AS data_aberta
+                FROM ret_all
+                GROUP BY contrato_id
             ),
             ActiveContracts AS (
                 SELECT C.ID, C.Cliente, C.Cidade, C.Data_ativa_o, C.Status_contrato, C.Status_acesso,
-                       COALESCE(R.qtd_abertas, 0)   AS ret_qtd_abertas,
-                       R.assunto_aberta              AS ret_assunto_aberta,
-                       R.data_aberta                 AS ret_data_aberta,
+                       COALESCE(RO.qtd_abertas, 0) AS ret_qtd_abertas,
+                       RO.assunto_aberta            AS ret_assunto_aberta,
+                       RO.data_aberta               AS ret_data_aberta,
                        CASE
-                           WHEN COALESCE(R.tem_aberta,0)=1      THEN 'ret_aberta'
-                           WHEN COALESCE(R.tem_encaminhada,0)=1 THEN 'ret_encaminhada'
-                           WHEN COALESCE(R.tem_finalizada,0)=1
+                           WHEN RL.ultimo_status = 'Aberta'      THEN 'ret_aberta'
+                           WHEN RL.ultimo_status = 'Encaminhada' THEN 'ret_encaminhada'
+                           WHEN RL.ultimo_status = 'Finalizada'
                                 AND C.Status_contrato = 'Negativado' THEN 'neg_com_retirada'
-                           WHEN COALESCE(R.tem_finalizada,0)=1
+                           WHEN RL.ultimo_status = 'Finalizada'
                                 AND C.Status_contrato NOT IN ('Negativado','Inativo') THEN 'ret_fin_sem_neg'
                            WHEN C.Status_contrato = 'Negativado'
-                                AND COALESCE(R.tem_aberta,0)=0
-                                AND COALESCE(R.tem_encaminhada,0)=0
-                                AND COALESCE(R.tem_finalizada,0)=0 THEN 'neg_sem_retirada'
+                                AND RL.contrato_id IS NULL THEN 'neg_sem_retirada'
                            ELSE NULL
                        END AS situacao_retirada
                 FROM Contratos C
-                LEFT JOIN ret_os R ON R.contrato_id = C.ID
+                LEFT JOIN ret_last RL ON RL.contrato_id = C.ID
+                LEFT JOIN ret_open RO ON RO.contrato_id = C.ID
                 WHERE C.Status_contrato NOT IN ('Inativo')
                   AND C.Status_acesso != 'Desativado'
                   AND (
                       C.Status_contrato = 'Ativo'
                       OR C.Status_contrato = 'Negativado'
-                      OR COALESCE(R.tem_aberta,0) = 1
-                      OR COALESCE(R.tem_encaminhada,0) = 1
-                      OR (COALESCE(R.tem_finalizada,0)=1 AND C.Status_contrato NOT IN ('Negativado'))
+                      OR RL.ultimo_status = 'Aberta'
+                      OR RL.ultimo_status = 'Encaminhada'
+                      OR (RL.ultimo_status = 'Finalizada' AND C.Status_contrato NOT IN ('Negativado'))
                   )
                   {city_cond}
                   AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
