@@ -553,6 +553,63 @@
             </div>
             {% endif %}
 
+            <!-- ChatMix — Mensagens Prontas -->
+            {% if current_user.is_authenticated and current_user.username == 'admin' %}
+            <div class="border rounded-lg p-4 mt-4">
+                <p class="text-sm font-semibold text-gray-700 mb-3">💬 ChatMix — Mensagens Prontas</p>
+
+                <!-- Credenciais -->
+                <div class="mb-4 space-y-2">
+                    <p class="text-xs font-semibold text-gray-600">Credenciais</p>
+                    <div class="flex gap-2 items-center">
+                        <label class="text-xs text-gray-500 w-12 shrink-0">Token:</label>
+                        <input type="text" id="cmTokenInput" placeholder="Token ChatMix"
+                               class="flex-1 border rounded px-2 py-1 text-sm">
+                    </div>
+                    <div class="flex gap-2 items-center">
+                        <label class="text-xs text-gray-500 w-12 shrink-0">Key:</label>
+                        <input type="text" id="cmKeyInput" placeholder="Key ChatMix"
+                               class="flex-1 border rounded px-2 py-1 text-sm">
+                    </div>
+                    <button onclick="cmSaveCredentials()"
+                            class="px-3 py-1 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700">
+                        💾 Salvar credenciais
+                    </button>
+                    <span id="cmCredMsg" class="text-xs text-green-600 hidden ml-2">Salvo!</span>
+                </div>
+
+                <!-- Templates -->
+                <div>
+                    <p class="text-xs font-semibold text-gray-600 mb-2">Templates cadastrados</p>
+                    <div id="cmTemplatesList" class="space-y-2 mb-3 max-h-48 overflow-y-auto"></div>
+
+                    <div class="border-t pt-3 space-y-2">
+                        <p class="text-xs font-semibold text-gray-600">Adicionar template</p>
+                        <input type="text" id="cmNewNome" placeholder="Nome (ex: Cobrança urgente)"
+                               class="w-full border rounded px-2 py-1 text-sm">
+                        <input type="text" id="cmNewTmplId" placeholder="ID do template no ChatMix/Meta"
+                               class="w-full border rounded px-2 py-1 text-sm">
+                        <textarea id="cmNewCorpo" rows="3" placeholder="Texto da mensagem com {{1}} {{2}} {{3}} {{4}}…"
+                                  class="w-full border rounded px-2 py-1 text-sm resize-y"></textarea>
+                        <p class="text-xs text-gray-400">Variáveis em ordem, separadas por vírgula. Disponíveis: <code>nome, contrato, fat_vencidas, val_vencido</code></p>
+                        <input type="text" id="cmNewVarList" placeholder="nome,contrato,fat_vencidas,val_vencido"
+                               value="nome,contrato,fat_vencidas,val_vencido"
+                               class="w-full border rounded px-2 py-1 text-sm">
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs text-gray-500 shrink-0">Intervalo mínimo (dias):</label>
+                            <input type="number" id="cmNewIntervalo" value="10" min="1" max="365"
+                                   class="w-20 border rounded px-2 py-1 text-sm">
+                        </div>
+                        <button onclick="cmAddTemplate()"
+                                class="px-3 py-1 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700">
+                            + Adicionar
+                        </button>
+                        <span id="cmAddMsg" class="text-xs hidden ml-2"></span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
         </div>
     </div>
 </div>
@@ -698,13 +755,125 @@ document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('adminSettingsModal');
     if (modal) {
         new MutationObserver(() => {
-            if (modal.classList.contains('show')) adminLoadAcompConfig();
+            if (modal.classList.contains('show')) { adminLoadAcompConfig(); cmLoadSettings(); }
         }).observe(modal, { attributes: true, attributeFilter: ['class'] });
     }
     // Fallback: botão de abrir
     const openBtn = document.getElementById('openAdminSettingsModalBtn');
-    if (openBtn) openBtn.addEventListener('click', () => setTimeout(adminLoadAcompConfig, 100));
+    if (openBtn) openBtn.addEventListener('click', () => setTimeout(() => { adminLoadAcompConfig(); cmLoadSettings(); }, 100));
 });
+
+// ---- ChatMix — Mensagens Prontas ----
+async function cmLoadSettings() {
+    try {
+        const r = await fetch('/api/behavior/chatmix/settings');
+        if (!r.ok) return;
+        const d = await r.json();
+        const t = document.getElementById('cmTokenInput');
+        const k = document.getElementById('cmKeyInput');
+        if (t) t.value = d.chatmix_token || '';
+        if (k) k.value = d.chatmix_key   || '';
+    } catch {}
+    cmLoadTemplates();
+}
+
+async function cmLoadTemplates() {
+    const list = document.getElementById('cmTemplatesList');
+    if (!list) return;
+    list.innerHTML = '<span class="text-xs text-gray-400">Carregando…</span>';
+    try {
+        const r = await fetch('/api/behavior/chatmix/templates');
+        const templates = r.ok ? await r.json() : [];
+        if (!templates.length) {
+            list.innerHTML = '<span class="text-xs text-gray-400">Nenhum template cadastrado.</span>';
+            return;
+        }
+        list.innerHTML = templates.map(t => {
+            let vars = []; try { vars = JSON.parse(t.variaveis || '[]'); } catch {}
+            return `<div class="flex items-start gap-2 border rounded p-2 bg-white text-xs">
+                <div class="flex-1 min-w-0">
+                    <div class="font-semibold text-gray-800">${t.nome}</div>
+                    <div class="text-gray-400">ID: ${t.template_id} · Vars: ${vars.join(', ') || '—'} · Intervalo: ${t.intervalo_dias || 10}d</div>
+                    <div class="text-gray-600 mt-1 truncate max-w-xs">${(t.corpo || '').replace(/\n/g,' ').slice(0,100)}…</div>
+                </div>
+                <div class="shrink-0 flex flex-col gap-1">
+                    <button onclick="cmTestTemplate(${t.id},'${encodeURIComponent(t.template_id)}','${encodeURIComponent(t.variaveis||'[]')}')"
+                            class="px-2 py-1 bg-blue-50 text-blue-600 border border-blue-200 rounded hover:bg-blue-100 text-xs font-medium">📤 Testar</button>
+                    <button onclick="cmDeleteTemplate(${t.id})"
+                            class="px-2 py-1 bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 font-bold text-xs">🗑</button>
+                </div>
+            </div>`;
+        }).join('');
+    } catch { list.innerHTML = '<span class="text-xs text-red-500">Erro ao carregar.</span>'; }
+    // Invalida cache do behaviorAnalysis
+    if (window._cmTemplates !== undefined) window._cmTemplates = null;
+}
+
+async function cmSaveCredentials() {
+    const token = (document.getElementById('cmTokenInput')?.value || '').trim();
+    const key   = (document.getElementById('cmKeyInput')?.value   || '').trim();
+    const msg   = document.getElementById('cmCredMsg');
+    try {
+        const r = await fetch('/api/behavior/chatmix/settings', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ chatmix_token: token, chatmix_key: key }),
+        });
+        if (r.ok && msg) { msg.textContent = '✅ Salvo!'; msg.classList.remove('hidden'); setTimeout(() => msg.classList.add('hidden'), 2000); }
+    } catch {}
+}
+
+async function cmAddTemplate() {
+    const nome     = (document.getElementById('cmNewNome')?.value    || '').trim();
+    const tmplId   = (document.getElementById('cmNewTmplId')?.value  || '').trim();
+    const corpo    = (document.getElementById('cmNewCorpo')?.value    || '').trim();
+    const varStr   = (document.getElementById('cmNewVarList')?.value  || '').trim();
+    const msg      = document.getElementById('cmAddMsg');
+    const variaveis    = varStr ? varStr.split(',').map(v => v.trim()).filter(Boolean) : [];
+    const intervaloDias = parseInt(document.getElementById('cmNewIntervalo')?.value || '10') || 10;
+    if (!nome || !tmplId) { if (msg) { msg.textContent = 'Nome e ID são obrigatórios.'; msg.className = 'text-xs text-red-500 ml-2'; msg.classList.remove('hidden'); } return; }
+    try {
+        const r = await fetch('/api/behavior/chatmix/templates', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ nome, template_id: tmplId, corpo, variaveis, intervalo_dias: intervaloDias }),
+        });
+        if (r.ok) {
+            ['cmNewNome','cmNewCorpo','cmNewTmplId'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+            if (msg) { msg.textContent = '✅ Adicionado!'; msg.className = 'text-xs text-green-600 ml-2'; msg.classList.remove('hidden'); setTimeout(() => msg.classList.add('hidden'), 2000); }
+            cmLoadTemplates();
+        } else {
+            const d = await r.json();
+            if (msg) { msg.textContent = d.error || 'Erro.'; msg.className = 'text-xs text-red-500 ml-2'; msg.classList.remove('hidden'); }
+        }
+    } catch (e) { if (msg) { msg.textContent = e.message; msg.className = 'text-xs text-red-500 ml-2'; msg.classList.remove('hidden'); } }
+}
+
+async function cmTestTemplate(id, encodedTmplId, encodedVars) {
+    const numero = prompt('Número para teste (somente dígitos, com DDD):');
+    if (!numero) return;
+    const templateId = decodeURIComponent(encodedTmplId);
+    let varNames = []; try { varNames = JSON.parse(decodeURIComponent(encodedVars)); } catch {}
+    // Valores fixos de exemplo para o teste
+    const exMap = { nome: 'Cliente Teste', contrato: '00000', fat_vencidas: '2', val_vencido: 'R$ 99,90' };
+    const valores = varNames.map(v => exMap[v] ?? v);
+    try {
+        const r = await fetch('/api/behavior/chatmix/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ numero, template_id: templateId, valores })
+        });
+        const d = await r.json();
+        if (r.ok) alert('✅ Teste enviado com sucesso!');
+        else alert('Erro: ' + (d.error || JSON.stringify(d)));
+    } catch (e) { alert('Erro ao enviar: ' + e.message); }
+}
+
+async function cmDeleteTemplate(id) {
+    if (!confirm('Excluir este template?')) return;
+    await fetch(`/api/behavior/chatmix/templates/${id}`, { method: 'DELETE' });
+    cmLoadTemplates();
+}
 </script>
 
 <!-- Modal: Editar Usuário -->

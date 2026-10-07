@@ -1019,7 +1019,7 @@ function _cdpCopiarMsg(el, texto) {
   });
 }
 
-function _cdpRenderMensagens(c, s) {
+async function _cdpRenderMensagens(c, s, cl) {
   const pane = document.getElementById('cdp-tab-mensagens');
   if (!pane) return;
   const nome     = (c.Cliente || '').split(' ')[0] || 'Cliente';
@@ -1078,6 +1078,100 @@ function _cdpRenderMensagens(c, s) {
     );
   }
 
+  // Fetch ChatMix templates + send log for this contract
+  let cmTemplates = [], sendLog = {};
+  try {
+    const [tr, lr] = await Promise.all([
+      fetch('/api/behavior/chatmix/templates'),
+      fetch(`/api/behavior/chatmix/send_log?contrato=${encodeURIComponent(contrato)}`),
+    ]);
+    if (tr.ok) cmTemplates = await tr.json();
+    if (lr.ok) {
+      const logRows = await lr.json();
+      logRows.forEach(r => { sendLog[r.template_id] = r.ultima; });
+    }
+  } catch {}
+
+  // Resolve ChatMix template body variables
+  const varMap = { nome, contrato: String(contrato), fat_vencidas: String(fat),
+    val_vencido: valor || 'R$ 0,00' };
+  function _resolveBody(corpo, variaveis) {
+    let out = corpo;
+    try {
+      const vars = typeof variaveis === 'string' ? JSON.parse(variaveis) : variaveis;
+      vars.forEach((v, i) => { out = out.replaceAll('{{' + (i+1) + '}}', varMap[v] ?? v); });
+    } catch {}
+    return out;
+  }
+
+  // Collect all phone numbers from contract + client, deduplicated
+  function _toE164(raw) { const d=(raw||'').replace(/\D/g,''); return d?(d.startsWith('55')?d:'55'+d):''; }
+  const allPhones = [
+    { label: 'Celular (contrato)', raw: c.Telefone_celular },
+    { label: 'Residencial (contrato)', raw: c.Telefone_residencial },
+    { label: 'Celular (cliente)', raw: cl?.cel },
+    { label: 'Telefone (cliente)', raw: cl?.Telefone },
+    { label: 'WhatsApp (cliente)', raw: cl?.WhatsApp },
+    { label: 'Comercial (cliente)', raw: cl?.comercial },
+  ].map(p => ({ ...p, e164: _toE164(p.raw) }))
+   .filter((p, idx, arr) => p.e164 && arr.findIndex(x => x.e164 === p.e164) === idx);
+
+  const phoneSelectHtml = allPhones.length
+    ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+         <span style="font-size:.7rem;color:#6b7280;white-space:nowrap;">Enviar para:</span>
+         <select id="cdp-wa-select" style="flex:1;min-width:180px;font-size:.75rem;border:1px solid #d1d5db;border-radius:5px;padding:3px 6px;">
+           ${allPhones.map(p => `<option value="${p.e164}">${p.label}: ${p.raw}</option>`).join('')}
+         </select>
+       </div>`
+    : `<div style="font-size:.7rem;color:#ef4444;margin-bottom:8px;">⚠️ Nenhum telefone cadastrado no contrato</div>`;
+
+  function _cmCardHtml(t, idx) {
+    const resolvedBody = _resolveBody(t.corpo || '', t.variaveis || '[]');
+    const lastSent = sendLog[t.template_id];
+    const diasPassados = lastSent ? Math.floor((Date.now() - new Date(lastSent).getTime()) / 86400000) : null;
+    const cooldown = t.intervalo_dias || 10;
+    const emCooldown = diasPassados !== null && diasPassados < cooldown;
+    const faltam = emCooldown ? cooldown - diasPassados : 0;
+
+    let cooldownBadge = '';
+    if (diasPassados !== null) {
+      cooldownBadge = emCooldown
+        ? `<span class="cm-cooldown-badge text-xs text-orange-600 font-medium">⏱ Enviada há ${diasPassados}d · próxima em ${faltam}d</span>`
+        : `<span class="cm-cooldown-badge text-xs text-gray-400">Última: ${diasPassados}d atrás</span>`;
+    }
+
+    const hasPhone = allPhones.length > 0;
+    const canSend = hasPhone && !emCooldown;
+    const sendBtnStyle = canSend
+      ? 'background:#16a34a;color:#fff;border:none;cursor:pointer;'
+      : 'background:#d1d5db;color:#9ca3af;border:none;cursor:not-allowed;';
+    const sendTitle = !hasPhone ? 'Nenhum telefone cadastrado no contrato'
+                   : emCooldown ? `Aguarde ${faltam} dia(s) para enviar novamente`
+                   : 'Enviar via WhatsApp (ChatMix)';
+
+    return `<div class="border border-blue-200 rounded-lg p-3 bg-blue-50" data-cm-idx="${idx}">
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="text-xs font-semibold text-gray-700">💬 ${t.nome}</span>
+        <div class="flex items-center gap-1.5">
+          ${cooldownBadge}
+          <button class="cm-copy-btn text-xs text-blue-500 hover:text-blue-700 flex-shrink-0">📋 Copiar</button>
+        </div>
+      </div>
+      <p class="text-xs text-gray-700 leading-relaxed whitespace-pre-line mb-2 cm-body-text">${resolvedBody || '<em class="text-gray-400">Sem corpo cadastrado</em>'}</p>
+      <button class="cm-send-btn" style="padding:4px 12px;border-radius:5px;font-size:.72rem;font-weight:700;${sendBtnStyle}"
+              title="${sendTitle}" ${!canSend ? 'disabled' : ''}>
+        📤 Enviar WhatsApp
+      </button>
+      <div class="cdp-copy-ok hidden mt-1.5 text-xs text-green-600 font-medium">✅ Copiado!</div>
+    </div>`;
+  }
+
+  const cmSection = cmTemplates.length
+    ? `<div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-3 mb-1">📤 ChatMix — Envio Direto</div>
+       ${phoneSelectHtml}
+       <div class="flex flex-col gap-2" id="cdp-cm-cards">${cmTemplates.map(_cmCardHtml).join('')}</div>`
+    : '';
+
   pane.innerHTML = `
     ${situacaoHtml}
     <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-1">Mensagens Prontas</div>
@@ -1091,12 +1185,71 @@ function _cdpRenderMensagens(c, s) {
       <p class="text-xs text-gray-700 leading-relaxed whitespace-pre-line">${t.msg}</p>
       <div class="cdp-copy-ok hidden mt-1.5 text-xs text-green-600 font-medium">✅ Copiado para a área de transferência!</div>
     </div>`).join('')}
-    <div class="pt-1 border-t border-gray-100">
+    ${cmSection}
+    <div class="pt-1 border-t border-gray-100 mt-2">
       <button onclick="switchCdpTab('acomp')"
         class="w-full text-center text-xs text-blue-600 hover:text-blue-800 py-1.5 font-medium">
         📋 Registrar Ação após o contato →
       </button>
     </div>`;
+
+  // Wire up ChatMix buttons via addEventListener (safe, no JSON in attributes)
+  pane.querySelectorAll('[data-cm-idx]').forEach(card => {
+    const idx = parseInt(card.dataset.cmIdx, 10);
+    const t = cmTemplates[idx];
+    if (!t) return;
+    const resolvedBody = _resolveBody(t.corpo || '', t.variaveis || '[]');
+
+    card.querySelector('.cm-copy-btn')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(resolvedBody).then(() => {
+        const ok = card.querySelector('.cdp-copy-ok');
+        if (ok) { ok.classList.remove('hidden'); setTimeout(() => ok.classList.add('hidden'), 1800); }
+      });
+    });
+
+    card.querySelector('.cm-send-btn')?.addEventListener('click', async function() {
+      if (this.disabled) return;
+      this.disabled = true;
+      this.textContent = '⏳ Enviando…';
+      let varNames = [];
+      try { varNames = typeof t.variaveis === 'string' ? JSON.parse(t.variaveis) : (t.variaveis || []); } catch {}
+      const valores = varNames.map(v => varMap[v] ?? v);
+      try {
+        const selectedNum = document.getElementById('cdp-wa-select')?.value || allPhones[0]?.e164 || '';
+        const r = await fetch('/api/behavior/chatmix/send', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ numero: selectedNum, template_id: t.template_id, valores, contrato: String(contrato) }),
+        });
+        const d = await r.json();
+        if (r.ok) {
+          this.textContent = '✅ Enviado!';
+          this.style.background = '#6b7280';
+          const cooldownEl = card.querySelector('.cm-cooldown-badge');
+          const intervaloDias = t.intervalo_dias || 10;
+          if (cooldownEl) {
+            cooldownEl.className = 'cm-cooldown-badge text-xs text-orange-600 font-medium';
+            cooldownEl.textContent = 'Enviada agora · próxima em ' + intervaloDias + 'd';
+          } else {
+            const sp = document.createElement('span');
+            sp.className = 'cm-cooldown-badge text-xs text-orange-600 font-medium';
+            sp.textContent = 'Enviada agora · próxima em ' + intervaloDias + 'd';
+            card.querySelector('.flex.items-center.gap-1\\.5')?.prepend(sp);
+          }
+        } else {
+          this.disabled = false;
+          this.textContent = '📤 Enviar WhatsApp';
+          this.style.background = '#16a34a';
+          alert('Erro: ' + (d.error || JSON.stringify(d)));
+        }
+      } catch(e) {
+        this.disabled = false;
+        this.textContent = '📤 Enviar WhatsApp';
+        this.style.background = '#16a34a';
+        alert('Erro: ' + e.message);
+      }
+    });
+  });
 }
 
 function showClientDetail(contratoId) {
@@ -1135,7 +1288,7 @@ function _renderClientDetail(d) {
   document.getElementById('cdp-header').style.background = isCanc ? '#991b1b' : '#1d4ed8';
 
   // --- ABA MENSAGENS ---
-  _cdpRenderMensagens(c, s);
+  _cdpRenderMensagens(c, s, cl);
 
   // --- ABA CONTRATO ---
   const badges = document.getElementById('cdp-status-badges');

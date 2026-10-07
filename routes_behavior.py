@@ -5311,3 +5311,169 @@ def api_ret_sync_visitas():
             except: pass
         logger.error(f"Erro sync-visitas: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# ChatMix — Mensagens Prontas (templates e envio via WhatsApp Business)
+# ---------------------------------------------------------------------------
+
+@behavior_bp.route('/chatmix/templates', methods=['GET'])
+def api_chatmix_templates_list():
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, nome, template_id, corpo, variaveis, intervalo_dias, criado_em FROM chatmix_templates ORDER BY id"
+        ).fetchall()
+        return jsonify([dict(r) for r in rows])
+    except Exception as e:
+        logger.error(f"chatmix templates list: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@behavior_bp.route('/chatmix/templates', methods=['POST'])
+def api_chatmix_templates_create():
+    conn = get_db()
+    try:
+        data        = request.get_json(force=True) or {}
+        nome        = str(data.get('nome',        '')).strip()
+        template_id = str(data.get('template_id', '')).strip()
+        corpo       = str(data.get('corpo',        '')).strip()
+        variaveis      = data.get('variaveis', [])
+        intervalo_dias = int(data.get('intervalo_dias') or 10)
+        if not nome:        return jsonify({"error": "nome é obrigatório"}), 400
+        if not template_id: return jsonify({"error": "template_id é obrigatório"}), 400
+        if not isinstance(variaveis, list): variaveis = []
+        cur = conn.execute(
+            "INSERT INTO chatmix_templates (nome, template_id, corpo, variaveis, intervalo_dias) VALUES (?, ?, ?, ?, ?)",
+            (nome, template_id, corpo, _json.dumps(variaveis), intervalo_dias)
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT id, nome, template_id, corpo, variaveis, intervalo_dias, criado_em FROM chatmix_templates WHERE id = ?",
+            (cur.lastrowid,)
+        ).fetchone()
+        return jsonify(dict(row)), 201
+    except Exception as e:
+        logger.error(f"chatmix templates create: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@behavior_bp.route('/chatmix/templates/<int:tmpl_id>', methods=['DELETE'])
+def api_chatmix_templates_delete(tmpl_id):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM chatmix_templates WHERE id = ?", (tmpl_id,))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        logger.error(f"chatmix templates delete {tmpl_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@behavior_bp.route('/chatmix/settings', methods=['GET'])
+def api_chatmix_settings_get():
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT key, value FROM Settings WHERE key IN ('chatmix_token', 'chatmix_key')"
+        ).fetchall()
+        cfg = {r['key']: r['value'] or '' for r in rows}
+        return jsonify({'chatmix_token': cfg.get('chatmix_token', ''), 'chatmix_key': cfg.get('chatmix_key', '')})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@behavior_bp.route('/chatmix/settings', methods=['PUT'])
+def api_chatmix_settings_put():
+    conn = get_db()
+    try:
+        data = request.get_json(force=True) or {}
+        for key in ('chatmix_token', 'chatmix_key'):
+            val = str(data.get(key, '')).strip()
+            conn.execute("INSERT OR REPLACE INTO Settings (key, value) VALUES (?, ?)", (key, val))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@behavior_bp.route('/chatmix/send_log', methods=['GET'])
+def api_chatmix_send_log():
+    contrato = request.args.get('contrato', '').strip()
+    if not contrato:
+        return jsonify([])
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """SELECT template_id, MAX(enviado_em) as ultima
+               FROM chatmix_send_log WHERE contrato=? GROUP BY template_id""",
+            (contrato,)
+        ).fetchall()
+        return jsonify([{'template_id': r['template_id'], 'ultima': r['ultima']} for r in rows])
+    finally:
+        conn.close()
+
+
+@behavior_bp.route('/chatmix/send', methods=['POST'])
+def api_chatmix_send():
+    conn = get_db()
+    try:
+        data        = request.get_json(force=True) or {}
+        numero      = str(data.get('numero',      '')).strip()
+        template_id = str(data.get('template_id', '')).strip()
+        valores     = data.get('valores', [])
+        contrato    = str(data.get('contrato', '')).strip()
+
+        if not numero:      return jsonify({"error": "numero é obrigatório"}), 400
+        if not template_id: return jsonify({"error": "template_id é obrigatório"}), 400
+
+        rows = conn.execute(
+            "SELECT key, value FROM Settings WHERE key IN ('chatmix_token', 'chatmix_key')"
+        ).fetchall()
+        cfg   = {r['key']: r['value'] or '' for r in rows}
+        token = cfg.get('chatmix_token', '')
+        key   = cfg.get('chatmix_key',   '')
+        if not token or not key:
+            return jsonify({"error": "ChatMix não configurado — salve o token e key em Configurar Mensagens"}), 503
+
+        digits = ''.join(c for c in numero if c.isdigit())
+        if not digits.startswith('55'):
+            digits = '55' + digits
+
+        vars_str = '|'.join(str(v) for v in valores)
+        message  = f"variables={vars_str}||template={template_id}" if vars_str else f"template={template_id}"
+
+        resp = requests.post(
+            'https://envios.bulkv2.chatmix.com.br/api',
+            params={'token': token, 'key': key},
+            data={'numero': digits, 'message': message},
+            timeout=15
+        )
+        resp.raise_for_status()
+
+        if contrato:
+            conn.execute(
+                "INSERT INTO chatmix_send_log (contrato, template_id) VALUES (?, ?)",
+                (contrato, template_id)
+            )
+            conn.commit()
+
+        return jsonify({"ok": True, "response": resp.text[:500]})
+    except requests.exceptions.RequestException as e:
+        logger.error(f"chatmix send: {e}")
+        return jsonify({"error": f"Erro ao enviar: {e}"}), 502
+    except Exception as e:
+        logger.error(f"chatmix send: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()

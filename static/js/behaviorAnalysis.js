@@ -2223,6 +2223,205 @@ async function renderListaRetencaoTab() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ChatMix — Mensagens Prontas
+// ─────────────────────────────────────────────────────────────────────────────
+let _cmTemplates = null;
+window._cmCurrentAlertasData = [];
+
+async function _loadChatmixTemplates(forceRefresh = false) {
+    if (_cmTemplates && !forceRefresh) return _cmTemplates;
+    try {
+        const r = await fetch(`${state.API_BASE_URL}/api/behavior/chatmix/templates`);
+        _cmTemplates = r.ok ? await r.json() : [];
+    } catch { _cmTemplates = []; }
+    return _cmTemplates;
+}
+
+function _cmResolveBody(corpo, variaveis, row) {
+    const varMap = {
+        nome:         (row.cliente || '').split(' ')[0] || 'Cliente',
+        contrato:     String(row.contrato || ''),
+        fat_vencidas: String(row.fat_vencidas || 0),
+        val_vencido:  row.val_vencido != null
+            ? `R$ ${Number(row.val_vencido).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+            : 'R$ 0,00',
+    };
+    let text = corpo || '';
+    let vars = [];
+    try { vars = JSON.parse(variaveis || '[]'); } catch { vars = []; }
+    vars.forEach((v, i) => { text = text.split(`{{${i + 1}}}`).join(varMap[v] ?? v); });
+    return text;
+}
+
+function _cmClosePopover() {
+    const p = document.getElementById('cm-popover');
+    if (p) p.remove();
+}
+
+function _cmShowPopover(btn, row) {
+    const existing = document.getElementById('cm-popover');
+    if (existing) {
+        if (existing._srcBtn === btn) { existing.remove(); return; }
+        existing.remove();
+    }
+
+    const templates = _cmTemplates || [];
+    const div = document.createElement('div');
+    div.id = 'cm-popover';
+    div._srcBtn = btn;
+    div.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1px solid #d1d5db;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.18);padding:12px;width:340px;max-height:420px;overflow-y:auto;';
+
+    const nome = (row.cliente || '').split(' ')[0] || 'Cliente';
+    const hasPhone = !!(row.whatsapp || '').replace(/\D/g, '');
+
+    const items = templates.length
+        ? templates.map(t => {
+            const body = _cmResolveBody(t.corpo, t.variaveis, row);
+            const bodyHtml = body.replace(/\n/g, '<br>');
+            let vars = []; try { vars = JSON.parse(t.variaveis || '[]'); } catch {}
+            const valores = vars.map(v => _cmResolveBody(`{{1}}`, JSON.stringify([v]), row) === `{{1}}` ? v : _cmResolveBody(`{{1}}`, JSON.stringify([v]), row));
+            const valoresResolved = vars.map((v, i) => _cmResolveBody(`{{${i+1}}}`, JSON.stringify(vars), row));
+            return `
+            <div style="border:1px solid #e5e7eb;border-radius:7px;padding:9px;margin-bottom:8px;background:#f9fafb;">
+                <div style="font-size:.72rem;font-weight:700;color:#1e293b;margin-bottom:5px;">${t.nome}</div>
+                <div style="font-size:.73rem;color:#374151;line-height:1.55;margin-bottom:7px;white-space:pre-wrap;">${bodyHtml}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="cm-copiar" data-body="${encodeURIComponent(body)}"
+                        style="font-size:.68rem;padding:3px 9px;border-radius:4px;background:#e5e7eb;border:none;cursor:pointer;color:#374151;font-weight:600;">
+                        📋 Copiar
+                    </button>
+                    <button class="cm-enviar"
+                        data-tmpl-id="${encodeURIComponent(t.template_id)}"
+                        data-numero="${encodeURIComponent(row.whatsapp || '')}"
+                        data-valores="${encodeURIComponent(JSON.stringify((() => { let vs=[]; try{vs=JSON.parse(t.variaveis||'[]')}catch{} const vm={nome:(row.cliente||'').split(' ')[0]||'Cliente',contrato:String(row.contrato||''),fat_vencidas:String(row.fat_vencidas||0),val_vencido:row.val_vencido!=null?'R$ '+Number(row.val_vencido).toLocaleString('pt-BR',{minimumFractionDigits:2}):'R$ 0,00'}; return vs.map(v=>vm[v]??v); })()))}"
+                        ${!hasPhone ? 'disabled title="Cliente sem WhatsApp"' : ''}
+                        style="font-size:.68rem;padding:3px 9px;border-radius:4px;background:${hasPhone ? '#059669' : '#9ca3af'};border:none;cursor:${hasPhone ? 'pointer' : 'not-allowed'};color:#fff;font-weight:600;">
+                        📤 Enviar
+                    </button>
+                </div>
+            </div>`;
+        }).join('')
+        : '<p style="font-size:.78rem;color:#6b7280;text-align:center;padding:8px 0;">Nenhum template. Configure em ⚙️ Configurar Mensagens.</p>';
+
+    div.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-size:.8rem;font-weight:700;color:#111;">💬 Mensagens Prontas — ${nome}</div>
+            <button onclick="document.getElementById('cm-popover')?.remove()" style="background:none;border:none;cursor:pointer;font-size:1rem;color:#9ca3af;line-height:1;">✕</button>
+        </div>
+        ${!hasPhone ? '<div style="font-size:.72rem;color:#ef4444;margin-bottom:8px;">⚠️ Sem WhatsApp — apenas cópia disponível</div>' : ''}
+        ${items}
+    `;
+    document.body.appendChild(div);
+
+    const rect = btn.getBoundingClientRect();
+    const left = Math.min(rect.left, window.innerWidth - 360);
+    div.style.top  = Math.min(rect.bottom + 4, window.innerHeight - 440) + 'px';
+    div.style.left = Math.max(4, left) + 'px';
+
+    div.querySelectorAll('.cm-copiar').forEach(b => {
+        b.addEventListener('click', e => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(decodeURIComponent(b.dataset.body)).then(() => {
+                const orig = b.textContent;
+                b.textContent = '✅ Copiado!';
+                setTimeout(() => { b.textContent = orig; }, 1500);
+            });
+        });
+    });
+
+    div.querySelectorAll('.cm-enviar').forEach(b => {
+        b.addEventListener('click', async e => {
+            e.stopPropagation();
+            if (b.disabled) return;
+            const numero      = decodeURIComponent(b.dataset.numero);
+            const templateId  = decodeURIComponent(b.dataset.tmplId);
+            let valores = [];
+            try { valores = JSON.parse(decodeURIComponent(b.dataset.valores)); } catch {}
+            b.textContent = '⏳ Enviando...';
+            b.disabled = true;
+            try {
+                const resp = await fetch(`${state.API_BASE_URL}/api/behavior/chatmix/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ numero, template_id: templateId, valores }),
+                });
+                const result = await resp.json();
+                if (resp.ok) {
+                    b.textContent = '✅ Enviado!';
+                    b.style.background = '#16a34a';
+                } else {
+                    b.textContent = '❌ Falhou';
+                    b.style.background = '#dc2626';
+                    alert(`Erro ao enviar: ${result.error || 'desconhecido'}`);
+                    b.disabled = false;
+                }
+            } catch (err) {
+                b.textContent = '❌ Erro';
+                b.style.background = '#dc2626';
+                alert(`Erro: ${err.message}`);
+                b.disabled = false;
+            }
+        });
+    });
+}
+
+window._cmMsg = function (btn, idx) {
+    const row = window._cmCurrentAlertasData[idx];
+    if (row) _cmShowPopover(btn, row);
+};
+
+document.addEventListener('click', e => {
+    const pop = document.getElementById('cm-popover');
+    if (!pop) return;
+    if (!pop.contains(e.target) && !e.target.classList.contains('cm-msg-btn')) pop.remove();
+});
+
+async function _cmRenderConfigPanel() {
+    const listEl = document.getElementById('cm-templates-list');
+    if (!listEl) return;
+    listEl.innerHTML = '<span style="font-size:.75rem;color:#9ca3af;">Carregando…</span>';
+
+    // Load credentials
+    try {
+        const sr = await fetch(`${state.API_BASE_URL}/api/behavior/chatmix/settings`);
+        if (sr.ok) {
+            const cfg = await sr.json();
+            const ti = document.getElementById('cm-token-input');
+            const ki = document.getElementById('cm-key-input');
+            if (ti) ti.value = cfg.chatmix_token || '';
+            if (ki) ki.value = cfg.chatmix_key || '';
+        }
+    } catch {}
+
+    const templates = await _loadChatmixTemplates(true);
+    if (!templates.length) {
+        listEl.innerHTML = '<span style="font-size:.75rem;color:#9ca3af;">Nenhum template cadastrado.</span>';
+        return;
+    }
+    listEl.innerHTML = templates.map(t => {
+        let vars = []; try { vars = JSON.parse(t.variaveis || '[]'); } catch {}
+        return `
+        <div style="display:flex;align-items:flex-start;gap:8px;border:1px solid #e5e7eb;border-radius:6px;padding:7px;margin-bottom:6px;background:#fff;">
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:.76rem;font-weight:700;color:#1e293b;">${t.nome}</div>
+                <div style="font-size:.7rem;color:#6b7280;">ID: ${t.template_id} · Vars: ${vars.join(', ') || '—'}</div>
+                <div style="font-size:.7rem;color:#374151;margin-top:3px;white-space:pre-wrap;max-height:60px;overflow:hidden;">${(t.corpo || '').slice(0, 120)}${(t.corpo || '').length > 120 ? '…' : ''}</div>
+            </div>
+            <button onclick="window._cmDeleteTemplate(${t.id})" style="flex-shrink:0;padding:3px 7px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;font-size:.68rem;cursor:pointer;font-weight:700;">🗑</button>
+        </div>`;
+    }).join('');
+}
+
+window._cmDeleteTemplate = async function (id) {
+    if (!confirm('Excluir este template?')) return;
+    try {
+        await fetch(`${state.API_BASE_URL}/api/behavior/chatmix/templates/${id}`, { method: 'DELETE' });
+        _cmTemplates = null;
+        await _cmRenderConfigPanel();
+    } catch (e) { alert(`Erro: ${e.message}`); }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TAB: Alertas de Ação
 // ─────────────────────────────────────────────────────────────────────────────
 async function renderAlertasAcaoTab() {
@@ -2241,6 +2440,7 @@ async function renderAlertasAcaoTab() {
 
     tabContent.innerHTML = `
         <div id="alerta-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
+
         <div class="flex flex-wrap justify-center gap-4 mb-4 items-end">
             <div>
                 <label class="text-sm font-medium text-gray-700 mr-1">Cliente:</label>
@@ -2316,6 +2516,8 @@ async function renderAlertasAcaoTab() {
             const response = await fetch(`${state.API_BASE_URL}/api/behavior/action_alerts?${p}`);
             if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar alertas de ação.'));
             const result = await response.json();
+            window._cmCurrentAlertasData = result.data || [];
+            await _loadChatmixTemplates();
 
             // KPI tiles on first page
             const kpiRow = document.getElementById('alerta-kpi-row');
@@ -2353,11 +2555,6 @@ async function renderAlertasAcaoTab() {
             let tableHtml = '<p class="text-center text-gray-500 mt-4">Nenhum alerta encontrado para os filtros selecionados.</p>';
             if (result.data?.length > 0) {
                 const rows = result.data.map((r, i) => {
-                    const digits = (r.whatsapp || '').replace(/\D/g, '');
-                    const wa = digits ? (digits.startsWith('55') ? digits : '55' + digits) : null;
-                    const waCell = wa
-                        ? `<a href="https://wa.me/${wa}" target="_blank" class="text-green-600 font-bold">💬 WhatsApp</a>`
-                        : '-';
                     const tierStyle = TIER_STYLE[r.tier] || '';
                     const acaoText = (r.acao || '');
                     return `<tr data-contrato="${r.contrato}" style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;cursor:pointer;" title="Clique para ver detalhes">
@@ -2418,7 +2615,7 @@ async function renderAlertasAcaoTab() {
                             };
                             return _SIT_BADGE[r.situacao_retirada] || _b('#f3f4f6','#6b7280','#e5e7eb','','Sem retirada','contrato ativo sem processo');
                         })()}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;">${waCell}</td>
+                        <td style="padding:6px 10px;text-align:center;" onclick="event.stopPropagation()"><button onclick="window._cmMsg(this,${i})" style="background:none;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;font-size:.85rem;padding:2px 6px;" title="Enviar mensagem pronta">💬</button></td>
                     </tr>`;
                 }).join('');
 
@@ -2437,7 +2634,7 @@ async function renderAlertasAcaoTab() {
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Dias Venc.</th>
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Sem Conexão</th>
                                 <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Sit. Retirada</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">WhatsApp</th>
+                                <th style="padding:8px 10px;text-align:center;white-space:nowrap;">Msg</th>
                             </tr></thead>
                             <tbody>${rows}</tbody>
                         </table>

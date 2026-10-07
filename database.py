@@ -102,10 +102,38 @@ def init_db_users():
             except Exception:
                 pass  # tabela ainda não existe no primeiro boot
 
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS chatmix_templates (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome         TEXT NOT NULL,
+                template_id  TEXT NOT NULL,
+                corpo        TEXT NOT NULL DEFAULT '',
+                variaveis    TEXT NOT NULL DEFAULT '[]',
+                intervalo_dias INTEGER NOT NULL DEFAULT 10,
+                criado_em    DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS chatmix_send_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                contrato    TEXT NOT NULL,
+                template_id TEXT NOT NULL,
+                enviado_em  DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_cslog_contrato ON chatmix_send_log(contrato)')
+
         # Migrations
         cursor = conn.cursor()
         cursor.execute("PRAGMA table_info(Users)")
         columns = [info[1] for info in cursor.fetchall()]
+
+        # chatmix_templates migration
+        cursor.execute("PRAGMA table_info(chatmix_templates)")
+        cm_cols = [info[1] for info in cursor.fetchall()]
+        if cm_cols and 'intervalo_dias' not in cm_cols:
+            conn.execute("ALTER TABLE chatmix_templates ADD COLUMN intervalo_dias INTEGER NOT NULL DEFAULT 10")
 
         if 'is_active' not in columns:
             logger.info("Atualizando tabela Users: Adicionando 'is_active'...")
