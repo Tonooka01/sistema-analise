@@ -4,14 +4,44 @@ Blueprint administrativo — settings, usuários, logs de acesso.
 """
 
 import json
+import os
+import signal
 import sqlite3
+import subprocess
+import zipfile
 from datetime import datetime
-from flask import Blueprint, render_template, request, jsonify, abort
+from pathlib import Path
+from flask import Blueprint, render_template, request, jsonify, abort, send_file
 from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 from database import get_db_connection
 
 admin_bp = Blueprint('admin_bp', __name__)
+
+# ── Versionamento ────────────────────────────────────────────────
+_APP_DIR      = Path(__file__).parent
+_VERSIONS_DIR = _APP_DIR / 'versions'
+_VERSION_FILE = _APP_DIR / 'version.txt'
+_MAX_OLD      = 3   # manter 3 versões antigas + 1 atual = 4 total
+_SKIP_DIRS    = {'__pycache__', 'versions', '.git', 'node_modules', '.venv', 'venv'}
+_SKIP_EXTS    = {'.pyc', '.log', '.pid', '.db', '.db-wal', '.db-shm'}
+
+def _current_ver():
+    if _VERSION_FILE.exists():
+        return _VERSION_FILE.read_text().strip()
+    return '1.000'
+
+def _next_ver(v):
+    try:
+        major, minor = v.split('.')
+        return f"{major}.{int(minor)+1:03d}"
+    except Exception:
+        return '1.001'
+
+def _list_zips():
+    if not _VERSIONS_DIR.exists():
+        return []
+    return sorted(_VERSIONS_DIR.glob('v*.zip'), key=lambda p: p.stat().st_mtime)
 
 
 @admin_bp.route('/api/admin/settings', methods=['GET', 'POST'])
@@ -142,6 +172,101 @@ def set_user_permissions():
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+
+
+@admin_bp.route('/api/admin/version', methods=['GET'])
+@login_required
+def get_version():
+    if current_user.username != 'admin':
+        return jsonify({'error': 'Acesso negado'}), 403
+    zips = _list_zips()
+    versions = []
+    for z in reversed(zips):
+        s = z.stat()
+        versions.append({
+            'filename': z.name,
+            'label':    z.stem,
+            'size_kb':  round(s.st_size / 1024, 1),
+            'saved_at': datetime.fromtimestamp(s.st_mtime).strftime('%d/%m/%Y %H:%M'),
+        })
+    return jsonify({'current': _current_ver(), 'versions': versions})
+
+
+@admin_bp.route('/api/admin/version/save', methods=['POST'])
+@login_required
+def save_version():
+    if current_user.username != 'admin':
+        return jsonify({'error': 'Acesso negado'}), 403
+
+    _VERSIONS_DIR.mkdir(exist_ok=True)
+    current = _current_ver()
+    zip_path = _VERSIONS_DIR / f'v{current}.zip'
+
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+        for item in _APP_DIR.rglob('*'):
+            rel = item.relative_to(_APP_DIR)
+            if any(p in _SKIP_DIRS for p in rel.parts):
+                continue
+            if item.suffix in _SKIP_EXTS:
+                continue
+            if item.is_file():
+                zf.write(item, rel)
+
+    next_v = _next_ver(current)
+    _VERSION_FILE.write_text(next_v)
+
+    # Manter apenas _MAX_OLD versões antigas
+    all_zips = _list_zips()
+    while len(all_zips) > _MAX_OLD:
+        all_zips[0].unlink()
+        all_zips = all_zips[1:]
+
+    return jsonify({'ok': True, 'saved': current, 'current': next_v})
+
+
+@admin_bp.route('/api/admin/version/restore', methods=['POST'])
+@login_required
+def restore_version():
+    if current_user.username != 'admin':
+        return jsonify({'error': 'Acesso negado'}), 403
+
+    filename = (request.json or {}).get('filename', '')
+    if not filename.endswith('.zip') or '/' in filename or '..' in filename:
+        return jsonify({'error': 'Arquivo inválido'}), 400
+
+    zip_path = _VERSIONS_DIR / filename
+    if not zip_path.exists():
+        return jsonify({'error': 'Versão não encontrada'}), 404
+
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        zf.extractall(_APP_DIR)
+
+    # Tenta reiniciar o serviço
+    try:
+        pid_file = _APP_DIR / 'gunicorn.pid'
+        if pid_file.exists():
+            pid = int(pid_file.read_text().strip())
+            os.kill(pid, signal.SIGHUP)
+        else:
+            subprocess.Popen(['systemctl', 'restart', 'analise'],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+    return jsonify({'ok': True, 'restored': filename.replace('.zip', '')})
+
+
+@admin_bp.route('/api/admin/version/download/<filename>', methods=['GET'])
+@login_required
+def download_version(filename):
+    if current_user.username != 'admin':
+        abort(403)
+    if not filename.endswith('.zip') or '/' in filename or '..' in filename:
+        abort(400)
+    zip_path = _VERSIONS_DIR / filename
+    if not zip_path.exists():
+        abort(404)
+    return send_file(zip_path, as_attachment=True, download_name=filename)
 
 
 @admin_bp.route('/api/admin/profile', methods=['POST'])

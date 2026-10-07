@@ -10,3 +10,4 @@ Tabelas/
 *.sqlite3
 logs/
 logs/*.log
+versions/

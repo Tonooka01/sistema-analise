@@ -608,6 +608,24 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Versões do Sistema -->
+            <div class="border rounded-lg p-4 mt-4">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <p class="text-sm font-semibold text-gray-700">🗂️ Versões do Sistema</p>
+                        <p class="text-xs text-gray-400">Versão atual: <span id="sysVerCurrent" class="font-mono font-bold text-blue-600">—</span></p>
+                    </div>
+                    <button onclick="sysVerSave()"
+                            class="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-700 flex items-center gap-1">
+                        📸 Salvar Versão
+                    </button>
+                </div>
+                <span id="sysVerMsg" class="text-xs hidden mb-2 block"></span>
+                <div id="sysVerList" class="space-y-1.5 text-xs text-gray-500">
+                    <p class="italic">Carregando versões…</p>
+                </div>
+            </div>
             {% endif %}
 
         </div>
@@ -755,12 +773,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('adminSettingsModal');
     if (modal) {
         new MutationObserver(() => {
-            if (modal.classList.contains('show')) { adminLoadAcompConfig(); cmLoadSettings(); }
+            if (modal.classList.contains('show')) { adminLoadAcompConfig(); cmLoadSettings(); sysVerLoad(); }
         }).observe(modal, { attributes: true, attributeFilter: ['class'] });
     }
     // Fallback: botão de abrir
     const openBtn = document.getElementById('openAdminSettingsModalBtn');
-    if (openBtn) openBtn.addEventListener('click', () => setTimeout(() => { adminLoadAcompConfig(); cmLoadSettings(); }, 100));
+    if (openBtn) openBtn.addEventListener('click', () => setTimeout(() => { adminLoadAcompConfig(); cmLoadSettings(); sysVerLoad(); }, 100));
 });
 
 // ---- ChatMix — Mensagens Prontas ----
@@ -873,6 +891,83 @@ async function cmDeleteTemplate(id) {
     if (!confirm('Excluir este template?')) return;
     await fetch(`/api/behavior/chatmix/templates/${id}`, { method: 'DELETE' });
     cmLoadTemplates();
+}
+
+// ---- Versões do Sistema ----
+async function sysVerLoad() {
+    try {
+        const r = await fetch('/api/admin/version');
+        const d = await r.json();
+        const cur = document.getElementById('sysVerCurrent');
+        if (cur) cur.textContent = d.current || '—';
+        const list = document.getElementById('sysVerList');
+        if (!list) return;
+        if (!d.versions || !d.versions.length) {
+            list.innerHTML = '<p class="italic text-gray-400">Nenhuma versão salva ainda.</p>';
+            return;
+        }
+        list.innerHTML = d.versions.map(v => `
+            <div class="flex items-center gap-2 bg-gray-50 border rounded px-3 py-1.5">
+                <span class="font-mono font-semibold text-blue-700 w-14 shrink-0">${v.label}</span>
+                <span class="text-gray-400 flex-1">${v.saved_at} · ${v.size_kb} KB</span>
+                <a href="/api/admin/version/download/${v.filename}"
+                   class="text-blue-500 hover:text-blue-700 px-1" title="Download">⬇️</a>
+                <button onclick="sysVerRestore('${v.filename}','${v.label}')"
+                        class="text-orange-500 hover:text-orange-700 px-1" title="Restaurar">♻️</button>
+            </div>
+        `).join('');
+    } catch(e) {
+        const list = document.getElementById('sysVerList');
+        if (list) list.innerHTML = '<p class="text-red-500">Erro ao carregar versões.</p>';
+    }
+}
+
+async function sysVerSave() {
+    const msg = document.getElementById('sysVerMsg');
+    msg.textContent = '⏳ Salvando…';
+    msg.className = 'text-xs block text-blue-600';
+    try {
+        const r = await fetch('/api/admin/version/save', { method: 'POST' });
+        const d = await r.json();
+        if (d.ok) {
+            msg.textContent = `✅ Versão ${d.saved} salva. Atual: ${d.current}`;
+            msg.className = 'text-xs block text-green-600';
+            await sysVerLoad();
+        } else {
+            msg.textContent = '❌ ' + (d.error || 'Erro');
+            msg.className = 'text-xs block text-red-500';
+        }
+    } catch {
+        msg.textContent = '❌ Erro de conexão';
+        msg.className = 'text-xs block text-red-500';
+    }
+    setTimeout(() => msg.classList.add('hidden'), 5000);
+}
+
+async function sysVerRestore(filename, label) {
+    if (!confirm(`Restaurar versão ${label}?\n\nOs arquivos atuais serão substituídos e o servidor será reiniciado.`)) return;
+    const msg = document.getElementById('sysVerMsg');
+    msg.textContent = '⏳ Restaurando…';
+    msg.className = 'text-xs block text-blue-600';
+    try {
+        const r = await fetch('/api/admin/version/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename })
+        });
+        const d = await r.json();
+        if (d.ok) {
+            msg.textContent = `✅ ${d.restored} restaurada. Recarregando em 3s…`;
+            msg.className = 'text-xs block text-green-600';
+            setTimeout(() => location.reload(), 3000);
+        } else {
+            msg.textContent = '❌ ' + (d.error || 'Erro');
+            msg.className = 'text-xs block text-red-500';
+        }
+    } catch {
+        msg.textContent = '❌ Erro de conexão';
+        msg.className = 'text-xs block text-red-500';
+    }
 }
 </script>
 
