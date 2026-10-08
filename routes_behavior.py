@@ -2216,13 +2216,22 @@ def api_behavior_action_alerts():
         city_cond    = "AND Cidade = ?" if city else ""
         city_p       = [city] if city else []
 
-        retirada_vals = request.args.getlist('retirada')
+        retirada_vals   = request.args.getlist('retirada')
+        assunto_ret_vals = request.args.getlist('assunto_ret')
 
         tier_cond    = "AND tier = ?" if tier else ""
         tier_p       = [tier] if tier else []
 
         cliente_cond = "AND A.cliente LIKE ?" if cliente else ""
         cliente_p    = [f"%{cliente}%"] if cliente else []
+
+        if assunto_ret_vals:
+            _ph_ar = ','.join('?' * len(assunto_ret_vals))
+            assunto_ret_cond = f"AND COALESCE(A.ret_ultimo_assunto, A.ret_assunto_aberta, '') IN ({_ph_ar})"
+            assunto_ret_p    = list(assunto_ret_vals)
+        else:
+            assunto_ret_cond = ""
+            assunto_ret_p    = []
 
         if retirada_vals:
             sem_ret   = 'sem_retirada' in retirada_vals
@@ -2440,7 +2449,7 @@ def api_behavior_action_alerts():
         """
 
         count_sql = base_cte + f"""
-            SELECT COUNT(*) AS cnt FROM Alerted A WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond}
+            SELECT COUNT(*) AS cnt FROM Alerted A WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond}
         """
 
         data_sql = base_cte + f"""
@@ -2456,7 +2465,7 @@ def api_behavior_action_alerts():
             FROM Alerted A
             LEFT JOIN Clientes CLI ON CLI.Raz_o_social = A.cliente
             LEFT JOIN Contratos CTR ON CTR.ID = A.contrato
-            WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond}
+            WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond}
             ORDER BY A.score DESC
             LIMIT ? OFFSET ?
         """
@@ -2470,9 +2479,10 @@ def api_behavior_action_alerts():
         """
 
         base_p      = tuple(ret_params) + tuple(city_p)
+        filter_p    = tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + tuple(assunto_ret_p)
         summary_row = conn.execute(summary_sql, base_p).fetchone()
-        total_rows  = conn.execute(count_sql,   base_p + tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p)).fetchone()[0]
-        data_rows   = conn.execute(data_sql,    base_p + tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + (limit, offset)).fetchall()
+        total_rows  = conn.execute(count_sql,   base_p + filter_p).fetchone()[0]
+        data_rows   = conn.execute(data_sql,    base_p + filter_p + (limit, offset)).fetchall()
         cities      = [r[0] for r in conn.execute(cities_sql).fetchall() if r[0]]
 
         summary = dict(summary_row) if summary_row else {

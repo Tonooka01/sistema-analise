@@ -2429,7 +2429,7 @@ async function renderAlertasAcaoTab() {
     if (!tabContent) return;
 
     let _alertaCurrentPage = 1;
-    let _alertaFilters = { city: '', tier: '', cliente: '', retirada: [] };
+    let _alertaFilters = { city: '', tier: '', cliente: '', retirada: [], assunto_ret: [] };
 
     const TIER_STYLE = {
         'Crítico': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
@@ -2490,6 +2490,33 @@ async function renderAlertasAcaoTab() {
                     </label>
                 </div>
             </div>
+            <div style="position:relative;">
+                <label class="text-sm font-medium text-gray-700 mr-1">Assunto OS:</label>
+                <button type="button" id="alertaAssuntoBtn"
+                    style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;background:white;border-radius:6px;font-size:0.875rem;cursor:pointer;min-width:130px;justify-content:space-between;box-shadow:0 1px 2px rgba(0,0,0,.05);">
+                    <span id="alertaAssuntoLabel">Todos</span><span style="font-size:0.7em;">▾</span>
+                </button>
+                <div id="alertaAssuntoMenu" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:white;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:200;min-width:320px;padding:6px 0;">
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="RETIRADA DE EQUIPAMENTO" class="assunto-chk"> Retirada de Equipamento
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="INADIMPLENCIA RETIRADA" class="assunto-chk"> Inadimplência Retirada
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="EQUIPAMENTO NÃO RETIRADO" class="assunto-chk"> Equipamento Não Retirado
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="RETIRADA DE EQUIPAMENTO PONTO ADICIONAL" class="assunto-chk"> Retirada — Ponto Adicional
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="CANCELAMENTO RETIRADA" class="assunto-chk"> Cancelamento Retirada
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="EQUIPAMENTO RENEGOCIADO" class="assunto-chk"> Equipamento Renegociado
+                    </label>
+                </div>
+            </div>
             <button id="btnFilterAlerta" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
         </div>
         <div id="alerta-table-area"></div>
@@ -2511,6 +2538,7 @@ async function renderAlertasAcaoTab() {
             offset
         });
         _alertaFilters.retirada.forEach(v => p.append('retirada', v));
+        _alertaFilters.assunto_ret.forEach(v => p.append('assunto_ret', v));
 
         try {
             const response = await fetch(`${state.API_BASE_URL}/api/behavior/action_alerts?${p}`);
@@ -2673,10 +2701,31 @@ async function renderAlertasAcaoTab() {
     const _RET_LABELS = { ret_aberta: '🔴 Aberta', ret_encaminhada: '🟡 Encaminhada', ret_fin_sem_neg: '⚠️ Finalizada — neg. pendente', neg_com_retirada: '✅ Finalizada — completo', neg_sem_retirada: '🔴 Negativado — sem OS', sem_retirada: 'Sem retirada' };
     _retBtn.addEventListener('click', e => {
         e.stopPropagation();
+        _assuntoMenu.style.display = 'none';
         _retMenu.style.display = _retMenu.style.display === 'none' ? 'block' : 'none';
     });
-    document.addEventListener('click', () => { _retMenu.style.display = 'none'; });
+
+    // Assunto OS dropdown toggle
+    const _assuntoBtn  = tabContent.querySelector('#alertaAssuntoBtn');
+    const _assuntoMenu = tabContent.querySelector('#alertaAssuntoMenu');
+    const _assuntoLbl  = tabContent.querySelector('#alertaAssuntoLabel');
+    const _ASSUNTO_SHORT = {
+        'RETIRADA DE EQUIPAMENTO':                  'Retirada Equip.',
+        'INADIMPLENCIA RETIRADA':                   'Inadim. Retirada',
+        'EQUIPAMENTO NÃO RETIRADO':                 'Equip. N. Retirado',
+        'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL':  'Pto. Adicional',
+        'CANCELAMENTO RETIRADA':                    'Canc. Retirada',
+        'EQUIPAMENTO RENEGOCIADO':                  'Equip. Renegociado',
+    };
+    _assuntoBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        _retMenu.style.display = 'none';
+        _assuntoMenu.style.display = _assuntoMenu.style.display === 'none' ? 'block' : 'none';
+    });
+
+    document.addEventListener('click', () => { _retMenu.style.display = 'none'; _assuntoMenu.style.display = 'none'; });
     _retMenu.addEventListener('click', e => e.stopPropagation());
+    _assuntoMenu.addEventListener('click', e => e.stopPropagation());
 
     tabContent.querySelector('#btnFilterAlerta').addEventListener('click', () => {
         _alertaFilters.city    = document.getElementById('alertaCityFilter')?.value || '';
@@ -2685,6 +2734,9 @@ async function renderAlertasAcaoTab() {
         const checked = [...tabContent.querySelectorAll('.retirada-chk:checked')].map(c => c.value);
         _alertaFilters.retirada = checked;
         _retLbl.textContent = checked.length === 0 ? 'Todas' : checked.length === 1 ? _RET_LABELS[checked[0]] : `${checked.length} selecionados`;
+        const checkedA = [...tabContent.querySelectorAll('.assunto-chk:checked')].map(c => c.value);
+        _alertaFilters.assunto_ret = checkedA;
+        _assuntoLbl.textContent = checkedA.length === 0 ? 'Todos' : checkedA.length === 1 ? _ASSUNTO_SHORT[checkedA[0]] || checkedA[0] : `${checkedA.length} selecionados`;
         fetchAndRenderAlertaTable(1);
     });
 
