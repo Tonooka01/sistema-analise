@@ -120,6 +120,19 @@ export function handleBehaviorTabChange(tabName) {
         tab.classList.toggle('active', tab.dataset.tab === tabName);
     });
 
+    // Se a aba ativa está no painel de Análises, abre-o automaticamente
+    const _analysesRow = document.getElementById('bhAnalysesRow');
+    const _toggleBtn   = document.getElementById('btnToggleAnalyses');
+    const _chev        = document.getElementById('btnToggleAnalysesChev');
+    if (_analysesRow) {
+        const isAnalysisTab = !!_analysesRow.querySelector(`.tab-link[data-tab="${tabName}"]`);
+        if (isAnalysisTab && _analysesRow.style.display === 'none') {
+            _analysesRow.style.display = 'flex';
+            if (_toggleBtn) _toggleBtn.setAttribute('aria-expanded', 'true');
+            if (_chev)      _chev.textContent = '▾';
+        }
+    }
+
     // Mostra o painel de conteúdo correto
     dom.behaviorAnalysisTabContent.querySelectorAll('.tab-pane').forEach(pane => {
         pane.classList.toggle('active', pane.id === `tab-content-${tabName}`);

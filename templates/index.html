@@ -108,6 +108,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tab = link.dataset.tab;
                 if (tab && !perms.includes('behavior:' + tab)) link.style.display = 'none';
             });
+            // Oculta botão "Análises" se nenhuma aba de análise ficou visível
+            const _analysesRow = document.getElementById('bhAnalysesRow');
+            const _toggleBtn   = document.getElementById('btnToggleAnalyses');
+            if (_analysesRow && _toggleBtn) {
+                const anyVisible = [..._analysesRow.querySelectorAll('.tab-link')].some(l => l.style.display !== 'none');
+                if (!anyVisible) _toggleBtn.style.display = 'none';
+            }
         }
     }
 
@@ -421,29 +428,60 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
     </div>
 
     <div id="behavior-analysis-container" class="hidden">
-        <div class="border-b border-gray-200 mb-4">
-            <nav id="behavior-analysis-tabs" class="-mb-px flex flex-wrap gap-x-4" aria-label="Tabs">
-                <a href="#" data-tab="reclamacoes" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Padrão de Reclamações</a>
-                <a href="#" data-tab="churn" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Padrão de Churn</a>
-                <a href="#" data-tab="preditiva" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Análise Preditiva de Churn</a>
-                <a href="#" data-tab="qualidade" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Qualidade de Rede</a>
-                <a href="#" data-tab="acoes" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Plano de Ações</a>
-                <a href="#" data-tab="temporal_suporte" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Padrão Temporal de Suporte</a>
-                <a href="#" data-tab="financeiro_ativo" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Comportamento Financeiro</a>
-                <a href="#" data-tab="inatividade" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Inatividade de Conexão</a>
-                <a href="#" data-tab="sazonalidade_canc" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Sazonalidade de Cancelamentos</a>
-                <a href="#" data-tab="causa_queda" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Monitoramento de ONUs</a>
-                <a href="#" data-tab="lista_retencao" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Lista de Retenção Ativa</a>
-                <a href="#" data-tab="alertas_acao" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Alertas de Ação</a>
-                <a href="#" data-tab="retorno" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">📅 Retorno</a>
-                <a href="#" data-tab="motivos_canc" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Motivos de Cancelamento</a>
-                <a href="#" data-tab="padrao_pre_canc" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Padrão Pré-Cancelamento</a>
-                <a href="#" data-tab="lifecycle_risk" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Risco por Ciclo de Vida</a>
-                <a href="#" data-tab="risco_plano" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Análise por Plano</a>
-                <a href="#" data-tab="perfil_pagamento" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Perfil de Pagamento</a>
-                <a href="#" data-tab="acompanhamento" class="tab-link whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Acompanhamento</a>
-            </nav>
-        </div>
+        <!-- Todas as abas ficam no mesmo nav para o JS de ativação funcionar -->
+        <nav id="behavior-analysis-tabs" aria-label="Tabs">
+
+            <!-- ── Faixa: Atendimento Diário ── -->
+            <div style="background:#f0f4ff;border:1px solid #c7d7fa;border-radius:10px;padding:6px 10px;margin-bottom:6px;display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
+                <span style="font-size:0.68rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-right:6px;white-space:nowrap;">📋 Atendimento</span>
+                <a href="#" data-tab="alertas_acao"    class="tab-link bh-daily" style="">Alertas de Ação</a>
+                <a href="#" data-tab="acoes"            class="tab-link bh-daily" style="">Plano de Ações</a>
+                <a href="#" data-tab="retorno"          class="tab-link bh-daily" style="">📅 Retorno</a>
+                <a href="#" data-tab="acompanhamento"  class="tab-link bh-daily" style="">Acompanhamento</a>
+                <a href="#" data-tab="perfil_pagamento" class="tab-link bh-daily" style="">Perfil de Pagamento</a>
+            </div>
+
+            <!-- ── Linha: Análises (colapsável) ── -->
+            <div style="margin-bottom:4px;">
+                <button id="btnToggleAnalyses" onclick="(function(){var el=document.getElementById('bhAnalysesRow');var open=el.style.display!=='none';el.style.display=open?'none':'flex';document.getElementById('btnToggleAnalyses').setAttribute('aria-expanded',!open);document.getElementById('btnToggleAnalysesChev').textContent=open?'▸':'▾';})()" aria-expanded="false"
+                    style="font-size:0.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;background:none;border:none;cursor:pointer;padding:4px 2px;display:flex;align-items:center;gap:4px;">
+                    <span id="btnToggleAnalysesChev">▸</span> Análises
+                </button>
+                <div id="bhAnalysesRow" style="display:none;flex-wrap:wrap;gap-x:16px;border-b:1px solid #e5e7eb;padding-bottom:2px;">
+                    <a href="#" data-tab="preditiva"         class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Análise Preditiva de Churn</a>
+                    <a href="#" data-tab="lista_retencao"    class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Lista de Retenção Ativa</a>
+                    <a href="#" data-tab="churn"             class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Padrão de Churn</a>
+                    <a href="#" data-tab="reclamacoes"       class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Padrão de Reclamações</a>
+                    <a href="#" data-tab="qualidade"         class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Qualidade de Rede</a>
+                    <a href="#" data-tab="temporal_suporte"  class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Padrão Temporal de Suporte</a>
+                    <a href="#" data-tab="financeiro_ativo"  class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Comportamento Financeiro</a>
+                    <a href="#" data-tab="inatividade"       class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Inatividade de Conexão</a>
+                    <a href="#" data-tab="sazonalidade_canc" class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Sazonalidade de Cancelamentos</a>
+                    <a href="#" data-tab="causa_queda"       class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Monitoramento de ONUs</a>
+                    <a href="#" data-tab="motivos_canc"      class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Motivos de Cancelamento</a>
+                    <a href="#" data-tab="padrao_pre_canc"   class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Padrão Pré-Cancelamento</a>
+                    <a href="#" data-tab="lifecycle_risk"    class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Risco por Ciclo de Vida</a>
+                    <a href="#" data-tab="risco_plano"       class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Análise por Plano</a>
+                </div>
+            </div>
+        </nav>
+
+        <style>
+        .bh-daily {
+            display:inline-flex; align-items:center;
+            padding:5px 12px; border-radius:6px;
+            font-size:0.82rem; font-weight:600;
+            color:#374151; text-decoration:none;
+            border:1.5px solid transparent;
+            background:white;
+            transition:background .12s, color .12s, border-color .12s;
+            white-space:nowrap;
+        }
+        .bh-daily:hover { background:#e8eeff; color:#1d4ed8; }
+        .bh-daily.active { background:#1d4ed8 !important; color:#fff !important; border-color:#1d4ed8 !important; }
+        /* Quando uma aba de análise está ativa, abre o painel de análises automaticamente */
+        </style>
+        <div style="margin-bottom:8px;"></div>
         <div id="behavior-analysis-tab-content">
             <div id="tab-content-reclamacoes" class="tab-pane"></div>
             <div id="tab-content-churn" class="tab-pane"></div>
