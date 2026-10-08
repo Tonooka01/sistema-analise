@@ -266,7 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
 .sb-group-hdr:hover{background:#f9fafb;}
 .sb-gicon{font-size:.9rem;flex-shrink:0;}
 .sb-glabel{font-size:.75rem;font-weight:600;color:#374151;flex:1;white-space:nowrap;}
-.sb-chev{font-size:.7rem;color:#9ca3af;transition:transform .2s;flex-shrink:0;}
+.sb-chev{font-size:.72rem;color:#9ca3af;transition:transform .2s;flex-shrink:0;}
 .sb-group.open .sb-chev{transform:rotate(180deg);}
 .sb-items{display:none;padding:.2rem 0;}
 .sb-group.open .sb-items{display:block;}
@@ -447,21 +447,50 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
                     style="font-size:0.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;background:none;border:none;cursor:pointer;padding:4px 2px;display:flex;align-items:center;gap:4px;">
                     <span id="btnToggleAnalysesChev">▸</span> Análises
                 </button>
-                <div id="bhAnalysesRow" style="display:none;flex-wrap:wrap;gap-x:16px;border-b:1px solid #e5e7eb;padding-bottom:2px;">
-                    <a href="#" data-tab="preditiva"         class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Análise Preditiva de Churn</a>
-                    <a href="#" data-tab="lista_retencao"    class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Lista de Retenção Ativa</a>
-                    <a href="#" data-tab="churn"             class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Padrão de Churn</a>
-                    <a href="#" data-tab="reclamacoes"       class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Padrão de Reclamações</a>
-                    <a href="#" data-tab="qualidade"         class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Qualidade de Rede</a>
-                    <a href="#" data-tab="temporal_suporte"  class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Padrão Temporal de Suporte</a>
-                    <a href="#" data-tab="financeiro_ativo"  class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Comportamento Financeiro</a>
-                    <a href="#" data-tab="inatividade"       class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Inatividade de Conexão</a>
-                    <a href="#" data-tab="sazonalidade_canc" class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Sazonalidade de Cancelamentos</a>
-                    <a href="#" data-tab="causa_queda"       class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Monitoramento de ONUs</a>
-                    <a href="#" data-tab="motivos_canc"      class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Motivos de Cancelamento</a>
-                    <a href="#" data-tab="padrao_pre_canc"   class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Padrão Pré-Cancelamento</a>
-                    <a href="#" data-tab="lifecycle_risk"    class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Risco por Ciclo de Vida</a>
-                    <a href="#" data-tab="risco_plano"       class="tab-link whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Análise por Plano</a>
+                <div id="bhAnalysesRow" style="display:none;flex-direction:column;gap:3px;border-top:1px solid #e5e7eb;padding-top:6px;padding-bottom:4px;">
+
+                    <!-- Cancelamento -->
+                    <div class="bh-analysis-group">
+                        <span class="bh-group-label">❌ Cancelamento</span>
+                        <div class="bh-group-tabs">
+                            <a href="#" data-tab="churn"             class="tab-link bh-analysis">Padrão de Churn</a>
+                            <a href="#" data-tab="preditiva"         class="tab-link bh-analysis">Análise Preditiva de Churn</a>
+                            <a href="#" data-tab="sazonalidade_canc" class="tab-link bh-analysis">Sazonalidade de Cancelamentos</a>
+                            <a href="#" data-tab="motivos_canc"      class="tab-link bh-analysis">Motivos de Cancelamento</a>
+                            <a href="#" data-tab="padrao_pre_canc"   class="tab-link bh-analysis">Padrão Pré-Cancelamento</a>
+                        </div>
+                    </div>
+
+                    <!-- Rede & Qualidade -->
+                    <div class="bh-analysis-group">
+                        <span class="bh-group-label">📡 Rede & Qualidade</span>
+                        <div class="bh-group-tabs">
+                            <a href="#" data-tab="qualidade"        class="tab-link bh-analysis">Qualidade de Rede</a>
+                            <a href="#" data-tab="inatividade"      class="tab-link bh-analysis">Inatividade de Conexão</a>
+                            <a href="#" data-tab="causa_queda"      class="tab-link bh-analysis">Monitoramento de ONUs</a>
+                            <a href="#" data-tab="temporal_suporte" class="tab-link bh-analysis">Padrão Temporal de Suporte</a>
+                        </div>
+                    </div>
+
+                    <!-- Financeiro & Planos -->
+                    <div class="bh-analysis-group">
+                        <span class="bh-group-label">💰 Financeiro & Planos</span>
+                        <div class="bh-group-tabs">
+                            <a href="#" data-tab="financeiro_ativo" class="tab-link bh-analysis">Comportamento Financeiro</a>
+                            <a href="#" data-tab="risco_plano"      class="tab-link bh-analysis">Análise por Plano</a>
+                        </div>
+                    </div>
+
+                    <!-- Retenção -->
+                    <div class="bh-analysis-group">
+                        <span class="bh-group-label">🛡️ Retenção</span>
+                        <div class="bh-group-tabs">
+                            <a href="#" data-tab="lista_retencao" class="tab-link bh-analysis">Lista de Retenção Ativa</a>
+                            <a href="#" data-tab="lifecycle_risk" class="tab-link bh-analysis">Risco por Ciclo de Vida</a>
+                            <a href="#" data-tab="reclamacoes"    class="tab-link bh-analysis">Padrão de Reclamações</a>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </nav>
@@ -479,7 +508,25 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
         }
         .bh-daily:hover { background:#e8eeff; color:#1d4ed8; }
         .bh-daily.active { background:#1d4ed8 !important; color:#fff !important; border-color:#1d4ed8 !important; }
-        /* Quando uma aba de análise está ativa, abre o painel de análises automaticamente */
+        /* Analysis sub-groups */
+        #bhAnalysesRow { flex-direction:column; gap:3px; }
+        .bh-analysis-group { display:flex; align-items:center; flex-wrap:wrap; gap:4px; padding:2px 0; }
+        .bh-group-label {
+            font-size:0.72rem; font-weight:700; color:#6b7280;
+            text-transform:uppercase; letter-spacing:.06em;
+            white-space:nowrap; min-width:120px; padding-right:6px;
+        }
+        .bh-group-tabs { display:flex; flex-wrap:wrap; gap:3px; }
+        .bh-analysis {
+            display:inline-flex; align-items:center;
+            padding:3px 9px; border-radius:5px;
+            font-size:0.76rem; font-weight:500; color:#4b5563;
+            border:1px solid #e5e7eb; background:#f9fafb;
+            white-space:nowrap; text-decoration:none;
+            transition:background .12s, color .12s, border-color .12s;
+        }
+        .bh-analysis:hover { background:#eef2ff; color:#1d4ed8; border-color:#c7d7fa; }
+        .bh-analysis.active { background:#1d4ed8 !important; color:#fff !important; border-color:#1d4ed8 !important; }
         </style>
         <div style="margin-bottom:8px;"></div>
         <div id="behavior-analysis-tab-content">
@@ -1148,12 +1195,12 @@ async function _cdpRenderMensagens(c, s, cl) {
 
   const phoneSelectHtml = allPhones.length
     ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
-         <span style="font-size:.7rem;color:#6b7280;white-space:nowrap;">Enviar para:</span>
+         <span style="font-size:.72rem;color:#6b7280;white-space:nowrap;">Enviar para:</span>
          <select id="cdp-wa-select" style="flex:1;min-width:180px;font-size:.75rem;border:1px solid #d1d5db;border-radius:5px;padding:3px 6px;">
            ${allPhones.map(p => `<option value="${p.e164}">${p.label}: ${p.raw}</option>`).join('')}
          </select>
        </div>`
-    : `<div style="font-size:.7rem;color:#ef4444;margin-bottom:8px;">⚠️ Nenhum telefone cadastrado no contrato</div>`;
+    : `<div style="font-size:.72rem;color:#ef4444;margin-bottom:8px;">⚠️ Nenhum telefone cadastrado no contrato</div>`;
 
   function _cmCardHtml(t, idx) {
     const resolvedBody = _resolveBody(t.corpo || '', t.variaveis || '[]');
