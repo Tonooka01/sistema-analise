@@ -2292,6 +2292,16 @@ def api_behavior_action_alerts():
                 FROM ret_all
                 GROUP BY contrato_id
             ),
+            -- OS de QUALQUER outro tipo abertas após a última OS de retirada.
+            -- Se existir, o cliente continua ativo: retirada foi erro humano ou ponto adicional.
+            pos_ret_os AS (
+                SELECT CAST(o.Contrato AS INTEGER) AS contrato_id,
+                       MAX(o.Abertura) AS ultima_os_pos
+                FROM OS o
+                WHERE o.Assunto NOT IN ({_ph_ret})
+                  AND CAST(o.Contrato AS INTEGER) > 0
+                GROUP BY CAST(o.Contrato AS INTEGER)
+            ),
             ActiveContracts AS (
                 SELECT C.ID, C.Cliente, C.Cidade, C.Data_ativa_o, C.Status_contrato, C.Status_acesso,
                        COALESCE(RO.qtd_abertas, 0) AS ret_qtd_abertas,
@@ -2304,6 +2314,17 @@ def api_behavior_action_alerts():
                            WHEN RL.ultimo_status = 'Encaminhada' THEN 'ret_encaminhada'
                            WHEN RL.ultimo_status = 'Finalizada'
                                 AND C.Status_contrato = 'Negativado' THEN 'neg_com_retirada'
+                           -- OS finalizada de troca/renegociação nunca exige negativação
+                           WHEN RL.ultimo_status = 'Finalizada'
+                                AND RL.ultimo_assunto IN (
+                                    'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
+                                    'EQUIPAMENTO RENEGOCIADO'
+                                )
+                                AND C.Status_contrato NOT IN ('Negativado','Inativo') THEN NULL
+                           -- OS finalizada de retirada, mas há atividade posterior = cliente ativo (erro humano)
+                           WHEN RL.ultimo_status = 'Finalizada'
+                                AND C.Status_contrato NOT IN ('Negativado','Inativo')
+                                AND PRO.ultima_os_pos > RL.ultima_abertura THEN NULL
                            WHEN RL.ultimo_status = 'Finalizada'
                                 AND C.Status_contrato NOT IN ('Negativado','Inativo') THEN 'ret_fin_sem_neg'
                            WHEN C.Status_contrato = 'Negativado'
@@ -2313,6 +2334,7 @@ def api_behavior_action_alerts():
                 FROM Contratos C
                 LEFT JOIN ret_last RL ON RL.contrato_id = C.ID
                 LEFT JOIN ret_open RO ON RO.contrato_id = C.ID
+                LEFT JOIN pos_ret_os PRO ON PRO.contrato_id = C.ID
                 WHERE C.Status_contrato NOT IN ('Inativo')
                   AND C.Status_acesso != 'Desativado'
                   AND (
@@ -2478,7 +2500,8 @@ def api_behavior_action_alerts():
             ORDER BY Cidade
         """
 
-        base_p      = tuple(ret_params) + tuple(city_p)
+        # ret_params aparece 2x no base_cte: ret_all + pos_ret_os
+        base_p      = tuple(ret_params) + tuple(ret_params) + tuple(city_p)
         filter_p    = tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + tuple(assunto_ret_p)
         summary_row = conn.execute(summary_sql, base_p).fetchone()
         total_rows  = conn.execute(count_sql,   base_p + filter_p).fetchone()[0]
