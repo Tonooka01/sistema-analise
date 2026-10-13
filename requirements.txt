@@ -8,4 +8,8 @@ pandas
 pdfplumber
 python-dotenv
 chardet
+openpyxl
+requests
+urllib3
+waitress
  
