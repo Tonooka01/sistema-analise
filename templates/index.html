@@ -1156,7 +1156,7 @@ async function _cdpRenderMensagens(c, s, cl) {
   }
 
   // Fetch ChatMix templates + send log for this contract
-  let cmTemplates = [], sendLog = {};
+  let cmTemplates = [], sendLog = {}, cmHistorico = [];
   try {
     const [tr, lr] = await Promise.all([
       fetch('/api/behavior/chatmix/templates'),
@@ -1164,8 +1164,11 @@ async function _cdpRenderMensagens(c, s, cl) {
     ]);
     if (tr.ok) cmTemplates = await tr.json();
     if (lr.ok) {
-      const logRows = await lr.json();
-      logRows.forEach(r => { sendLog[r.template_id] = r.ultima; });
+      const logData = await lr.json();
+      // suporta formato novo {cooldowns, historico} e antigo (array)
+      const cooldowns = Array.isArray(logData) ? logData : (logData.cooldowns || []);
+      cmHistorico     = Array.isArray(logData) ? []       : (logData.historico  || []);
+      cooldowns.forEach(r => { sendLog[r.template_id] = r.ultima; });
     }
   } catch {}
 
@@ -1273,6 +1276,29 @@ async function _cdpRenderMensagens(c, s, cl) {
       <div class="cdp-copy-ok hidden mt-1.5 text-xs text-green-600 font-medium">✅ Copiado para a área de transferência!</div>
     </div>`).join('')}
     ${cmSection}
+    <div style="border-top:1px solid #e5e7eb;margin-top:10px;padding-top:8px;">
+      <div style="font-size:0.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+        📋 Histórico de Envios
+      </div>
+      <div id="cdp-chatmix-historico" style="display:flex;flex-direction:column;gap:4px;max-height:180px;overflow-y:auto;">
+        ${cmHistorico.length ? cmHistorico.map(h => {
+          const dt = new Date(h.enviado_em);
+          const pad = n => String(n).padStart(2,'0');
+          const dtStr = `${pad(dt.getDate())}/${pad(dt.getMonth()+1)}/${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+          const numFmt = h.numero ? h.numero.replace(/^55(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3') : '';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:5px 8px;gap:8px;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:0.76rem;font-weight:600;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">💬 ${h.template_nome || h.template_id}</div>
+              ${numFmt ? `<div style="font-size:0.72rem;color:#6b7280;">→ ${numFmt}</div>` : ''}
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              <div style="font-size:0.72rem;color:#374151;white-space:nowrap;">${dtStr}</div>
+              ${h.usuario ? `<div style="font-size:0.72rem;color:#9ca3af;">${h.usuario}</div>` : ''}
+            </div>
+          </div>`;
+        }).join('') : '<div style="font-size:0.72rem;color:#9ca3af;padding:4px 2px;">Nenhum envio registrado ainda.</div>'}
+      </div>
+    </div>
     <div class="pt-1 border-t border-gray-100 mt-2">
       <button onclick="switchCdpTab('acomp')"
         class="w-full text-center text-xs text-blue-600 hover:text-blue-800 py-1.5 font-medium">
@@ -1324,6 +1350,18 @@ async function _cdpRenderMensagens(c, s, cl) {
             sp.className = 'cm-cooldown-badge text-xs text-orange-600 font-medium';
             sp.textContent = 'Enviada agora · próxima em ' + intervaloDias + 'd';
             card.querySelector('.flex.items-center.gap-1\\.5')?.prepend(sp);
+          }
+          // Adiciona entrada no histórico visível imediatamente
+          const histBox = document.querySelector('#cdp-chatmix-historico');
+          if (histBox) {
+            const now = new Date();
+            const pad = n => String(n).padStart(2,'0');
+            const dtStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+            const numFmt = selectedNum.replace(/^55(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3');
+            const entry = document.createElement('div');
+            entry.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:5px 8px;gap:8px;';
+            entry.innerHTML = `<div style="flex:1;min-width:0;"><div style="font-size:0.76rem;font-weight:600;color:#111827;">💬 ${t.nome || t.template_id}</div><div style="font-size:0.72rem;color:#6b7280;">→ ${numFmt || selectedNum}</div></div><div style="text-align:right;flex-shrink:0;"><div style="font-size:0.72rem;color:#374151;white-space:nowrap;">${dtStr}</div></div>`;
+            histBox.prepend(entry);
           }
         } else {
           this.disabled = false;

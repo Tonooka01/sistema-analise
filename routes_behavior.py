@@ -5371,8 +5371,15 @@ def _ensure_chatmix_tables():
             enviado_em  DATETIME DEFAULT CURRENT_TIMESTAMP
         )''')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_cslog_contrato ON chatmix_send_log(contrato)')
-        cols = [r[1] for r in conn.execute("PRAGMA table_info(chatmix_templates)").fetchall()]
-        if cols and 'intervalo_dias' not in cols:
+        log_cols = [r[1] for r in conn.execute("PRAGMA table_info(chatmix_send_log)").fetchall()]
+        if 'numero'        not in log_cols:
+            conn.execute("ALTER TABLE chatmix_send_log ADD COLUMN numero        TEXT NOT NULL DEFAULT ''")
+        if 'template_nome' not in log_cols:
+            conn.execute("ALTER TABLE chatmix_send_log ADD COLUMN template_nome TEXT NOT NULL DEFAULT ''")
+        if 'usuario'       not in log_cols:
+            conn.execute("ALTER TABLE chatmix_send_log ADD COLUMN usuario       TEXT NOT NULL DEFAULT ''")
+        tpl_cols = [r[1] for r in conn.execute("PRAGMA table_info(chatmix_templates)").fetchall()]
+        if tpl_cols and 'intervalo_dias' not in tpl_cols:
             conn.execute("ALTER TABLE chatmix_templates ADD COLUMN intervalo_dias INTEGER NOT NULL DEFAULT 10")
         conn.commit()
     finally:
@@ -5475,15 +5482,24 @@ def api_chatmix_settings_put():
 def api_chatmix_send_log():
     contrato = request.args.get('contrato', '').strip()
     if not contrato:
-        return jsonify([])
+        return jsonify({'cooldowns': [], 'historico': []})
     conn = get_db()
     try:
-        rows = conn.execute(
+        cooldowns = conn.execute(
             """SELECT template_id, MAX(enviado_em) as ultima
                FROM chatmix_send_log WHERE contrato=? GROUP BY template_id""",
             (contrato,)
         ).fetchall()
-        return jsonify([{'template_id': r['template_id'], 'ultima': r['ultima']} for r in rows])
+        historico = conn.execute(
+            """SELECT id, template_nome, numero, usuario, enviado_em
+               FROM chatmix_send_log WHERE contrato=?
+               ORDER BY enviado_em DESC LIMIT 30""",
+            (contrato,)
+        ).fetchall()
+        return jsonify({
+            'cooldowns':  [{'template_id': r['template_id'], 'ultima': r['ultima']} for r in cooldowns],
+            'historico':  [dict(r) for r in historico],
+        })
     finally:
         conn.close()
 
@@ -5526,9 +5542,15 @@ def api_chatmix_send():
         resp.raise_for_status()
 
         if contrato:
+            tpl_row = conn.execute(
+                "SELECT nome FROM chatmix_templates WHERE template_id=?", (template_id,)
+            ).fetchone()
+            tpl_nome = tpl_row['nome'] if tpl_row else template_id
+            usuario  = current_user.username if current_user.is_authenticated else ''
             conn.execute(
-                "INSERT INTO chatmix_send_log (contrato, template_id) VALUES (?, ?)",
-                (contrato, template_id)
+                """INSERT INTO chatmix_send_log (contrato, template_id, numero, template_nome, usuario)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (contrato, template_id, digits, tpl_nome, usuario)
             )
             conn.commit()
 
