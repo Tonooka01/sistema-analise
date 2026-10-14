@@ -1193,14 +1193,24 @@ async function _cdpRenderMensagens(c, s, cl) {
   ].map(p => ({ ...p, e164: _toE164(p.raw) }))
    .filter((p, idx, arr) => p.e164 && arr.findIndex(x => x.e164 === p.e164) === idx);
 
+  const _isAdmin = window._currentUser?.username === 'admin';
+  const _manualNumHtml = _isAdmin ? `
+    <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
+      <span style="font-size:.72rem;color:#6b7280;white-space:nowrap;">Número manual:</span>
+      <input id="cdp-manual-num" type="tel" placeholder="Ex: 99988887777"
+        style="flex:1;min-width:150px;font-size:.75rem;border:1px solid #d1d5db;border-radius:5px;padding:3px 8px;outline:none;"
+        oninput="this.value=this.value.replace(/\D/g,'')">
+      <span style="font-size:.68rem;color:#9ca3af;">(deixe vazio para usar o número acima)</span>
+    </div>` : '';
+
   const phoneSelectHtml = allPhones.length
-    ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+    ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
          <span style="font-size:.72rem;color:#6b7280;white-space:nowrap;">Enviar para:</span>
          <select id="cdp-wa-select" style="flex:1;min-width:180px;font-size:.75rem;border:1px solid #d1d5db;border-radius:5px;padding:3px 6px;">
            ${allPhones.map(p => `<option value="${p.e164}">${p.label}: ${p.raw}</option>`).join('')}
          </select>
-       </div>`
-    : `<div style="font-size:.72rem;color:#ef4444;margin-bottom:8px;">⚠️ Nenhum telefone cadastrado no contrato</div>`;
+       </div>${_manualNumHtml}`
+    : `<div style="font-size:.72rem;color:#ef4444;margin-bottom:4px;">⚠️ Nenhum telefone cadastrado no contrato</div>${_manualNumHtml}`;
 
   function _cmCardHtml(t, idx) {
     const resolvedBody = _resolveBody(t.corpo || '', t.variaveis || '[]');
@@ -1292,7 +1302,9 @@ async function _cdpRenderMensagens(c, s, cl) {
       try { varNames = typeof t.variaveis === 'string' ? JSON.parse(t.variaveis) : (t.variaveis || []); } catch {}
       const valores = varNames.map(v => varMap[v] ?? v);
       try {
-        const selectedNum = document.getElementById('cdp-wa-select')?.value || allPhones[0]?.e164 || '';
+        const _manualVal = (document.getElementById('cdp-manual-num')?.value || '').trim();
+        const selectedNum = _manualVal ? _toE164(_manualVal) || _manualVal
+                          : document.getElementById('cdp-wa-select')?.value || allPhones[0]?.e164 || '';
         const r = await fetch('/api/behavior/chatmix/send', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
