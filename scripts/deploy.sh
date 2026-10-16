@@ -35,14 +35,25 @@ cd "$APP_DIR"
 # ── 1. git pull ──────────────────────────────────────────────────
 echo ""
 echo "=== 1. Atualizando código (git pull) ==="
+# Salva versão local antes do git checkout (pode estar à frente do git)
+LOCAL_VER="1.000"
+if [ -f "$VERSION_FILE" ]; then
+    LOCAL_VER=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+fi
 git checkout version.txt 2>/dev/null || true
 git pull || fail "git pull falhou"
 ok "Código atualizado"
 
-# ── 2. Versão atual (lida do git) ────────────────────────────────
-CURRENT_VER="1.000"
+# ── 2. Versão atual (maior entre local e git) ────────────────────
+GIT_VER="1.000"
 if [ -f "$VERSION_FILE" ]; then
-    CURRENT_VER=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+    GIT_VER=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+fi
+# Usa a versão mais alta (local avança a cada deploy, git fica parado)
+if [[ "$LOCAL_VER" > "$GIT_VER" ]]; then
+    CURRENT_VER="$LOCAL_VER"
+else
+    CURRENT_VER="$GIT_VER"
 fi
 echo ""
 echo "→ Versão atual: $CURRENT_VER"
