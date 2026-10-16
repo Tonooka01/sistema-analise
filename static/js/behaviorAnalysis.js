@@ -4344,6 +4344,23 @@ window._colToggle = function(storageKey, key, checked) {
     document.querySelectorAll(`[data-coltable="${storageKey}"] [data-col="${key}"]`).forEach(el => {
         el.style.display = checked ? '' : 'none';
     });
+    // Mostra aviso quando nenhuma coluna está visível para o container não colapsar
+    const container = document.querySelector(`[data-coltable="${storageKey}"]`);
+    if (container) {
+        const allHidden = !Object.values(vis).some(v => v !== false);
+        let placeholder = container.querySelector('.col-empty-placeholder');
+        if (allHidden) {
+            if (!placeholder) {
+                placeholder = document.createElement('div');
+                placeholder.className = 'col-empty-placeholder';
+                placeholder.style.cssText = 'text-align:center;padding:24px;color:#9ca3af;font-size:.85rem;min-height:60px;display:flex;align-items:center;justify-content:center;';
+                placeholder.textContent = 'Nenhuma coluna selecionada. Use ⊞ Colunas para exibir.';
+                container.appendChild(placeholder);
+            }
+        } else if (placeholder) {
+            placeholder.remove();
+        }
+    }
 };
 window._colPanelToggle = function(e, storageKey) {
     e.stopPropagation();
