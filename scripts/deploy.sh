@@ -3,10 +3,10 @@
 # Uso: ./scripts/deploy.sh
 #
 # Fluxo:
-#   1. Lê versão atual de version.txt
-#   2. Cria backup .tar.gz em versions/  (mantém 3 versões antigas)
-#   3. Incrementa version.txt
-#   4. git pull
+#   1. git pull (descartando version.txt local para evitar conflito)
+#   2. Lê versão atual de version.txt (do git)
+#   3. Cria backup .tar.gz em versions/  (mantém 3 versões antigas)
+#   4. Incrementa version.txt
 #   5. pip install -r requirements.txt
 #   6. sudo systemctl restart analise
 #   7. Mostra topo do CHANGELOG
@@ -30,7 +30,16 @@ echo "════════════════════════�
 echo "   Deploy — NetVale Analise"
 echo "════════════════════════════════════════════"
 
-# ── 1. Versão atual ───────────────────────────────────────────────
+cd "$APP_DIR"
+
+# ── 1. git pull ──────────────────────────────────────────────────
+echo ""
+echo "=== 1. Atualizando código (git pull) ==="
+git checkout version.txt 2>/dev/null || true
+git pull || fail "git pull falhou"
+ok "Código atualizado"
+
+# ── 2. Versão atual (lida do git) ────────────────────────────────
 CURRENT_VER="1.000"
 if [ -f "$VERSION_FILE" ]; then
     CURRENT_VER=$(cat "$VERSION_FILE" | tr -d '[:space:]')
@@ -38,13 +47,12 @@ fi
 echo ""
 echo "→ Versão atual: $CURRENT_VER"
 
-# ── 2. Backup tar.gz ─────────────────────────────────────────────
+# ── 3. Backup tar.gz ─────────────────────────────────────────────
 echo ""
-echo "=== 1. Backup da versão $CURRENT_VER ==="
+echo "=== 2. Backup da versão $CURRENT_VER ==="
 mkdir -p "$VERSIONS_DIR"
 TAR_PATH="$VERSIONS_DIR/v${CURRENT_VER}.tar.gz"
 
-cd "$APP_DIR"
 tar -czf "$TAR_PATH" \
     --exclude="./.git" \
     --exclude="./__pycache__" \
@@ -69,20 +77,13 @@ if [ -n "$OLD" ]; then
 fi
 cd "$APP_DIR"
 
-# ── 3. Incrementa versão ──────────────────────────────────────────
+# ── 4. Incrementa versão ──────────────────────────────────────────
 MAJOR=$(echo "$CURRENT_VER" | cut -d. -f1)
 MINOR=$(echo "$CURRENT_VER" | cut -d. -f2)
 NEXT_MINOR=$(printf "%03d" $((10#$MINOR + 1)))
 NEXT_VER="${MAJOR}.${NEXT_MINOR}"
 echo "$NEXT_VER" > "$VERSION_FILE"
 ok "Versão incrementada: $CURRENT_VER → $NEXT_VER"
-
-# ── 4. git pull ──────────────────────────────────────────────────
-echo ""
-echo "=== 2. Atualizando código (git pull) ==="
-git checkout version.txt 2>/dev/null || true
-git pull || fail "git pull falhou — backup disponível em versions/v${CURRENT_VER}.tar.gz"
-ok "Código atualizado"
 
 # ── 5. Dependências ──────────────────────────────────────────────
 echo ""

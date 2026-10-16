@@ -3916,6 +3916,7 @@ def api_behavior_retiradas_filtros():
                     AND o.Contrato IS NOT NULL AND o.Contrato != '' AND o.Contrato != '0'
                 )
                 AND e.Descricao_produto IS NOT NULL AND e.Descricao_produto != ''
+                AND e.Status_comodato = 'Emprestado'
                 AND (UPPER(e.Descricao_produto) LIKE '%ONU%' OR UPPER(e.Descricao_produto) LIKE '%ONT%'
                      OR UPPER(e.Descricao_produto) LIKE '%ROTEADOR%' OR UPPER(e.Descricao_produto) LIKE '%ROUTER%')
                 ORDER BY e.Descricao_produto
@@ -3997,7 +3998,7 @@ def api_behavior_retiradas():
         if equip_f:
             contratos_com_equip = [
                 str(r[0]) for r in conn.execute(
-                    "SELECT DISTINCT ID_contrato FROM Equipamento WHERE Descricao_produto = ?",
+                    "SELECT DISTINCT ID_contrato FROM Equipamento WHERE Descricao_produto = ? AND Status_comodato = 'Emprestado'",
                     (equip_f,)
                 ).fetchall()
             ]
@@ -4227,10 +4228,13 @@ def api_behavior_retiradas():
         if contratos_pagina:
             try:
                 ph2 = ','.join('?' * len(contratos_pagina))
+                # Se há filtro de equipamento, mostra só o equipamento filtrado na coluna
+                equip_where = f"AND Descricao_produto = ?" if equip_f else ""
+                equip_params = contratos_pagina + ([equip_f] if equip_f else [])
                 eq_rows = conn.execute(
-                    f"SELECT CAST(ID_contrato AS TEXT), GROUP_CONCAT(Descricao_produto, ' / ') "
-                    f"FROM Equipamento WHERE CAST(ID_contrato AS TEXT) IN ({ph2}) GROUP BY CAST(ID_contrato AS TEXT)",
-                    contratos_pagina
+                    f"SELECT CAST(ID_contrato AS TEXT), GROUP_CONCAT(DISTINCT Descricao_produto) "
+                    f"FROM Equipamento WHERE CAST(ID_contrato AS TEXT) IN ({ph2}) AND Status_comodato = 'Emprestado' {equip_where} GROUP BY CAST(ID_contrato AS TEXT)",
+                    equip_params
                 ).fetchall()
                 equip_map = {str(r2[0]): r2[1] or '' for r2 in eq_rows}
             except Exception:
@@ -5234,7 +5238,7 @@ def api_ret_sync_visitas():
         if equip_f:
             contratos_com_equip = [
                 str(r[0]) for r in conn.execute(
-                    "SELECT DISTINCT ID_contrato FROM Equipamento WHERE Descricao_produto = ?",
+                    "SELECT DISTINCT ID_contrato FROM Equipamento WHERE Descricao_produto = ? AND Status_comodato = 'Emprestado'",
                     (equip_f,)
                 ).fetchall()
             ]
