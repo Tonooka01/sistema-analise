@@ -4289,6 +4289,42 @@ function _retDiasAberto(o) {
     return { txt, cls };
 }
 
+// ── Gerenciar colunas da tabela Ordens ──────────────────────────────
+const _RET_COL_DEFS = [
+    {key:'id',           label:'ID'},
+    {key:'tipo',         label:'Tipo'},
+    {key:'status',       label:'Status'},
+    {key:'cliente',      label:'Cliente'},
+    {key:'endereco',     label:'Endereço'},
+    {key:'colaborador',  label:'Colaborador'},
+    {key:'abertura',     label:'Abertura'},
+    {key:'agendamento',  label:'Agendamento'},
+    {key:'tempo_aberto', label:'Tempo Aberto'},
+    {key:'equipamentos', label:'Equipamentos'},
+    {key:'visitas',      label:'Visitas'},
+];
+function _retGetColVis() {
+    try { const s = JSON.parse(localStorage.getItem('ret_ordens_cols') || 'null'); if (s) return s; } catch(e) {}
+    return Object.fromEntries(_RET_COL_DEFS.map(c => [c.key, true]));
+}
+function _retApplyCols(el) {
+    const vis = _retGetColVis();
+    Object.entries(vis).forEach(([k, show]) => {
+        el.querySelectorAll(`[data-col="${k}"]`).forEach(td => { td.style.display = show ? '' : 'none'; });
+    });
+}
+window._retToggleCol = function(key, checked) {
+    const vis = _retGetColVis(); vis[key] = checked;
+    localStorage.setItem('ret_ordens_cols', JSON.stringify(vis));
+    const w = document.getElementById('ret-table-wrap'); if (w) _retApplyCols(w);
+};
+window._retColPanel = function(e) {
+    e.stopPropagation();
+    const p = document.getElementById('ret-col-panel');
+    if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+};
+document.addEventListener('click', () => { const p = document.getElementById('ret-col-panel'); if (p) p.style.display = 'none'; });
+
 function _retRenderTable(wrap) {
     if (!wrap) return;
     if (!_retData.length) {
@@ -4312,6 +4348,7 @@ function _retRenderTable(wrap) {
         let detail = '';
         if (expanded) {
             const rows2 = [
+                ['👤 Cliente',           o.cliente || '—'],
                 ['🔧 Colaborador',       nomeTecnico],
                 ['🏢 Filial',            o.filial || '—'],
                 ['🚨 Prioridade',        o.prioridade || '—'],
@@ -4371,21 +4408,21 @@ function _retRenderTable(wrap) {
 
         return `<tr class="hover:bg-gray-50 cursor-pointer border-b border-gray-100 ${expanded ? 'bg-blue-50' : ''}"
                     onclick="window._retToggle(${o.id})">
-          <td class="px-3 py-2 text-xs text-gray-500 font-mono">#${o.id}</td>
-          <td class="px-3 py-2">
+          <td data-col="id" class="px-3 py-2 text-xs text-gray-500 font-mono">#${o.id}</td>
+          <td data-col="tipo" class="px-3 py-2">
             <span class="inline-block text-xs px-2 py-0.5 rounded-full font-medium ${assuntoCls}">${assuntoShort}</span>
           </td>
-          <td class="px-3 py-2">
+          <td data-col="status" class="px-3 py-2">
             <span class="inline-block text-xs px-2 py-0.5 rounded-full font-medium ${statusCls}">${o.status}</span>
           </td>
-          <td class="px-3 py-2 text-sm text-gray-900 font-medium max-w-[180px] truncate" title="${o.cliente || ''}">${o.cliente || '—'}</td>
-          <td class="px-3 py-2 text-xs text-gray-600 max-w-[240px] truncate" title="${endDisplay}">${endDisplay || '—'}</td>
-          <td class="px-3 py-2 text-xs text-gray-600 max-w-[120px] truncate" title="${nomeTecnico}">${nomeTecnico}</td>
-          <td class="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">${abertura}</td>
-          <td class="px-3 py-2 text-xs ${o.agendamento ? 'text-blue-700 font-medium' : 'text-gray-400'} whitespace-nowrap">${agendTxt}</td>
-          <td class="px-3 py-2 text-xs whitespace-nowrap ${diasInfo.cls}">${diasInfo.txt}</td>
-          <td class="px-3 py-2 text-xs text-gray-700 max-w-[200px] truncate" title="${equipTxt}">${equipTxt}</td>
-          <td class="px-3 py-2 text-xs whitespace-nowrap ret-visitas-cell" data-osid="${o.id}">${
+          <td data-col="cliente" class="px-3 py-2 text-sm text-gray-900 font-medium max-w-[180px] truncate" title="${o.cliente || ''}">${o.cliente || '—'}</td>
+          <td data-col="endereco" class="px-3 py-2 text-xs text-gray-600 max-w-[240px] truncate" title="${endDisplay}">${endDisplay || '—'}</td>
+          <td data-col="colaborador" class="px-3 py-2 text-xs text-gray-600 max-w-[120px] truncate" title="${nomeTecnico}">${nomeTecnico}</td>
+          <td data-col="abertura" class="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">${abertura}</td>
+          <td data-col="agendamento" class="px-3 py-2 text-xs ${o.agendamento ? 'text-blue-700 font-medium' : 'text-gray-400'} whitespace-nowrap">${agendTxt}</td>
+          <td data-col="tempo_aberto" class="px-3 py-2 text-xs whitespace-nowrap ${diasInfo.cls}">${diasInfo.txt}</td>
+          <td data-col="equipamentos" class="px-3 py-2 text-xs text-gray-700 max-w-[200px] truncate" title="${equipTxt}">${equipTxt}</td>
+          <td data-col="visitas" class="px-3 py-2 text-xs whitespace-nowrap ret-visitas-cell" data-osid="${o.id}">${
             _retVisitasCache[o.id] !== undefined
               ? (_retVisitasCache[o.id] > 0 ? `<span class="text-blue-700 font-semibold">${_retVisitasCache[o.id]}</span>` : '<span class="text-gray-400">0</span>')
               : '<span class="text-gray-300">...</span>'
@@ -4398,28 +4435,58 @@ function _retRenderTable(wrap) {
         return _retSortDir === 'desc' ? '<span class="text-yellow-300 ml-1">↓</span>' : '<span class="text-yellow-300 ml-1">↑</span>';
     };
     const _sortTh = (col, label, extra = '') =>
-        `<th class="px-3 py-2 font-semibold cursor-pointer hover:bg-gray-700 select-none whitespace-nowrap ${extra}"
+        `<th data-col="${col}" class="px-3 py-2 font-semibold cursor-pointer hover:bg-gray-700 select-none whitespace-nowrap ${extra}"
              onclick="window._retSort('${col}')">${label}${_sortArrow(col)}</th>`;
 
-    wrap.innerHTML = `
+    const _vis = _retGetColVis();
+    const _colPanelHtml = `
+      <div style="display:flex;justify-content:flex-end;margin-bottom:4px;position:relative;">
+        <div style="position:relative;">
+          <button id="ret-col-btn" onclick="window._retColPanel(event)"
+            style="font-size:0.72rem;padding:3px 8px;border:1px solid #d1d5db;border-radius:4px;
+                   background:#fff;cursor:pointer;color:#374151;display:flex;align-items:center;gap:4px;">
+            ⊞ Colunas
+          </button>
+          <div id="ret-col-panel" onclick="event.stopPropagation()"
+            style="display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:200;
+                   background:#fff;border:1px solid #d1d5db;border-radius:6px;padding:12px 14px;
+                   box-shadow:0 4px 14px rgba(0,0,0,.13);min-width:230px;">
+            <div style="font-size:0.72rem;font-weight:700;color:#374151;margin-bottom:8px;letter-spacing:.03em;">
+              Gerenciar colunas
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 18px;">
+              ${_RET_COL_DEFS.map(c => `
+                <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;cursor:pointer;color:#111827;">
+                  <input type="checkbox" ${_vis[c.key] !== false ? 'checked' : ''}
+                    onchange="window._retToggleCol('${c.key}',this.checked)"
+                    style="accent-color:#2563eb;width:14px;height:14px;">
+                  ${c.label}
+                </label>`).join('')}
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    wrap.innerHTML = `${_colPanelHtml}
     <table class="min-w-full text-left">
       <thead>
         <tr class="bg-gray-800 text-white text-xs">
           ${_sortTh('id', 'ID')}
-          <th class="px-3 py-2 font-semibold">Tipo</th>
+          <th data-col="tipo" class="px-3 py-2 font-semibold">Tipo</th>
           ${_sortTh('status', 'Status')}
           ${_sortTh('cliente', 'Cliente')}
-          <th class="px-3 py-2 font-semibold">Endereço</th>
+          <th data-col="endereco" class="px-3 py-2 font-semibold">Endereço</th>
           ${_sortTh('colaborador', 'Colaborador')}
           ${_sortTh('abertura', 'Abertura')}
           ${_sortTh('agendamento', 'Agendamento')}
           ${_sortTh('tempo_aberto', 'Tempo Aberto')}
-          <th class="px-3 py-2 font-semibold whitespace-nowrap">Equipamentos</th>
+          <th data-col="equipamentos" class="px-3 py-2 font-semibold whitespace-nowrap">Equipamentos</th>
           ${_sortTh('visitas', 'Visitas')}
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>`;
+    _retApplyCols(wrap);
 }
 
 function _retVisitasApply() {
