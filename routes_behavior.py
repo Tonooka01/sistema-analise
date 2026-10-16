@@ -4519,14 +4519,18 @@ def _ixc_post(endpoint, payload, token):
 
 def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titulo='', fechar=False, id_assunto_ixc='', id_atendente_override=None):
     """Cria um ticket de suporte no IXC (su_ticket). Retorna ID ou None."""
-    # Busca endereço do contrato no banco local
-    endereco = bairro = complemento = id_cidade = ''
+    # Busca endereço e login do contrato no banco local
+    endereco = bairro = complemento = id_cidade = id_login = ''
     try:
         _conn = get_db()
         try:
             row = _conn.execute(
                 "SELECT Endere_o, N_mero, Bairro, Complemento, Cidade FROM Contratos WHERE ID = ?",
                 (id_contrato,)
+            ).fetchone()
+            row_login = _conn.execute(
+                "SELECT ID FROM Logins WHERE CAST(ID_contrato AS INTEGER) = ? AND Ativo = 'S' LIMIT 1",
+                (int(id_contrato),)
             ).fetchone()
         finally:
             _conn.close()
@@ -4537,8 +4541,10 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
             bairro      = (row['Bairro'] or '').strip()
             complemento = (row['Complemento'] or '').strip()
             id_cidade   = _CIDADE_IDS.get(row['Cidade'] or '', '')
+        if row_login:
+            id_login = str(row_login['ID'])
     except Exception as ex:
-        logger.warning(f"_ixc_criar_os: erro ao buscar endereço: {ex}")
+        logger.warning(f"_ixc_criar_os: erro ao buscar endereço/login: {ex}")
 
     # Busca configurações IXC salvas pelo admin
     id_ticket_setor = ''
@@ -4585,6 +4591,8 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
     }
     if id_assunto_ixc:
         payload['id_assunto'] = str(id_assunto_ixc)
+    if id_login:
+        payload['id_login'] = id_login
     _atendente_final = id_atendente_override or id_atendente
     if _atendente_final:
         payload['id_atendente']   = str(_atendente_final)
