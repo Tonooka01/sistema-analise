@@ -1714,29 +1714,31 @@ async function fetchInatividadeData(city = '', min_days = '1') {
                     ? `<a href="https://wa.me/${wa}" target="_blank" class="text-green-600 font-bold">💬</a>`
                     : '-';
                 return `<tr style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:6px 10px;font-size:.8rem;font-weight:600;">${r.contrato || ''}</td>
-                    <td style="padding:6px 10px;font-size:.8rem;">${r.cliente || ''}</td>
-                    <td style="padding:6px 10px;font-size:.8rem;">${r.cidade || ''}</td>
-                    <td style="padding:6px 10px;font-size:.8rem;color:#dc2626;font-weight:700;">${r.dias_inativo || 0}d</td>
-                    <td style="padding:6px 10px;font-size:.8rem;font-family:monospace;">${r.login || ''}</td>
-                    <td style="padding:6px 10px;font-size:.8rem;">${r.telefone || '-'}</td>
-                    <td style="padding:6px 10px;font-size:.8rem;text-align:center;">${waLink}</td>
+                    <td data-col="contrato" style="padding:6px 10px;font-size:.8rem;font-weight:600;">${r.contrato || ''}</td>
+                    <td data-col="cliente" style="padding:6px 10px;font-size:.8rem;">${r.cliente || ''}</td>
+                    <td data-col="cidade" style="padding:6px 10px;font-size:.8rem;">${r.cidade || ''}</td>
+                    <td data-col="dias_inativo" style="padding:6px 10px;font-size:.8rem;color:#dc2626;font-weight:700;">${r.dias_inativo || 0}d</td>
+                    <td data-col="login" style="padding:6px 10px;font-size:.8rem;font-family:monospace;">${r.login || ''}</td>
+                    <td data-col="telefone" style="padding:6px 10px;font-size:.8rem;">${r.telefone || '-'}</td>
+                    <td data-col="whatsapp" style="padding:6px 10px;font-size:.8rem;text-align:center;">${waLink}</td>
                 </tr>`;
             }).join('');
 
+            const _INAT_COLS = [{key:'contrato',label:'Contrato'},{key:'cliente',label:'Cliente'},{key:'cidade',label:'Cidade'},{key:'dias_inativo',label:'Dias Inativo'},{key:'login',label:'Login'},{key:'telefone',label:'Telefone'},{key:'whatsapp',label:'WhatsApp'}];
             const tableHtml = `
                 <div class="grid-stack-item-content" style="overflow-y:auto;">
                     <h3 style="font-size:.85rem;font-weight:700;color:#1e293b;padding:10px 12px 4px;">Lista dos Clientes Mais Inativos</h3>
-                    <div style="overflow-x:auto;">
+                    <div data-coltable="inativos_cols" style="overflow-x:auto;">
+                        ${_colToggleHtml('inativos_cols', _INAT_COLS)}
                         <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
                             <thead><tr style="background:#1e293b;color:#fff;">
-                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Contrato</th>
-                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Cliente</th>
-                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Cidade</th>
-                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Dias Inativo</th>
-                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Login</th>
-                                <th style="padding:7px 10px;text-align:left;white-space:nowrap;">Telefone</th>
-                                <th style="padding:7px 10px;text-align:center;white-space:nowrap;">WhatsApp</th>
+                                <th data-col="contrato" style="padding:7px 10px;text-align:left;white-space:nowrap;">Contrato</th>
+                                <th data-col="cliente" style="padding:7px 10px;text-align:left;white-space:nowrap;">Cliente</th>
+                                <th data-col="cidade" style="padding:7px 10px;text-align:left;white-space:nowrap;">Cidade</th>
+                                <th data-col="dias_inativo" style="padding:7px 10px;text-align:left;white-space:nowrap;">Dias Inativo</th>
+                                <th data-col="login" style="padding:7px 10px;text-align:left;white-space:nowrap;">Login</th>
+                                <th data-col="telefone" style="padding:7px 10px;text-align:left;white-space:nowrap;">Telefone</th>
+                                <th data-col="whatsapp" style="padding:7px 10px;text-align:center;white-space:nowrap;">WhatsApp</th>
                             </tr></thead>
                             <tbody>${rows}</tbody>
                         </table>
@@ -2143,39 +2145,41 @@ async function renderListaRetencaoTab() {
                         : '-';
                     const riskStyle = RISK_CLS[r.risco] || '';
                     return `<tr data-contrato="${r.contrato}" style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;cursor:pointer;" title="Clique para ver detalhes">
-                        <td style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${(page - 1) * rowsPerPage + i + 1}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;font-family:monospace;">#${r.contrato || ''}</td>
-                        <td style="padding:6px 10px;font-size:.8rem;font-weight:500;">${r.cliente || ''}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;">${r.cidade || ''}</td>
-                        <td style="padding:6px 10px;">
+                        <td data-col="num" style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${(page - 1) * rowsPerPage + i + 1}</td>
+                        <td data-col="contrato" style="padding:6px 10px;font-size:.78rem;font-family:monospace;">#${r.contrato || ''}</td>
+                        <td data-col="cliente" style="padding:6px 10px;font-size:.8rem;font-weight:500;">${r.cliente || ''}</td>
+                        <td data-col="cidade" style="padding:6px 10px;font-size:.78rem;">${r.cidade || ''}</td>
+                        <td data-col="risco" style="padding:6px 10px;">
                             <span style="padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap;${riskStyle}">${r.risco || ''}</span>
                         </td>
-                        <td style="padding:6px 10px;font-size:.8rem;font-weight:700;font-family:monospace;">${r.score || 0}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;${r.fat_vencidas > 0 ? 'color:#dc2626;font-weight:700;' : ''}">${r.fat_vencidas || 0}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;">${r.atend_30d || 0}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;">${r.telefone ? `<a href="tel:${r.telefone}">${r.telefone}</a>` : '-'}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;">${waCell}</td>
+                        <td data-col="score" style="padding:6px 10px;font-size:.8rem;font-weight:700;font-family:monospace;">${r.score || 0}</td>
+                        <td data-col="fat_vencidas" style="padding:6px 10px;font-size:.78rem;${r.fat_vencidas > 0 ? 'color:#dc2626;font-weight:700;' : ''}">${r.fat_vencidas || 0}</td>
+                        <td data-col="dias_vencido" style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
+                        <td data-col="atend_30d" style="padding:6px 10px;font-size:.78rem;">${r.atend_30d || 0}</td>
+                        <td data-col="sem_conexao" style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>
+                        <td data-col="telefone" style="padding:6px 10px;font-size:.78rem;">${r.telefone ? `<a href="tel:${r.telefone}">${r.telefone}</a>` : '-'}</td>
+                        <td data-col="whatsapp" style="padding:6px 10px;font-size:.78rem;">${waCell}</td>
                     </tr>`;
                 }).join('');
 
+                const _CHURN_COLS = [{key:'num',label:'#'},{key:'contrato',label:'Contrato'},{key:'cliente',label:'Cliente'},{key:'cidade',label:'Cidade'},{key:'risco',label:'Risco'},{key:'score',label:'Score'},{key:'fat_vencidas',label:'Fat. Vencidas'},{key:'dias_vencido',label:'Dias Vencido'},{key:'atend_30d',label:'Atend. 30d'},{key:'sem_conexao',label:'Sem Conexão'},{key:'telefone',label:'Telefone'},{key:'whatsapp',label:'WhatsApp'}];
                 tableHtml = `
-                    <div style="overflow-x:auto;">
+                    <div data-coltable="churn_cols" style="overflow-x:auto;">
+                        ${_colToggleHtml('churn_cols', _CHURN_COLS)}
                         <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
                             <thead><tr style="background:#1e293b;color:#fff;position:sticky;top:0;">
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">#</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Contrato</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Cliente</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Cidade</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Risco</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Score</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Fat. Vencidas</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Dias Vencido</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Atend. 30d</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Sem Conexão</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Telefone</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">WhatsApp</th>
+                                <th data-col="num" style="padding:8px 10px;text-align:left;white-space:nowrap;">#</th>
+                                <th data-col="contrato" style="padding:8px 10px;text-align:left;white-space:nowrap;">Contrato</th>
+                                <th data-col="cliente" style="padding:8px 10px;text-align:left;white-space:nowrap;">Cliente</th>
+                                <th data-col="cidade" style="padding:8px 10px;text-align:left;white-space:nowrap;">Cidade</th>
+                                <th data-col="risco" style="padding:8px 10px;text-align:left;white-space:nowrap;">Risco</th>
+                                <th data-col="score" style="padding:8px 10px;text-align:left;white-space:nowrap;">Score</th>
+                                <th data-col="fat_vencidas" style="padding:8px 10px;text-align:left;white-space:nowrap;">Fat. Vencidas</th>
+                                <th data-col="dias_vencido" style="padding:8px 10px;text-align:left;white-space:nowrap;">Dias Vencido</th>
+                                <th data-col="atend_30d" style="padding:8px 10px;text-align:left;white-space:nowrap;">Atend. 30d</th>
+                                <th data-col="sem_conexao" style="padding:8px 10px;text-align:left;white-space:nowrap;">Sem Conexão</th>
+                                <th data-col="telefone" style="padding:8px 10px;text-align:left;white-space:nowrap;">Telefone</th>
+                                <th data-col="whatsapp" style="padding:8px 10px;text-align:left;white-space:nowrap;">WhatsApp</th>
                             </tr></thead>
                             <tbody>${rows}</tbody>
                         </table>
@@ -2197,6 +2201,7 @@ async function renderListaRetencaoTab() {
             }
 
             container.innerHTML = `<div class="border rounded-lg overflow-hidden"><div style="overflow-y:auto;max-height:560px;">${tableHtml}</div></div>${paginationHtml}`;
+            _colApply(container, 'churn_cols', [{key:'num'},{key:'contrato'},{key:'cliente'},{key:'cidade'},{key:'risco'},{key:'score'},{key:'fat_vencidas'},{key:'dias_vencido'},{key:'atend_30d'},{key:'sem_conexao'},{key:'telefone'},{key:'whatsapp'}]);
             container.querySelectorAll('.ret-page-btn').forEach(btn => {
                 btn.addEventListener('click', () => fetchAndRenderRetTable(parseInt(btn.dataset.page)));
             });
@@ -2599,15 +2604,15 @@ async function renderAlertasAcaoTab() {
                     const tierStyle = TIER_STYLE[r.tier] || '';
                     const acaoText = (r.acao || '');
                     return `<tr data-contrato="${r.contrato}" style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;cursor:pointer;" title="Clique para ver detalhes">
-                        <td style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${(page - 1) * rowsPerPage + i + 1}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;font-family:monospace;">#${r.contrato || ''}</td>
-                        <td style="padding:6px 10px;font-size:.8rem;font-weight:500;">${r.cliente || ''}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;">${r.cidade || ''}</td>
-                        <td style="padding:6px 10px;">
+                        <td data-col="num" style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${(page - 1) * rowsPerPage + i + 1}</td>
+                        <td data-col="contrato" style="padding:6px 10px;font-size:.78rem;font-family:monospace;">#${r.contrato || ''}</td>
+                        <td data-col="cliente" style="padding:6px 10px;font-size:.8rem;font-weight:500;">${r.cliente || ''}</td>
+                        <td data-col="cidade" style="padding:6px 10px;font-size:.78rem;">${r.cidade || ''}</td>
+                        <td data-col="urgencia" style="padding:6px 10px;">
                             <span style="padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap;${tierStyle}">${r.tier || ''}</span>
                         </td>
-                        <td style="padding:6px 10px;font-size:.78rem;max-width:260px;line-height:1.5;">${acaoText}</td>
-                        <td style="padding:6px 10px;font-size:.75rem;max-width:180px;line-height:1.4;">${(() => {
+                        <td data-col="acao_rec" style="padding:6px 10px;font-size:.78rem;max-width:260px;line-height:1.5;">${acaoText}</td>
+                        <td data-col="os_ret" style="padding:6px 10px;font-size:.75rem;max-width:180px;line-height:1.4;">${(() => {
                             const sit = r.situacao_retirada || '';
                             const assunto = r.ret_assunto_aberta || '';
                             const dtRaw = (r.ret_data_aberta || '').slice(0,10);
@@ -2641,10 +2646,10 @@ async function renderAlertasAcaoTab() {
                             if (sit === 'neg_sem_retirada') return '<span style="color:#991b1b;font-weight:600;">Sem OS cadastrada</span>';
                             return '<span style="color:#9ca3af;">—</span>';
                         })()}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;${r.fat_vencidas > 0 ? 'color:#dc2626;font-weight:700;' : ''}">${r.fat_vencidas || 0}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
-                        <td style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>
-                        <td style="padding:6px 10px;">${(() => {
+                        <td data-col="fat_venc" style="padding:6px 10px;font-size:.78rem;${r.fat_vencidas > 0 ? 'color:#dc2626;font-weight:700;' : ''}">${r.fat_vencidas || 0}</td>
+                        <td data-col="dias_venc" style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
+                        <td data-col="sem_conexao" style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>
+                        <td data-col="sit_ret" style="padding:6px 10px;">${(() => {
                             const _b = (bg, cor, bdr, icon, title, sub) =>
                                 `<span style="padding:3px 7px;border-radius:6px;font-size:.68rem;font-weight:700;display:inline-block;line-height:1.5;background:${bg};color:${cor};border:1px solid ${bdr};">${icon} ${title}<br><span style="font-weight:400;font-size:.62rem;opacity:.85;">${sub}</span></span>`;
                             const _SIT_BADGE = {
@@ -2656,26 +2661,28 @@ async function renderAlertasAcaoTab() {
                             };
                             return _SIT_BADGE[r.situacao_retirada] || _b('#f3f4f6','#6b7280','#e5e7eb','','Sem retirada','contrato ativo sem processo');
                         })()}</td>
-                        <td style="padding:6px 10px;text-align:center;" onclick="event.stopPropagation()"><button onclick="window._cmMsg(this,${i})" style="background:none;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;font-size:.85rem;padding:2px 6px;" title="Enviar mensagem pronta">💬</button></td>
+                        <td data-col="msg" style="padding:6px 10px;text-align:center;" onclick="event.stopPropagation()"><button onclick="window._cmMsg(this,${i})" style="background:none;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;font-size:.85rem;padding:2px 6px;" title="Enviar mensagem pronta">💬</button></td>
                     </tr>`;
                 }).join('');
 
+                const _ALERTA_COLS = [{key:'num',label:'#'},{key:'contrato',label:'Contrato'},{key:'cliente',label:'Cliente'},{key:'cidade',label:'Cidade'},{key:'urgencia',label:'Urgência'},{key:'acao_rec',label:'Ação Recomendada'},{key:'os_ret',label:'OS Retirada'},{key:'fat_venc',label:'Fat. Vencidas'},{key:'dias_venc',label:'Dias Venc.'},{key:'sem_conexao',label:'Sem Conexão'},{key:'sit_ret',label:'Sit. Retirada'},{key:'msg',label:'Msg'}];
                 tableHtml = `
-                    <div style="overflow-x:auto;">
+                    <div data-coltable="alerta_cols" style="overflow-x:auto;">
+                        ${_colToggleHtml('alerta_cols', _ALERTA_COLS)}
                         <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
                             <thead><tr style="background:#1e293b;color:#fff;position:sticky;top:0;">
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">#</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Contrato</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Cliente</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Cidade</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Urgência</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Ação Recomendada</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">OS Retirada</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Fat. Vencidas</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Dias Venc.</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Sem Conexão</th>
-                                <th style="padding:8px 10px;text-align:left;white-space:nowrap;">Sit. Retirada</th>
-                                <th style="padding:8px 10px;text-align:center;white-space:nowrap;">Msg</th>
+                                <th data-col="num" style="padding:8px 10px;text-align:left;white-space:nowrap;">#</th>
+                                <th data-col="contrato" style="padding:8px 10px;text-align:left;white-space:nowrap;">Contrato</th>
+                                <th data-col="cliente" style="padding:8px 10px;text-align:left;white-space:nowrap;">Cliente</th>
+                                <th data-col="cidade" style="padding:8px 10px;text-align:left;white-space:nowrap;">Cidade</th>
+                                <th data-col="urgencia" style="padding:8px 10px;text-align:left;white-space:nowrap;">Urgência</th>
+                                <th data-col="acao_rec" style="padding:8px 10px;text-align:left;white-space:nowrap;">Ação Recomendada</th>
+                                <th data-col="os_ret" style="padding:8px 10px;text-align:left;white-space:nowrap;">OS Retirada</th>
+                                <th data-col="fat_venc" style="padding:8px 10px;text-align:left;white-space:nowrap;">Fat. Vencidas</th>
+                                <th data-col="dias_venc" style="padding:8px 10px;text-align:left;white-space:nowrap;">Dias Venc.</th>
+                                <th data-col="sem_conexao" style="padding:8px 10px;text-align:left;white-space:nowrap;">Sem Conexão</th>
+                                <th data-col="sit_ret" style="padding:8px 10px;text-align:left;white-space:nowrap;">Sit. Retirada</th>
+                                <th data-col="msg" style="padding:8px 10px;text-align:center;white-space:nowrap;">Msg</th>
                             </tr></thead>
                             <tbody>${rows}</tbody>
                         </table>
@@ -2697,6 +2704,7 @@ async function renderAlertasAcaoTab() {
             }
 
             container.innerHTML = `<div class="border rounded-lg overflow-hidden"><div style="overflow-y:auto;max-height:560px;">${tableHtml}</div></div>${paginationHtml}`;
+            _colApply(container, 'alerta_cols', [{key:'num'},{key:'contrato'},{key:'cliente'},{key:'cidade'},{key:'urgencia'},{key:'acao_rec'},{key:'os_ret'},{key:'fat_venc'},{key:'dias_venc'},{key:'sem_conexao'},{key:'sit_ret'},{key:'msg'}]);
             container.querySelectorAll('.alerta-page-btn').forEach(btn => {
                 btn.addEventListener('click', () => fetchAndRenderAlertaTable(parseInt(btn.dataset.page)));
             });
@@ -3394,19 +3402,20 @@ function renderPerfilPagamentoTab() {
 
         <!-- Tabela geral -->
         <div class="bg-white rounded-lg shadow overflow-hidden">
-          <div class="overflow-x-auto">
+          <div data-coltable="pf_cols" class="overflow-x-auto">
+            <div id="pf-col-toggle-placeholder"></div>
             <table class="min-w-full text-sm">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-3 py-2 text-left">Contrato</th>
-                  <th class="px-3 py-2 text-left">Cliente</th>
-                  <th class="px-3 py-2 text-left">Cidade</th>
-                  <th class="px-3 py-2 text-center">Perfil</th>
-                  <th class="px-3 py-2 text-right">Pagas</th>
-                  <th class="px-3 py-2 text-right">Atrasos</th>
-                  <th class="px-3 py-2 text-right">% Atraso</th>
-                  <th class="px-3 py-2 text-right">Med. Atraso</th>
-                  <th class="px-3 py-2 text-right">Vencidas Hoje</th>
+                  <th data-col="contrato" class="px-3 py-2 text-left">Contrato</th>
+                  <th data-col="cliente" class="px-3 py-2 text-left">Cliente</th>
+                  <th data-col="cidade" class="px-3 py-2 text-left">Cidade</th>
+                  <th data-col="perfil" class="px-3 py-2 text-center">Perfil</th>
+                  <th data-col="pagas" class="px-3 py-2 text-right">Pagas</th>
+                  <th data-col="atrasos" class="px-3 py-2 text-right">Atrasos</th>
+                  <th data-col="pct_atraso" class="px-3 py-2 text-right">% Atraso</th>
+                  <th data-col="med_atraso" class="px-3 py-2 text-right">Med. Atraso</th>
+                  <th data-col="vencidas_hoje" class="px-3 py-2 text-right">Vencidas Hoje</th>
                 </tr>
               </thead>
               <tbody id="pf-table-body" class="divide-y divide-gray-100"></tbody>
@@ -3561,18 +3570,22 @@ function renderPerfilPagamentoTab() {
                 }[p] || 'bg-gray-100 text-gray-600';
                 return `<span class="px-2 py-0.5 rounded-full text-xs ${cls}">${p}</span>`;
             };
+            const _PF_COLS = [{key:'contrato',label:'Contrato'},{key:'cliente',label:'Cliente'},{key:'cidade',label:'Cidade'},{key:'perfil',label:'Perfil'},{key:'pagas',label:'Pagas'},{key:'atrasos',label:'Atrasos'},{key:'pct_atraso',label:'% Atraso'},{key:'med_atraso',label:'Med. Atraso'},{key:'vencidas_hoje',label:'Vencidas Hoje'}];
+            const _pfTogglePh = document.getElementById('pf-col-toggle-placeholder');
+            if (_pfTogglePh && !_pfTogglePh.dataset.done) { _pfTogglePh.innerHTML = _colToggleHtml('pf_cols', _PF_COLS); _pfTogglePh.dataset.done = '1'; }
             tbody.innerHTML = (data.data || []).map(r => `
               <tr class="hover:bg-gray-50 cursor-pointer" data-contrato="${r.contrato}" title="Clique para ver detalhes">
-                <td class="px-3 py-2">${r.contrato}</td>
-                <td class="px-3 py-2">${r.cliente}</td>
-                <td class="px-3 py-2">${r.cidade || '-'}</td>
-                <td class="px-3 py-2 text-center">${perfilBadge(r.perfil)}</td>
-                <td class="px-3 py-2 text-right">${r.total_pagas}</td>
-                <td class="px-3 py-2 text-right">${r.total_atrasos}</td>
-                <td class="px-3 py-2 text-right">${r.pct_atraso}%</td>
-                <td class="px-3 py-2 text-right">${r.media_atraso_dias > 0 ? r.media_atraso_dias + ' d' : '-'}</td>
-                <td class="px-3 py-2 text-right ${r.fat_vencidas_hoje > 0 ? 'text-red-600 font-semibold' : ''}">${r.fat_vencidas_hoje || '-'}</td>
+                <td data-col="contrato" class="px-3 py-2">${r.contrato}</td>
+                <td data-col="cliente" class="px-3 py-2">${r.cliente}</td>
+                <td data-col="cidade" class="px-3 py-2">${r.cidade || '-'}</td>
+                <td data-col="perfil" class="px-3 py-2 text-center">${perfilBadge(r.perfil)}</td>
+                <td data-col="pagas" class="px-3 py-2 text-right">${r.total_pagas}</td>
+                <td data-col="atrasos" class="px-3 py-2 text-right">${r.total_atrasos}</td>
+                <td data-col="pct_atraso" class="px-3 py-2 text-right">${r.pct_atraso}%</td>
+                <td data-col="med_atraso" class="px-3 py-2 text-right">${r.media_atraso_dias > 0 ? r.media_atraso_dias + ' d' : '-'}</td>
+                <td data-col="vencidas_hoje" class="px-3 py-2 text-right ${r.fat_vencidas_hoje > 0 ? 'text-red-600 font-semibold' : ''}">${r.fat_vencidas_hoje || '-'}</td>
               </tr>`).join('');
+            _colApply(tbody.closest('[data-coltable]') || tbody, 'pf_cols', _PF_COLS);
         }
 
         // Pagination
@@ -4289,7 +4302,56 @@ function _retDiasAberto(o) {
     return { txt, cls };
 }
 
-// ── Gerenciar colunas da tabela Ordens ──────────────────────────────
+// ── Gerenciar colunas — utilitário genérico (usado em todas as análises) ──
+function _colGetVis(storageKey, defs) {
+    try { const s = JSON.parse(localStorage.getItem(storageKey) || 'null'); if (s) return s; } catch(e) {}
+    return Object.fromEntries(defs.map(c => [c.key, true]));
+}
+function _colToggleHtml(storageKey, defs) {
+    const vis = _colGetVis(storageKey, defs);
+    return `<div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+      <div style="position:relative;">
+        <button onclick="window._colPanelToggle(event,'${storageKey}')"
+          style="font-size:0.72rem;padding:3px 9px;border:1px solid #d1d5db;border-radius:4px;
+                 background:#fff;cursor:pointer;color:#374151;">⊞ Colunas</button>
+        <div id="col-panel-${storageKey}" onclick="event.stopPropagation()"
+          style="display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:200;
+                 background:#fff;border:1px solid #d1d5db;border-radius:6px;padding:12px 14px;
+                 box-shadow:0 4px 14px rgba(0,0,0,.13);min-width:220px;">
+          <div style="font-size:0.72rem;font-weight:700;color:#374151;margin-bottom:8px;">Gerenciar colunas</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 18px;">
+            ${defs.map(c => `<label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;cursor:pointer;color:#111827;">
+                <input type="checkbox" ${vis[c.key] !== false ? 'checked' : ''}
+                  onchange="window._colToggle('${storageKey}','${c.key}',this.checked)"
+                  style="accent-color:#2563eb;width:14px;height:14px;">${c.label}</label>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+function _colApply(root, storageKey, defs) {
+    const vis = _colGetVis(storageKey, defs);
+    Object.entries(vis).forEach(([k, show]) => {
+        root.querySelectorAll(`[data-col="${k}"]`).forEach(el => { el.style.display = show ? '' : 'none'; });
+    });
+}
+window._colToggle = function(storageKey, key, checked) {
+    const vis = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    vis[key] = checked;
+    localStorage.setItem(storageKey, JSON.stringify(vis));
+    document.querySelectorAll(`[data-coltable="${storageKey}"] [data-col="${key}"]`).forEach(el => {
+        el.style.display = checked ? '' : 'none';
+    });
+};
+window._colPanelToggle = function(e, storageKey) {
+    e.stopPropagation();
+    const p = document.getElementById(`col-panel-${storageKey}`);
+    if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+};
+document.addEventListener('click', () => {
+    document.querySelectorAll('[id^="col-panel-"]').forEach(p => p.style.display = 'none');
+});
+
 const _RET_COL_DEFS = [
     {key:'id',           label:'ID'},
     {key:'tipo',         label:'Tipo'},
@@ -4303,27 +4365,6 @@ const _RET_COL_DEFS = [
     {key:'equipamentos', label:'Equipamentos'},
     {key:'visitas',      label:'Visitas'},
 ];
-function _retGetColVis() {
-    try { const s = JSON.parse(localStorage.getItem('ret_ordens_cols') || 'null'); if (s) return s; } catch(e) {}
-    return Object.fromEntries(_RET_COL_DEFS.map(c => [c.key, true]));
-}
-function _retApplyCols(el) {
-    const vis = _retGetColVis();
-    Object.entries(vis).forEach(([k, show]) => {
-        el.querySelectorAll(`[data-col="${k}"]`).forEach(td => { td.style.display = show ? '' : 'none'; });
-    });
-}
-window._retToggleCol = function(key, checked) {
-    const vis = _retGetColVis(); vis[key] = checked;
-    localStorage.setItem('ret_ordens_cols', JSON.stringify(vis));
-    const w = document.getElementById('ret-table-wrap'); if (w) _retApplyCols(w);
-};
-window._retColPanel = function(e) {
-    e.stopPropagation();
-    const p = document.getElementById('ret-col-panel');
-    if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
-};
-document.addEventListener('click', () => { const p = document.getElementById('ret-col-panel'); if (p) p.style.display = 'none'; });
 
 function _retRenderTable(wrap) {
     if (!wrap) return;
@@ -4438,36 +4479,7 @@ function _retRenderTable(wrap) {
         `<th data-col="${col}" class="px-3 py-2 font-semibold cursor-pointer hover:bg-gray-700 select-none whitespace-nowrap ${extra}"
              onclick="window._retSort('${col}')">${label}${_sortArrow(col)}</th>`;
 
-    const _vis = _retGetColVis();
-    const _colPanelHtml = `
-      <div style="display:flex;justify-content:flex-end;margin-bottom:4px;position:relative;">
-        <div style="position:relative;">
-          <button id="ret-col-btn" onclick="window._retColPanel(event)"
-            style="font-size:0.72rem;padding:3px 8px;border:1px solid #d1d5db;border-radius:4px;
-                   background:#fff;cursor:pointer;color:#374151;display:flex;align-items:center;gap:4px;">
-            ⊞ Colunas
-          </button>
-          <div id="ret-col-panel" onclick="event.stopPropagation()"
-            style="display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:200;
-                   background:#fff;border:1px solid #d1d5db;border-radius:6px;padding:12px 14px;
-                   box-shadow:0 4px 14px rgba(0,0,0,.13);min-width:230px;">
-            <div style="font-size:0.72rem;font-weight:700;color:#374151;margin-bottom:8px;letter-spacing:.03em;">
-              Gerenciar colunas
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 18px;">
-              ${_RET_COL_DEFS.map(c => `
-                <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;cursor:pointer;color:#111827;">
-                  <input type="checkbox" ${_vis[c.key] !== false ? 'checked' : ''}
-                    onchange="window._retToggleCol('${c.key}',this.checked)"
-                    style="accent-color:#2563eb;width:14px;height:14px;">
-                  ${c.label}
-                </label>`).join('')}
-            </div>
-          </div>
-        </div>
-      </div>`;
-
-    wrap.innerHTML = `${_colPanelHtml}
+    wrap.innerHTML = `<div data-coltable="ret_ordens_cols">${_colToggleHtml('ret_ordens_cols', _RET_COL_DEFS)}
     <table class="min-w-full text-left">
       <thead>
         <tr class="bg-gray-800 text-white text-xs">
@@ -4485,8 +4497,8 @@ function _retRenderTable(wrap) {
         </tr>
       </thead>
       <tbody>${rows}</tbody>
-    </table>`;
-    _retApplyCols(wrap);
+    </table></div>`;
+    _colApply(wrap, 'ret_ordens_cols', _RET_COL_DEFS);
 }
 
 function _retVisitasApply() {
