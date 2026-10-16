@@ -1046,8 +1046,8 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
         <div class="mb-2">
           <label class="text-xs text-gray-500 block mb-1">Colaborador responsável</label>
           <div class="flex items-center gap-2 border rounded px-2 py-1 bg-gray-50 text-sm">
-            <span id="cdp-acomp-colab-nome" class="text-gray-700 flex-1">—</span>
-            <span id="cdp-acomp-colab-ixcid" class="text-xs text-gray-400"></span>
+            <span id="cdp-acomp-colab-nome" class="text-gray-700 flex-1">{{ current_username | default('—') }}</span>
+            <span id="cdp-acomp-colab-ixcid" class="text-xs text-gray-400">{% if current_ixc_colab_id %}ID: {{ current_ixc_colab_id }}{% endif %}</span>
           </div>
         </div>
         <div class="flex gap-2 items-end">
