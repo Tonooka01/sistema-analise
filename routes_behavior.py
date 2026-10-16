@@ -3900,7 +3900,7 @@ def api_behavior_retiradas_filtros():
             f"SELECT DISTINCT Bairro FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) AND Bairro IS NOT NULL AND Bairro != '' ORDER BY Bairro",
             _base_p).fetchall()]
         colab_ids = [str(r[0]) for r in conn.execute(
-            f"SELECT DISTINCT Colaborador FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) AND Colaborador IS NOT NULL AND Colaborador != '' AND Colaborador != '0' ORDER BY Colaborador",
+            f"SELECT DISTINCT Colaborador FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) AND Status IN ('Aberta','Encaminhada','Agendada') AND Colaborador IS NOT NULL AND Colaborador != '' AND Colaborador != '0' ORDER BY Colaborador",
             _base_p).fetchall()]
         filiais = [r[0] for r in conn.execute(
             f"SELECT DISTINCT Filial FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) AND Filial IS NOT NULL ORDER BY Filial",
