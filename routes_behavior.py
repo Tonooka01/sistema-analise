@@ -5038,28 +5038,55 @@ def api_ret_atividade_tecnico():
         ph_ass = ','.join('?' * len(RETIRADA_ASSUNTOS))
         ph_cid = ','.join('?' * len(_CIDADES_OP))
 
-        # Conta finalizações por técnico/dia direto da tabela OS (todos os 5 assuntos de retirada)
-        rows = conn.execute(f"""
-            SELECT o.Colaborador,
-                   CAST(strftime('%d',
-                       CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
-                                 AND o.Fechamento NOT LIKE '0000%'
-                            THEN o.Fechamento ELSE o.Final END
-                   ) AS INTEGER) AS dia,
-                   COUNT(*) AS cnt
+        import json as _json, collections as _coll
+
+        # Busca todas as OS de retirada nas cidades operacionais
+        all_os_rows = conn.execute(f"""
+            SELECT o.ID, o.Colaborador,
+                   CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                             AND o.Fechamento NOT LIKE '0000%'
+                        THEN o.Fechamento ELSE o.Final END AS data_fin
             FROM OS o
             WHERE o.Assunto IN ({ph_ass})
             AND o.Cidade IN ({ph_cid})
-            AND o.Status = 'Finalizada'
             AND o.Colaborador IS NOT NULL AND TRIM(o.Colaborador) != '' AND o.Colaborador != '0'
-            AND strftime('%Y-%m',
-                CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
-                          AND o.Fechamento NOT LIKE '0000%'
-                     THEN o.Fechamento ELSE o.Final END
-            ) = ?
-            GROUP BY o.Colaborador, dia
-            ORDER BY o.Colaborador, dia
-        """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP) + [mes]).fetchall()
+        """, list(RETIRADA_ASSUNTOS) + list(_CIDADES_OP)).fetchall()
+
+        os_ids = [str(r[0]) for r in all_os_rows]
+
+        # Lê cache de interações (fotos, mensagens) para essas OS
+        cache_map = {}
+        if os_ids:
+            ph_os = ','.join('?' * len(os_ids))
+            for cr in conn.execute(
+                f"SELECT os_id, datas FROM ret_atividade_cache WHERE os_id IN ({ph_os})",
+                os_ids
+            ).fetchall():
+                try:
+                    cache_map[str(cr[0])] = set(_json.loads(cr[1] or '[]'))
+                except Exception:
+                    cache_map[str(cr[0])] = set()
+
+        # Agrega: (colab, dia) -> conjunto de OS distintas com interação naquele dia
+        mes_prefix = mes + '-'
+        colab_day_os = _coll.defaultdict(lambda: _coll.defaultdict(set))
+        for r in all_os_rows:
+            os_id  = str(r[0])
+            colab  = str(r[1] or '').strip()
+            data_f = str(r[2] or '')
+            # Data de finalização, se cair no mês selecionado
+            if data_f and data_f.startswith(mes_prefix):
+                try:
+                    colab_day_os[colab][int(data_f[8:10])].add(os_id)
+                except Exception:
+                    pass
+            # Datas de interação registradas no cache IXC
+            for dt in cache_map.get(os_id, set()):
+                if dt and dt.startswith(mes_prefix):
+                    try:
+                        colab_day_os[colab][int(dt[8:10])].add(os_id)
+                    except Exception:
+                        pass
 
         # Auto-sync cache para OS recentes (mantém detalhe por clique atualizado)
         fresh_24h = set(
@@ -5090,18 +5117,12 @@ def api_ret_atividade_tecnico():
                 ).start()
 
         _tec_map = _get_tecnicos_map()
-        _colab_dias = {}
-        for r in rows:
-            cid = str(r[0]).strip()
-            if cid not in _colab_dias:
-                nome = _tec_map.get(cid) or _tec_map.get(cid.lstrip('0')) or f'#{cid}'
-                _colab_dias[cid] = {'id': cid, 'nome': nome, 'dias': {}}
-            _colab_dias[cid]['dias'][r[1]] = r[2]
-
         por_colab = sorted(
-            [{'id': v['id'], 'nome': v['nome'], 'dias': v['dias'],
-              'total': sum(v['dias'].values())}
-             for v in _colab_dias.values()],
+            [{'id': colab,
+              'nome': _tec_map.get(colab) or _tec_map.get(colab.lstrip('0')) or f'#{colab}',
+              'dias': {dia: len(os_set) for dia, os_set in dia_map.items()},
+              'total': sum(len(s) for s in dia_map.values())}
+             for colab, dia_map in colab_day_os.items()],
             key=lambda x: -x['total']
         )
         return jsonify({'por_colaborador': por_colab, 'num_days': num_days, 'mes': mes,
@@ -5121,10 +5142,16 @@ def _atividade_bg_sync(app, bg_ids, ativ_colab_map, token):
         with app.app_context():
             def _fetch_dates(os_id):
                 try:
-                    recs = _ixc_arquivos(os_id, token)
                     dias = set()
-                    for rec in (recs or []):
+                    # Fotos/arquivos
+                    for rec in (_ixc_arquivos(os_id, token) or []):
                         dt = (rec.get('data_envio') or rec.get('data') or '')[:10]
+                        if dt and dt != '0000-00-00':
+                            dias.add(dt)
+                    # Mensagens
+                    for rec in (_ixc_mensagens(os_id, token) or []):
+                        dt = (rec.get('data') or rec.get('data_hora') or
+                              rec.get('data_envio') or rec.get('created_at') or '')[:10]
                         if dt and dt != '0000-00-00':
                             dias.add(dt)
                     return str(os_id), dias

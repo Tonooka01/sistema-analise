@@ -3990,11 +3990,13 @@ function _retShell(f) {
           <label class="text-xs text-gray-500 font-medium">Bairro</label>
           ${sel('ret-f-bairro', f.bairros || [], 'Todos bairros')}
         </div>
-        <div class="flex flex-col gap-1">
+        <div class="flex flex-col gap-1" style="min-width:160px;">
           <label class="text-xs text-gray-500 font-medium">Colaborador</label>
+          <input id="ret-f-colab-search" type="text" placeholder="Buscar colaborador…"
+            class="border border-gray-300 rounded px-2 py-1 text-sm" style="margin-bottom:2px;">
           <select id="ret-f-colab" class="ret-filter border border-gray-300 rounded px-2 py-1 text-sm">
             <option value="">Todos colaboradores</option>
-            ${(f.colaboradores || []).map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}
+            ${(f.colaboradores || []).slice().sort((a,b) => a.nome.localeCompare(b.nome,'pt-BR')).map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}
           </select>
         </div>
         <div class="flex flex-col gap-1">
@@ -4137,8 +4139,10 @@ function _retBindEvents(pane) {
     pane.querySelector('#ret-btn-limpar')?.addEventListener('click', () => {
         pane.querySelectorAll('.ret-ms-cb').forEach(cb => cb.checked = false);
         _retUpdateStatusLabel();
-        ['#ret-f-assunto','#ret-f-filial','#ret-f-cidade','#ret-f-bairro','#ret-f-colab','#ret-f-equip','#ret-f-min-visitas','#ret-f-de','#ret-f-ate','#ret-f-search']
+        ['#ret-f-assunto','#ret-f-filial','#ret-f-cidade','#ret-f-bairro','#ret-f-colab','#ret-f-colab-search','#ret-f-equip','#ret-f-min-visitas','#ret-f-de','#ret-f-ate','#ret-f-search']
             .forEach(s => { const el = pane.querySelector(s); if (el) el.value = ''; });
+        // Restore all hidden options when clearing the colab search
+        pane.querySelectorAll('#ret-f-colab option').forEach(o => { o.hidden = false; });
         _retFilters = { status:'',assunto:'',filial:'',cidade:'',bairro:'',colaborador:'',equipamento:'',min_visitas:'',date_from:'',date_to:'',search:'' };
         _retSortBy  = '';
         _retSortDir = 'desc';
@@ -4146,6 +4150,21 @@ function _retBindEvents(pane) {
         _retExpanded.clear();
         _retLoad();
     });
+
+    // Busca em tempo real dentro do select de colaborador
+    const _colabSearchEl = pane.querySelector('#ret-f-colab-search');
+    const _colabSelEl    = pane.querySelector('#ret-f-colab');
+    if (_colabSearchEl && _colabSelEl) {
+        _colabSearchEl.addEventListener('input', () => {
+            const q = _colabSearchEl.value.toLowerCase().trim();
+            Array.from(_colabSelEl.options).forEach(opt => {
+                if (opt.value === '') { opt.hidden = false; return; }
+                opt.hidden = q !== '' && !opt.text.toLowerCase().includes(q);
+            });
+            // Se a opção selecionada ficou oculta, volta para "Todos"
+            if (_colabSelEl.selectedOptions[0]?.hidden) _colabSelEl.value = '';
+        });
+    }
 }
 
 async function _retLoad() {
