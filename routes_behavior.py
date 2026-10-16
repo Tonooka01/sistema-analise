@@ -3903,13 +3903,20 @@ def api_behavior_retiradas_filtros():
             f"SELECT DISTINCT Filial FROM OS WHERE Assunto IN ({ph}) AND Filial IS NOT NULL ORDER BY Filial",
             RETIRADA_ASSUNTOS).fetchall()]
         try:
-            equipamentos = [r[0] for r in conn.execute(
-                "SELECT Descricao_produto, COUNT(*) AS cnt FROM Equipamento "
-                "WHERE Descricao_produto IS NOT NULL AND Descricao_produto != '' "
-                "AND (UPPER(Descricao_produto) LIKE '%ONU%' OR UPPER(Descricao_produto) LIKE '%ONT%' "
-                "     OR UPPER(Descricao_produto) LIKE '%ROTEADOR%' OR UPPER(Descricao_produto) LIKE '%ROUTER%') "
-                "GROUP BY Descricao_produto ORDER BY cnt DESC LIMIT 60"
-            ).fetchall()]
+            equipamentos = [r[0] for r in conn.execute(f"""
+                SELECT DISTINCT e.Descricao_produto
+                FROM Equipamento e
+                WHERE CAST(e.ID_contrato AS TEXT) IN (
+                    SELECT DISTINCT CAST(o.Contrato AS TEXT) FROM OS o
+                    WHERE o.Assunto IN ({ph})
+                    AND o.Status IN ('Aberta','Encaminhada','Agendada')
+                    AND o.Contrato IS NOT NULL AND o.Contrato != '' AND o.Contrato != '0'
+                )
+                AND e.Descricao_produto IS NOT NULL AND e.Descricao_produto != ''
+                AND (UPPER(e.Descricao_produto) LIKE '%ONU%' OR UPPER(e.Descricao_produto) LIKE '%ONT%'
+                     OR UPPER(e.Descricao_produto) LIKE '%ROTEADOR%' OR UPPER(e.Descricao_produto) LIKE '%ROUTER%')
+                ORDER BY e.Descricao_produto
+            """, RETIRADA_ASSUNTOS).fetchall()]
         except Exception:
             equipamentos = []
 

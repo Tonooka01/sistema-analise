@@ -3990,14 +3990,27 @@ function _retShell(f) {
           <label class="text-xs text-gray-500 font-medium">Bairro</label>
           ${sel('ret-f-bairro', f.bairros || [], 'Todos bairros')}
         </div>
-        <div class="flex flex-col gap-1" style="min-width:160px;">
+        <div class="flex flex-col gap-1" style="min-width:175px;position:relative;">
           <label class="text-xs text-gray-500 font-medium">Colaborador</label>
-          <input id="ret-f-colab-search" type="text" placeholder="Buscar colaborador…"
-            class="border border-gray-300 rounded px-2 py-1 text-sm" style="margin-bottom:2px;">
-          <select id="ret-f-colab" class="ret-filter border border-gray-300 rounded px-2 py-1 text-sm">
-            <option value="">Todos colaboradores</option>
-            ${(f.colaboradores || []).slice().sort((a,b) => a.nome.localeCompare(b.nome,'pt-BR')).map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}
-          </select>
+          <div style="position:relative;">
+            <input id="ret-f-colab-input" type="text" placeholder="Todos colaboradores"
+              autocomplete="off"
+              class="border border-gray-300 rounded px-2 py-1 text-sm w-full">
+            <input id="ret-f-colab" type="hidden" value="">
+            <div id="ret-f-colab-dropdown"
+              style="display:none;position:absolute;top:100%;left:0;right:0;z-index:100;
+                     background:#fff;border:1px solid #d1d5db;border-radius:4px;
+                     max-height:210px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,.12);">
+              <div class="ret-colab-opt" data-id="" data-nome=""
+                style="padding:5px 10px;cursor:pointer;font-size:0.78rem;color:#6b7280;font-style:italic;">
+                Todos colaboradores
+              </div>
+              ${(f.colaboradores || []).slice().sort((a,b) => a.nome.localeCompare(b.nome,'pt-BR')).map(c =>
+                `<div class="ret-colab-opt" data-id="${c.id}" data-nome="${c.nome}"
+                  style="padding:5px 10px;cursor:pointer;font-size:0.78rem;color:#111827;">${c.nome}</div>`
+              ).join('')}
+            </div>
+          </div>
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-xs text-gray-500 font-medium">De</label>
@@ -4139,10 +4152,8 @@ function _retBindEvents(pane) {
     pane.querySelector('#ret-btn-limpar')?.addEventListener('click', () => {
         pane.querySelectorAll('.ret-ms-cb').forEach(cb => cb.checked = false);
         _retUpdateStatusLabel();
-        ['#ret-f-assunto','#ret-f-filial','#ret-f-cidade','#ret-f-bairro','#ret-f-colab','#ret-f-colab-search','#ret-f-equip','#ret-f-min-visitas','#ret-f-de','#ret-f-ate','#ret-f-search']
+        ['#ret-f-assunto','#ret-f-filial','#ret-f-cidade','#ret-f-bairro','#ret-f-colab','#ret-f-colab-input','#ret-f-equip','#ret-f-min-visitas','#ret-f-de','#ret-f-ate','#ret-f-search']
             .forEach(s => { const el = pane.querySelector(s); if (el) el.value = ''; });
-        // Restore all hidden options when clearing the colab search
-        pane.querySelectorAll('#ret-f-colab option').forEach(o => { o.hidden = false; });
         _retFilters = { status:'',assunto:'',filial:'',cidade:'',bairro:'',colaborador:'',equipamento:'',min_visitas:'',date_from:'',date_to:'',search:'' };
         _retSortBy  = '';
         _retSortDir = 'desc';
@@ -4151,18 +4162,37 @@ function _retBindEvents(pane) {
         _retLoad();
     });
 
-    // Busca em tempo real dentro do select de colaborador
-    const _colabSearchEl = pane.querySelector('#ret-f-colab-search');
-    const _colabSelEl    = pane.querySelector('#ret-f-colab');
-    if (_colabSearchEl && _colabSelEl) {
-        _colabSearchEl.addEventListener('input', () => {
-            const q = _colabSearchEl.value.toLowerCase().trim();
-            Array.from(_colabSelEl.options).forEach(opt => {
-                if (opt.value === '') { opt.hidden = false; return; }
-                opt.hidden = q !== '' && !opt.text.toLowerCase().includes(q);
+    // Combobox de colaborador — campo único com dropdown filtrável
+    const _cInput  = pane.querySelector('#ret-f-colab-input');
+    const _cHidden = pane.querySelector('#ret-f-colab');
+    const _cDrop   = pane.querySelector('#ret-f-colab-dropdown');
+    if (_cInput && _cDrop) {
+        const _cOpts = Array.from(_cDrop.querySelectorAll('.ret-colab-opt'));
+
+        function _cFilter(q) {
+            const lq = q.toLowerCase().trim();
+            _cOpts.forEach(o => {
+                if (!o.dataset.id) { o.style.display = ''; return; }
+                o.style.display = !lq || o.dataset.nome.toLowerCase().includes(lq) ? '' : 'none';
             });
-            // Se a opção selecionada ficou oculta, volta para "Todos"
-            if (_colabSelEl.selectedOptions[0]?.hidden) _colabSelEl.value = '';
+        }
+        function _cOpen()  { _cFilter(_cInput.value); _cDrop.style.display = 'block'; }
+        function _cClose() { _cDrop.style.display = 'none'; }
+
+        _cInput.addEventListener('focus', _cOpen);
+        _cInput.addEventListener('input', () => { _cHidden.value = ''; _cOpen(); });
+        document.addEventListener('mousedown', e => {
+            if (!_cInput.contains(e.target) && !_cDrop.contains(e.target)) _cClose();
+        });
+        _cOpts.forEach(o => {
+            o.addEventListener('mouseover', () => o.style.background = '#f3f4f6');
+            o.addEventListener('mouseout',  () => o.style.background = '');
+            o.addEventListener('mousedown', e => {
+                e.preventDefault();
+                _cInput.value  = o.dataset.id ? o.dataset.nome : '';
+                _cHidden.value = o.dataset.id;
+                _cClose();
+            });
         });
     }
 }
