@@ -2483,10 +2483,18 @@ def api_behavior_action_alerts():
                    COALESCE(A.ret_data_aberta, '')    AS ret_data_aberta,
                    COALESCE(A.ret_ultimo_assunto, '') AS ret_ultimo_assunto,
                    COALESCE(A.ret_ultima_data, '')    AS ret_ultima_data,
-                   COALESCE(CTR.Telefone_celular, CLI.WhatsApp, CLI.Telefone, '') AS whatsapp
+                   COALESCE(CTR.Telefone_celular, CLI.WhatsApp, CLI.Telefone, '') AS whatsapp,
+                   COALESCE(EQ.equipamentos, '') AS equipamentos
             FROM Alerted A
             LEFT JOIN Clientes CLI ON CLI.Raz_o_social = A.cliente
             LEFT JOIN Contratos CTR ON CTR.ID = A.contrato
+            LEFT JOIN (
+                SELECT CAST(ID_contrato AS TEXT) AS id_c,
+                       GROUP_CONCAT(DISTINCT Descricao_produto) AS equipamentos
+                FROM Equipamento
+                WHERE Status_comodato = 'Emprestado'
+                GROUP BY CAST(ID_contrato AS TEXT)
+            ) EQ ON CAST(A.contrato AS TEXT) = EQ.id_c
             WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond}
             ORDER BY A.score DESC
             LIMIT ? OFFSET ?
@@ -3456,6 +3464,28 @@ def api_behavior_client_detail(contrato_id):
             LIMIT 10
         """, (cliente_nome,)).fetchall()
 
+        # --- OS do contrato ---
+        ordens = conn.execute("""
+            SELECT o.ID, o.Assunto, o.Status, o.Abertura, o.Mensagem,
+                   CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                             AND o.Fechamento NOT LIKE '0000%'
+                        THEN o.Fechamento ELSE o.Final END AS data_fin,
+                   o.Colaborador
+            FROM OS o
+            WHERE CAST(o.Contrato AS TEXT) = ?
+            ORDER BY o.Abertura DESC
+            LIMIT 20
+        """, (str(contrato_id),)).fetchall()
+
+        # --- Equipamentos em comodato ---
+        equipamentos = conn.execute("""
+            SELECT Descricao_produto, Status_comodato, Quantidade
+            FROM Equipamento
+            WHERE CAST(ID_contrato AS TEXT) = ?
+            ORDER BY CASE Status_comodato WHEN 'Emprestado' THEN 0 WHEN 'Devolvido' THEN 1 ELSE 2 END,
+                     Descricao_produto
+        """, (str(contrato_id),)).fetchall()
+
         return jsonify({
             "contrato":    contrato,
             "cliente":     cliente,
@@ -3464,6 +3494,8 @@ def api_behavior_client_detail(contrato_id):
                 "faturas": [dict(f) for f in faturas],
             },
             "atendimentos": [dict(a) for a in atendimentos],
+            "ordens":       [dict(o) for o in ordens],
+            "equipamentos": [dict(e) for e in equipamentos],
         })
 
     except Exception as e:

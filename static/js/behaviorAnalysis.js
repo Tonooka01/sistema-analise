@@ -2661,11 +2661,12 @@ async function renderAlertasAcaoTab() {
                             };
                             return _SIT_BADGE[r.situacao_retirada] || _b('#f3f4f6','#6b7280','#e5e7eb','','Sem retirada','contrato ativo sem processo');
                         })()}</td>
+                        <td data-col="equipamento" style="padding:6px 10px;font-size:.75rem;max-width:160px;" title="${r.equipamentos || ''}">${r.equipamentos ? `<span style="color:#1d4ed8;">${r.equipamentos}</span>` : '<span style="color:#9ca3af;">—</span>'}</td>
                         <td data-col="msg" style="padding:6px 10px;text-align:center;" onclick="event.stopPropagation()"><button onclick="window._cmMsg(this,${i})" style="background:none;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;font-size:.85rem;padding:2px 6px;" title="Enviar mensagem pronta">💬</button></td>
                     </tr>`;
                 }).join('');
 
-                const _ALERTA_COLS = [{key:'num',label:'#'},{key:'contrato',label:'Contrato'},{key:'cliente',label:'Cliente'},{key:'cidade',label:'Cidade'},{key:'urgencia',label:'Urgência'},{key:'acao_rec',label:'Ação Recomendada'},{key:'os_ret',label:'OS Retirada'},{key:'fat_venc',label:'Fat. Vencidas'},{key:'dias_venc',label:'Dias Venc.'},{key:'sem_conexao',label:'Sem Conexão'},{key:'sit_ret',label:'Sit. Retirada'},{key:'msg',label:'Msg'}];
+                const _ALERTA_COLS = [{key:'num',label:'#'},{key:'contrato',label:'Contrato'},{key:'cliente',label:'Cliente'},{key:'cidade',label:'Cidade'},{key:'urgencia',label:'Urgência'},{key:'acao_rec',label:'Ação Recomendada'},{key:'os_ret',label:'OS Retirada'},{key:'fat_venc',label:'Fat. Vencidas'},{key:'dias_venc',label:'Dias Venc.'},{key:'sem_conexao',label:'Sem Conexão'},{key:'sit_ret',label:'Sit. Retirada'},{key:'equipamento',label:'Equipamento'},{key:'msg',label:'Msg'}];
                 tableHtml = `
                     <div data-coltable="alerta_cols" style="overflow-x:auto;">
                         ${_colToggleHtml('alerta_cols', _ALERTA_COLS)}
@@ -2682,6 +2683,7 @@ async function renderAlertasAcaoTab() {
                                 <th data-col="dias_venc" style="padding:8px 10px;text-align:left;white-space:nowrap;">Dias Venc.</th>
                                 <th data-col="sem_conexao" style="padding:8px 10px;text-align:left;white-space:nowrap;">Sem Conexão</th>
                                 <th data-col="sit_ret" style="padding:8px 10px;text-align:left;white-space:nowrap;">Sit. Retirada</th>
+                                <th data-col="equipamento" style="padding:8px 10px;text-align:left;white-space:nowrap;">Equipamento</th>
                                 <th data-col="msg" style="padding:8px 10px;text-align:center;white-space:nowrap;">Msg</th>
                             </tr></thead>
                             <tbody>${rows}</tbody>
@@ -2704,7 +2706,7 @@ async function renderAlertasAcaoTab() {
             }
 
             container.innerHTML = `<div class="border rounded-lg overflow-hidden"><div style="overflow-y:auto;max-height:560px;">${tableHtml}</div></div>${paginationHtml}`;
-            _colApply(container, 'alerta_cols', [{key:'num'},{key:'contrato'},{key:'cliente'},{key:'cidade'},{key:'urgencia'},{key:'acao_rec'},{key:'os_ret'},{key:'fat_venc'},{key:'dias_venc'},{key:'sem_conexao'},{key:'sit_ret'},{key:'msg'}]);
+            _colApply(container, 'alerta_cols', [{key:'num'},{key:'contrato'},{key:'cliente'},{key:'cidade'},{key:'urgencia'},{key:'acao_rec'},{key:'os_ret'},{key:'fat_venc'},{key:'dias_venc'},{key:'sem_conexao'},{key:'sit_ret'},{key:'equipamento'},{key:'msg'}]);
             container.querySelectorAll('.alerta-page-btn').forEach(btn => {
                 btn.addEventListener('click', () => fetchAndRenderAlertaTable(parseInt(btn.dataset.page)));
             });
