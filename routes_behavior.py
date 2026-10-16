@@ -3897,7 +3897,7 @@ def api_behavior_retiradas_filtros():
             f"SELECT DISTINCT Cidade FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) ORDER BY Cidade",
             _base_p).fetchall()]
         bairros = [r[0] for r in conn.execute(
-            f"SELECT DISTINCT Bairro FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) AND Bairro IS NOT NULL AND Bairro != '' ORDER BY Bairro",
+            f"SELECT DISTINCT Bairro FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) AND Status IN ('Aberta','Encaminhada','Agendada') AND Bairro IS NOT NULL AND Bairro != '' ORDER BY Bairro",
             _base_p).fetchall()]
         colab_ids = [str(r[0]) for r in conn.execute(
             f"SELECT DISTINCT Colaborador FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) AND Status IN ('Aberta','Encaminhada','Agendada') AND Colaborador IS NOT NULL AND Colaborador != '' AND Colaborador != '0' ORDER BY Colaborador",
@@ -4985,9 +4985,10 @@ def api_ret_producao_tecnico_os():
 
 @behavior_bp.route('/retiradas/atividade-tecnico-os')
 def api_ret_atividade_tecnico_os():
-    """OS finalizadas por técnico em um dia específico (todos os assuntos de retirada)."""
+    """OS com interação (fotos, mensagens, finalizações) por técnico em um dia específico."""
     if not current_user.is_authenticated:
         return jsonify({'error': 'Não autenticado'}), 401
+    import json as _json
     colab = request.args.get('colab', '').strip()
     mes   = request.args.get('mes', '').strip()
     dia   = request.args.get('dia', '').strip()
@@ -4999,6 +5000,38 @@ def api_ret_atividade_tecnico_os():
         dia_fmt    = dia.zfill(2)
         data_exata = f"{mes}-{dia_fmt}"
         ph_ass = ','.join('?' * len(RETIRADA_ASSUNTOS))
+
+        # 1. OS finalizadas nesse dia pelo técnico
+        fin_rows = conn.execute(f"""
+            SELECT o.ID
+            FROM OS o
+            WHERE CAST(o.Colaborador AS TEXT) = ?
+            AND o.Assunto IN ({ph_ass})
+            AND strftime('%Y-%m-%d',
+                CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
+                          AND o.Fechamento NOT LIKE '0000%'
+                     THEN o.Fechamento ELSE o.Final END
+            ) = ?
+        """, [colab] + list(RETIRADA_ASSUNTOS) + [data_exata]).fetchall()
+        os_ids = set(str(r[0]) for r in fin_rows)
+
+        # 2. OS com interação no cache (fotos/mensagens) nesse dia pelo técnico
+        cache_rows = conn.execute(
+            "SELECT os_id, datas FROM ret_atividade_cache WHERE colaborador = ?",
+            (colab,)
+        ).fetchall()
+        for cr in cache_rows:
+            try:
+                if data_exata in _json.loads(cr[1] or '[]'):
+                    os_ids.add(str(cr[0]))
+            except Exception:
+                pass
+
+        if not os_ids:
+            _tec_map = _get_tecnicos_map()
+            return jsonify({'ordens': [], 'tecnico': _tec_map.get(str(colab)) or f'#{colab}', 'data': data_exata})
+
+        ph_ids = ','.join('?' * len(os_ids))
         rows = conn.execute(f"""
             SELECT o.ID, o.Cliente, o.Status, o.Bairro, o.Cidade,
                    o.Assunto, o.Abertura, o.Mensagem,
@@ -5006,16 +5039,10 @@ def api_ret_atividade_tecnico_os():
                              AND o.Fechamento NOT LIKE '0000%'
                         THEN o.Fechamento ELSE o.Final END AS data_fin
             FROM OS o
-            WHERE CAST(o.Colaborador AS TEXT) = ?
-            AND o.Status = 'Finalizada'
-            AND o.Assunto IN ({ph_ass})
-            AND strftime('%Y-%m-%d',
-                CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != ''
-                          AND o.Fechamento NOT LIKE '0000%'
-                     THEN o.Fechamento ELSE o.Final END
-            ) = ?
+            WHERE CAST(o.ID AS TEXT) IN ({ph_ids})
             ORDER BY data_fin
-        """, [colab] + list(RETIRADA_ASSUNTOS) + [data_exata]).fetchall()
+        """, list(os_ids)).fetchall()
+
         _tec_map = _get_tecnicos_map()
         nome_tec = _tec_map.get(str(colab)) or f'#{colab}'
         ordens = [{'id': r[0], 'cliente': r[1], 'status': r[2], 'bairro': r[3],
