@@ -137,6 +137,12 @@ def set_user_ixc_colaborador():
 def get_current_user_info():
     conn = get_db_connection()
     try:
+        # garante que a coluna existe antes de consultar
+        try:
+            conn.execute("ALTER TABLE Users ADD COLUMN ixc_colaborador_id TEXT")
+            conn.commit()
+        except Exception:
+            pass
         u = conn.execute(
             "SELECT id, username, ixc_colaborador_id FROM Users WHERE id = ?", (current_user.id,)
         ).fetchone()
