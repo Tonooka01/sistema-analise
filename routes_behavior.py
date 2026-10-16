@@ -4599,6 +4599,7 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
         payload['id_atendente']           = _atendente_final
         payload['id_colaborador']         = _atendente_final
         payload['id_responsavel_tecnico'] = _atendente_final
+        payload['id_usuario']             = _atendente_final
     try:
         resp = requests.post(f'{_IXC_BASE}/su_ticket', json=payload,
                              headers=headers, timeout=15, verify=False)
