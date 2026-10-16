@@ -3890,18 +3890,21 @@ def api_behavior_retiradas_filtros():
     try:
         conn = current_app.config['GET_DB_CONNECTION']()
         ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
+        _CIDS = ('Dom Pedro', 'Presidente Dutra', 'São Domingos do Maranhão', 'Tuntum')
+        ph_cid = ','.join('?' * len(_CIDS))
+        _base_p = list(RETIRADA_ASSUNTOS) + list(_CIDS)
         cidades = [r[0] for r in conn.execute(
-            f"SELECT DISTINCT Cidade FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ('Dom Pedro','Presidente Dutra','São Domingos do Maranhão','Tuntum') ORDER BY Cidade",
-            RETIRADA_ASSUNTOS).fetchall()]
+            f"SELECT DISTINCT Cidade FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) ORDER BY Cidade",
+            _base_p).fetchall()]
         bairros = [r[0] for r in conn.execute(
-            f"SELECT DISTINCT Bairro FROM OS WHERE Assunto IN ({ph}) AND Bairro IS NOT NULL AND Bairro != '' ORDER BY Bairro",
-            RETIRADA_ASSUNTOS).fetchall()]
+            f"SELECT DISTINCT Bairro FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) AND Bairro IS NOT NULL AND Bairro != '' ORDER BY Bairro",
+            _base_p).fetchall()]
         colab_ids = [str(r[0]) for r in conn.execute(
-            f"SELECT DISTINCT Colaborador FROM OS WHERE Assunto IN ({ph}) AND Colaborador IS NOT NULL AND Colaborador != '' ORDER BY Colaborador",
-            RETIRADA_ASSUNTOS).fetchall()]
+            f"SELECT DISTINCT Colaborador FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) AND Colaborador IS NOT NULL AND Colaborador != '' AND Colaborador != '0' ORDER BY Colaborador",
+            _base_p).fetchall()]
         filiais = [r[0] for r in conn.execute(
-            f"SELECT DISTINCT Filial FROM OS WHERE Assunto IN ({ph}) AND Filial IS NOT NULL ORDER BY Filial",
-            RETIRADA_ASSUNTOS).fetchall()]
+            f"SELECT DISTINCT Filial FROM OS WHERE Assunto IN ({ph}) AND Cidade IN ({ph_cid}) AND Filial IS NOT NULL ORDER BY Filial",
+            _base_p).fetchall()]
         try:
             equipamentos = [r[0] for r in conn.execute(f"""
                 SELECT DISTINCT e.Descricao_produto

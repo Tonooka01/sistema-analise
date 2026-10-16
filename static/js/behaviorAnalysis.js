@@ -3693,7 +3693,7 @@ window._retColabCellModal = async function(colab, dia, mes, tableType) {
     const endpoint = tableType === 'atividade'
         ? `/api/behavior/retiradas/atividade-tecnico-os`
         : `/api/behavior/retiradas/producao-tecnico-os`;
-    const tituloTbl = tableType === 'atividade' ? 'OS Finalizadas (todos os assuntos de retirada)' : 'Produção (OS finalizadas)';
+    const tituloTbl = tableType === 'atividade' ? 'Interações do técnico (fotos, mensagens, finalizações)' : 'Produção (OS finalizadas)';
     const diaFmt = String(dia).padStart(2, '0');
     const mesPartes = mes.split('-');
     const dataLabel = `${diaFmt}/${mesPartes[1]}/${mesPartes[0]}`;
@@ -3819,7 +3819,7 @@ async function _retLoadAtividadeTecnico(mes, container) {
         if (!colab.length) {
             wrap.innerHTML = `<div class="bg-white border border-gray-100 rounded-xl p-4 mt-2">
               <div class="text-sm font-semibold text-gray-700 mb-2">Atividade Diária por Técnico
-                <span class="text-xs font-normal text-gray-400 ml-1">(OS finalizadas · todos os assuntos de retirada)</span>
+                <span class="text-xs font-normal text-gray-400 ml-1">(interações · fotos, mensagens, finalizações)</span>
               </div>
               <div class="text-xs text-gray-400 py-2">Nenhuma atividade encontrada para este mês.</div>
             </div>`;
@@ -3829,7 +3829,7 @@ async function _retLoadAtividadeTecnico(mes, container) {
         <div class="bg-white border border-gray-100 rounded-xl p-4 mt-2">
           <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
             <span class="text-sm font-semibold text-gray-700">Atividade Diária por Técnico
-              <span class="text-xs font-normal text-gray-400 ml-1">(OS finalizadas · todos os assuntos de retirada · clique 🔄 Atualizar para sincronizar)</span>
+              <span class="text-xs font-normal text-gray-400 ml-1">(interações · fotos, mensagens, finalizações · clique 🔄 Atualizar para sincronizar)</span>
             </span>
           </div>
           <div class="overflow-x-auto">${_renderColabTable(colab, numDays, mesSel, 'atividade')}</div>

@@ -80,6 +80,7 @@ ok "Versão incrementada: $CURRENT_VER → $NEXT_VER"
 # ── 4. git pull ──────────────────────────────────────────────────
 echo ""
 echo "=== 2. Atualizando código (git pull) ==="
+git checkout version.txt 2>/dev/null || true
 git pull || fail "git pull falhou — backup disponível em versions/v${CURRENT_VER}.tar.gz"
 ok "Código atualizado"
 
