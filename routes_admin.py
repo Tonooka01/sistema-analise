@@ -80,7 +80,12 @@ def get_users():
         return jsonify({"error": "Acesso negado"}), 403
 
     conn = get_db_connection()
-    users = conn.execute("SELECT id, username, is_active, last_seen, permissions FROM Users").fetchall()
+    try:
+        conn.execute("ALTER TABLE Users ADD COLUMN ixc_colaborador_id TEXT")
+        conn.commit()
+    except Exception:
+        pass
+    users = conn.execute("SELECT id, username, is_active, last_seen, permissions, ixc_colaborador_id FROM Users").fetchall()
     conn.close()
 
     now = datetime.now()
@@ -100,9 +105,52 @@ def get_users():
             "last_seen": u['last_seen'],
             "is_online": is_online,
             "permissions": u['permissions'],
+            "ixc_colaborador_id": u['ixc_colaborador_id'] or '',
         })
 
     return jsonify(users_list)
+
+
+@admin_bp.route('/api/admin/users/ixc-colaborador', methods=['POST'])
+@login_required
+def set_user_ixc_colaborador():
+    if current_user.username != 'admin':
+        return jsonify({"error": "Acesso negado"}), 403
+    data    = request.json or {}
+    user_id = data.get('user_id')
+    ixc_id  = (data.get('ixc_colaborador_id') or '').strip()
+    if not user_id:
+        return jsonify({"error": "user_id obrigatório"}), 400
+    conn = get_db_connection()
+    try:
+        conn.execute("UPDATE Users SET ixc_colaborador_id = ? WHERE id = ?", (ixc_id or None, user_id))
+        conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@admin_bp.route('/api/user/me', methods=['GET'])
+@login_required
+def get_current_user_info():
+    conn = get_db_connection()
+    try:
+        u = conn.execute(
+            "SELECT id, username, ixc_colaborador_id FROM Users WHERE id = ?", (current_user.id,)
+        ).fetchone()
+        if not u:
+            return jsonify({"error": "Usuário não encontrado"}), 404
+        return jsonify({
+            "id": u['id'],
+            "username": u['username'],
+            "ixc_colaborador_id": u['ixc_colaborador_id'] or '',
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
 
 @admin_bp.route('/api/admin/users/toggle', methods=['POST'])

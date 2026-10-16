@@ -171,6 +171,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         <td class="py-2 px-3 text-center">${statusBadge}</td>
                         <td class="py-2 px-3 text-center text-xs text-gray-500">${u.last_seen || 'Nunca'}</td>
                         <td class="py-2 px-3 text-center">
+                            <input type="text"
+                                   value="${u.ixc_colaborador_id || ''}"
+                                   placeholder="—"
+                                   onchange="saveUserIxcColaborador(${u.id}, this.value)"
+                                   class="border rounded px-2 py-0.5 text-xs text-center w-20 focus:ring-1 focus:ring-blue-400 focus:outline-none"
+                                   title="ID do colaborador no IXC">
+                        </td>
+                        <td class="py-2 px-3 text-center">
                             <button onclick="openPermissions(${u.id})"
                                     class="px-2 py-1 rounded text-xs font-bold bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition">
                                 🔒 Permissões
@@ -193,9 +201,26 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch (e) {
             console.error("Erro ao listar usuários", e);
-            usersTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-red-500 py-2">Erro ao carregar.</td></tr>';
+            usersTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-red-500 py-2">Erro ao carregar.</td></tr>';
         }
     }
+
+    window.saveUserIxcColaborador = async function(userId, value) {
+        try {
+            const res = await fetch('/api/admin/users/ixc-colaborador', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: userId, ixc_colaborador_id: value})
+            });
+            if (!res.ok) { const err = await res.json(); alert('Erro: ' + err.error); }
+        } catch(e) { alert('Erro de conexão.'); }
+    };
+
+    // Carrega info do usuário logado (para preencher campo colaborador no painel)
+    window._currentUserInfo = {};
+    fetch('/api/user/me').then(r => r.json()).then(d => {
+        window._currentUserInfo = d;
+    }).catch(() => {});
 
     window.toggleUserStatus = async function(userId) {
         if(!confirm("Tem certeza que deseja alterar o acesso deste usuário?")) return;

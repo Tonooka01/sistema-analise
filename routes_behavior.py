@@ -3511,22 +3511,24 @@ def api_behavior_client_detail(contrato_id):
 def _ensure_acompanhamento_table(conn):
     conn.execute("""
         CREATE TABLE IF NOT EXISTS Acompanhamento_Clientes (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            contrato_id   INTEGER NOT NULL,
-            usuario       TEXT    NOT NULL,
-            data_registro TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
-            tipo_acao     TEXT    NOT NULL,
-            resultado     TEXT,
-            observacao    TEXT,
-            data_retorno  TEXT,
-            snooze_ate    TEXT,
-            ixc_os_id     TEXT
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            contrato_id        INTEGER NOT NULL,
+            usuario            TEXT    NOT NULL,
+            data_registro      TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+            tipo_acao          TEXT    NOT NULL,
+            resultado          TEXT,
+            observacao         TEXT,
+            data_retorno       TEXT,
+            snooze_ate         TEXT,
+            ixc_os_id          TEXT,
+            colaborador_ixc_id TEXT
         )
     """)
-    try:
-        conn.execute("ALTER TABLE Acompanhamento_Clientes ADD COLUMN ixc_os_id TEXT")
-    except Exception:
-        pass
+    for col in ('ixc_os_id TEXT', 'colaborador_ixc_id TEXT'):
+        try:
+            conn.execute(f"ALTER TABLE Acompanhamento_Clientes ADD COLUMN {col}")
+        except Exception:
+            pass
     conn.commit()
 
 
@@ -3571,10 +3573,11 @@ def api_behavior_acompanhamento_post():
         resultado       = (data.get('resultado') or '').strip() or None
         observacao      = (data.get('observacao') or '').strip() or None
         data_retorno    = (data.get('data_retorno') or '').strip() or None
-        os_assunto      = (data.get('os_assunto') or '').strip()
-        abre_os         = bool(data.get('abre_os') or data.get('abrir_os_ixc', False))
-        id_cliente_ixc  = data.get('id_cliente_ixc')
-        usuario         = current_user.username if current_user.is_authenticated else 'sistema'
+        os_assunto          = (data.get('os_assunto') or '').strip()
+        abre_os             = bool(data.get('abre_os') or data.get('abrir_os_ixc', False))
+        id_cliente_ixc      = data.get('id_cliente_ixc')
+        colaborador_ixc_id  = (data.get('colaborador_ixc_id') or '').strip() or None
+        usuario             = current_user.username if current_user.is_authenticated else 'sistema'
 
         if not contrato_id or not tipo_acao:
             return jsonify({"error": "contrato_id e tipo_acao são obrigatórios"}), 400
@@ -3635,6 +3638,7 @@ def api_behavior_acompanhamento_post():
                         titulo=titulo_ticket,
                         fechar=not abre_os,
                         id_assunto_ixc=id_assunto_ixc,
+                        id_atendente_override=colaborador_ixc_id,
                     )
                     logger.info(f"acompanhamento_post: ixc_os_id={ixc_os_id!r}")
                 else:
@@ -3647,9 +3651,9 @@ def api_behavior_acompanhamento_post():
 
         conn.execute("""
             INSERT INTO Acompanhamento_Clientes
-                (contrato_id, usuario, data_registro, tipo_acao, resultado, observacao, data_retorno, snooze_ate, ixc_os_id)
-            VALUES (?, ?, datetime('now', 'localtime'), ?, ?, ?, ?, ?, ?)
-        """, (contrato_id, usuario, tipo_acao, resultado, observacao, data_retorno, snooze_ate, ixc_os_id))
+                (contrato_id, usuario, data_registro, tipo_acao, resultado, observacao, data_retorno, snooze_ate, ixc_os_id, colaborador_ixc_id)
+            VALUES (?, ?, datetime('now', 'localtime'), ?, ?, ?, ?, ?, ?, ?)
+        """, (contrato_id, usuario, tipo_acao, resultado, observacao, data_retorno, snooze_ate, ixc_os_id, colaborador_ixc_id))
         conn.commit()
 
         return jsonify({"ok": True, "snooze_ate": snooze_ate, "ixc_os_id": ixc_os_id, "ixc_erro": ixc_erro})
@@ -4513,7 +4517,7 @@ def _ixc_post(endpoint, payload, token):
         return None
 
 
-def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titulo='', fechar=False, id_assunto_ixc=''):
+def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titulo='', fechar=False, id_assunto_ixc='', id_atendente_override=None):
     """Cria um ticket de suporte no IXC (su_ticket). Retorna ID ou None."""
     # Busca endereço do contrato no banco local
     endereco = bairro = complemento = id_cidade = ''
@@ -4581,9 +4585,10 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
     }
     if id_assunto_ixc:
         payload['id_assunto'] = str(id_assunto_ixc)
-    if id_atendente:
-        payload['id_atendente']   = str(id_atendente)
-        payload['id_colaborador'] = str(id_atendente)
+    _atendente_final = id_atendente_override or id_atendente
+    if _atendente_final:
+        payload['id_atendente']   = str(_atendente_final)
+        payload['id_colaborador'] = str(_atendente_final)
     try:
         resp = requests.post(f'{_IXC_BASE}/su_ticket', json=payload,
                              headers=headers, timeout=15, verify=False)
