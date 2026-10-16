@@ -1709,20 +1709,12 @@ window.switchCdpTab = function(name) {
   if (name === 'acomp' && _cdpCurrentContrato) {
     cdpLoadAcompConfig();
     cdpAcompLoad(_cdpCurrentContrato);
-    const _fillColab = (info) => {
-      const colabNome = document.getElementById('cdp-acomp-colab-nome');
-      const colabIxc  = document.getElementById('cdp-acomp-colab-ixcid');
-      if (!colabNome) return;
+    const info = window._currentUserInfo || {};
+    const colabNome = document.getElementById('cdp-acomp-colab-nome');
+    const colabIxc  = document.getElementById('cdp-acomp-colab-ixcid');
+    if (colabNome) {
       colabNome.textContent = info.username || '—';
-      if (colabIxc) colabIxc.textContent = info.ixc_colaborador_id ? `ID: ${info.ixc_colaborador_id}` : '(sem ID IXC)';
-    };
-    if (window._currentUserInfo && window._currentUserInfo.username) {
-      _fillColab(window._currentUserInfo);
-    } else {
-      fetch('/api/user/me').then(r => r.json()).then(d => {
-        window._currentUserInfo = d;
-        _fillColab(d);
-      }).catch(() => {});
+      if (colabIxc) colabIxc.textContent = info.ixc_colaborador_id ? `ID: ${info.ixc_colaborador_id}` : '';
     }
   }
 };

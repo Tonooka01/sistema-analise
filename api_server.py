@@ -219,7 +219,25 @@ def require_login_for_api():
 @app.route('/')
 @login_required
 def index():
-    return render_template('index.html')
+    ixc_colab_id = ''
+    try:
+        conn = get_db_connection()
+        try:
+            conn.execute("ALTER TABLE Users ADD COLUMN ixc_colaborador_id TEXT")
+            conn.commit()
+        except Exception:
+            pass
+        row = conn.execute(
+            "SELECT ixc_colaborador_id FROM Users WHERE id = ?", (current_user.id,)
+        ).fetchone()
+        if row:
+            ixc_colab_id = row['ixc_colaborador_id'] or ''
+        conn.close()
+    except Exception:
+        pass
+    return render_template('index.html',
+                           current_username=current_user.username,
+                           current_ixc_colab_id=ixc_colab_id)
 
 
 # ---------------------------------------------------------------------------

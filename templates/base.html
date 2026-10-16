@@ -216,11 +216,11 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch(e) { alert('Erro de conexão.'); }
     };
 
-    // Carrega info do usuário logado (para preencher campo colaborador no painel)
-    window._currentUserInfo = {};
-    fetch('/api/user/me').then(r => r.json()).then(d => {
-        window._currentUserInfo = d;
-    }).catch(() => {});
+    // Info do usuário logado injetada pelo servidor (sem fetch async)
+    window._currentUserInfo = {
+        username: {{ current_user.username | tojson if current_user.is_authenticated else '""' }},
+        ixc_colaborador_id: {{ current_ixc_colab_id | default('') | tojson }}
+    };
 
     window.toggleUserStatus = async function(userId) {
         if(!confirm("Tem certeza que deseja alterar o acesso deste usuário?")) return;
