@@ -4568,35 +4568,37 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
     if not id_ticket_setor:
         logger.warning("_ixc_criar_os: ixc_setor_id não configurado")
 
+    # Resolve colaborador: usa override do usuário logado ou fallback global
+    _atendente_final = str(id_atendente_override or id_atendente or '')
+
     encoded = base64.b64encode(token.encode()).decode()
     headers = {
         'Authorization': f'Basic {encoded}',
         'Content-Type': 'application/json',
     }
     payload = {
-        'tipo':                   'C',
-        'titulo':                 titulo or mensagem or '',
-        'id_cliente':             str(id_cliente_ixc),
-        'id_filial':              '2',
-        'id_contrato':            str(id_contrato),
-        'id_ticket_setor':        id_ticket_setor,
-        'origem_endereco':        'CC',
-        'prioridade':             'M',
-        'menssagem':              mensagem or titulo or '',
-        'status':                 'A',
-        'su_status':              'N',
-        'atualizar_cliente':      'N',
-        'atualizar_login':        'N',
-        'id_responsavel_tecnico': '170',
+        'tipo':              'C',
+        'titulo':            titulo or mensagem or '',
+        'id_cliente':        str(id_cliente_ixc),
+        'id_filial':         '2',
+        'id_contrato':       str(id_contrato),
+        'id_ticket_setor':   id_ticket_setor,
+        'origem_endereco':   'CC',
+        'prioridade':        'M',
+        'menssagem':         mensagem or titulo or '',
+        'status':            'A',
+        'su_status':         'N',
+        'atualizar_cliente': 'N',
+        'atualizar_login':   'N',
     }
     if id_assunto_ixc:
         payload['id_assunto'] = str(id_assunto_ixc)
     if id_login:
         payload['id_login'] = id_login
-    _atendente_final = id_atendente_override or id_atendente
     if _atendente_final:
-        payload['id_atendente']   = str(_atendente_final)
-        payload['id_colaborador'] = str(_atendente_final)
+        payload['id_atendente']           = _atendente_final
+        payload['id_colaborador']         = _atendente_final
+        payload['id_responsavel_tecnico'] = _atendente_final
     try:
         resp = requests.post(f'{_IXC_BASE}/su_ticket', json=payload,
                              headers=headers, timeout=15, verify=False)
