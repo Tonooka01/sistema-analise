@@ -251,6 +251,13 @@ def _sync_contratos(conn, token, log, since=None):
     modo = f"desde {since}" if since else "completo"
     log.append(f"→ Contratos ({modo})...")
 
+    # Garante coluna ID_cliente para lookup preciso de contato
+    try:
+        conn.execute("ALTER TABLE Contratos ADD COLUMN ID_cliente INTEGER")
+        conn.commit()
+    except Exception:
+        pass
+
     # Carrega cache de clientes para obter cidade
     cliente_cache = {}
     for table in ['Clientes', 'Clientes_Negativacao']:
@@ -417,9 +424,9 @@ def _sync_contratos(conn, token, log, since=None):
                  ltimo_bloqueio_manual, ltimo_desbloqueio_de_confian_a,
                  ltimo_financeiro_em_atraso, ltima_negativa_o,
                  Data_cadastro_sistema, ltima_atualiza_o, Complemento, Cep,
-                 Cidade, Taxa_ativa_o, Motivo_de_inclus_o)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """, row[:-1])
+                 Cidade, Taxa_ativa_o, Motivo_de_inclus_o, ID_cliente)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, row[:-1] + (id_cli if id_cli and id_cli != '0' else None,))
             total_c += 1
 
     conn.commit()

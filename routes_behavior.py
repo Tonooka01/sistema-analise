@@ -3344,6 +3344,13 @@ MOTIVO_LABELS_DETAIL = {
 def api_behavior_client_detail(contrato_id):
     conn = get_db()
     try:
+        # Migração: garante coluna ID_cliente em Contratos (populada pelo sync IXC)
+        try:
+            conn.execute("ALTER TABLE Contratos ADD COLUMN ID_cliente INTEGER")
+            conn.commit()
+        except Exception:
+            pass
+
         # --- Contract ---
         contrato_row = conn.execute("""
             SELECT
@@ -3358,7 +3365,8 @@ def api_behavior_client_detail(contrato_id):
                 ltimo_bloqueio_manual     AS ultimo_bloqueio_manual,
                 ltima_negativa_o          AS ultima_negativacao,
                 Data_negativa_o           AS data_negativacao,
-                Data_cadastro_sistema
+                Data_cadastro_sistema,
+                ID_cliente
             FROM Contratos
             WHERE ID = ?
         """, (contrato_id,)).fetchone()
@@ -3379,9 +3387,12 @@ def api_behavior_client_detail(contrato_id):
             contrato['motivo_label'] = None
 
         cliente_nome = contrato.get('Cliente', '')
+        id_cliente   = contrato.get('ID_cliente')
 
         # --- Client contact ---
-        cliente_row = conn.execute("""
+        # Usa ID_cliente (preenchido pelo sync IXC) para evitar ambiguidade de nomes duplicados.
+        # Fallback por nome se a coluna ainda não foi populada (sync pendente).
+        _CLIENTE_COLS = """
             SELECT
                 ID AS id_cliente_ixc,
                 Raz_o_social AS razao_social,
@@ -3391,9 +3402,15 @@ def api_behavior_client_detail(contrato_id):
                 Endere_o AS endereco, Cidade, Bairro, CEP,
                 Data_nascimento, Tipo_pessoa
             FROM Clientes
-            WHERE Raz_o_social = ?
-            LIMIT 1
-        """, (cliente_nome,)).fetchone()
+        """
+        if id_cliente:
+            cliente_row = conn.execute(
+                _CLIENTE_COLS + " WHERE ID = ?", (id_cliente,)
+            ).fetchone()
+        else:
+            cliente_row = conn.execute(
+                _CLIENTE_COLS + " WHERE Raz_o_social = ? LIMIT 1", (cliente_nome,)
+            ).fetchone()
 
         if not cliente_row:
             # Tenta em clientes negativados (menos colunas disponíveis)
