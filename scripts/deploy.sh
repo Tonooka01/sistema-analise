@@ -129,7 +129,7 @@ echo "════════════════════════�
 if [ -f "$APP_DIR/CHANGELOG.md" ]; then
     echo ""
     echo "--- CHANGELOG (últimas entradas) ---"
-    head -40 "$APP_DIR/CHANGELOG.md"
+    cat "$APP_DIR/CHANGELOG.md"
     echo "---"
 fi
 
