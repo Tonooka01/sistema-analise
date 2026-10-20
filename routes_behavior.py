@@ -122,7 +122,7 @@ def _require_behavior_access():
     # Retiradas: aceita permissão de módulo 'retiradas' OU 'behavior'
     suffix = request.path[len('/api/behavior'):]
     suffix_base = '/' + suffix.lstrip('/').split('/')[0]
-    is_retiradas_route = suffix_base == '/retiradas'
+    is_retiradas_route = suffix_base in ('/retiradas', '/ixc-file')
 
     has_behavior  = 'behavior'  in perm_list
     has_retiradas = 'retiradas' in perm_list
