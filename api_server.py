@@ -240,6 +240,20 @@ def index():
                            current_ixc_colab_id=ixc_colab_id)
 
 
+@app.route('/resumo/<token>')
+@login_required
+def resumo_gerente(token):
+    """Relatório HTML gerado pelo assistente-gerente (resumos das 8h/12h/18h).
+    Só entrega arquivo da pasta configurada em RELATORIOS_DIR e só se o
+    código for o token aleatório (nada de caminho livre)."""
+    import re
+    from flask import abort, send_from_directory
+    pasta = os.environ.get('RELATORIOS_DIR', '')
+    if not pasta or not re.fullmatch(r'[A-Za-z0-9_-]{16,64}', token):
+        abort(404)
+    return send_from_directory(pasta, token + '.html', mimetype='text/html')
+
+
 # ---------------------------------------------------------------------------
 # Registro de Blueprints
 # ---------------------------------------------------------------------------
