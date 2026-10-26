@@ -2459,7 +2459,8 @@ async function renderAlertasAcaoTab() {
     tabContent.innerHTML = `
         <div id="alerta-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
 
-        <div class="flex flex-wrap justify-center gap-4 mb-4 items-end">
+        <div style="position:relative;">
+        <div class="flex flex-wrap justify-center gap-4 mb-4 items-end" style="padding-right:110px;">
             <div>
                 <label class="text-sm font-medium text-gray-700 mr-1">Cliente:</label>
                 <input type="text" id="alertaClienteFilter" placeholder="Nome do cliente..."
@@ -2545,7 +2546,10 @@ async function renderAlertasAcaoTab() {
                 </div>
             </div>
             <button id="btnFilterAlerta" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
-            <button id="btnExportAlerta" class="bg-green-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-green-700 transition font-semibold text-sm h-10" title="Exportar todos os registros filtrados para Excel">↓ Excel</button>
+        </div>
+        <button id="btnExportAlerta"
+            style="position:absolute;top:0;right:0;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:0.82rem;font-weight:600;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.15);white-space:nowrap;"
+            title="Exportar todos os registros filtrados para Excel">↓ Excel</button>
         </div>
         <div id="alerta-table-area"></div>
     `;
