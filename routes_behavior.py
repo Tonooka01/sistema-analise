@@ -2498,6 +2498,7 @@ def api_behavior_action_alerts():
                    COALESCE(A.ret_ultimo_assunto, '') AS ret_ultimo_assunto,
                    COALESCE(A.ret_ultima_data, '')    AS ret_ultima_data,
                    COALESCE(CTR.Telefone_celular, CLI.WhatsApp, CLI.Telefone, '') AS whatsapp,
+                   COALESCE(CTR.Telefone_celular, '') AS telefone_celular,
                    COALESCE(EQ.equipamentos, '') AS equipamentos
             FROM Alerted A
             LEFT JOIN (SELECT Raz_o_social, WhatsApp, Telefone FROM Clientes GROUP BY Raz_o_social) CLI ON CLI.Raz_o_social = A.cliente

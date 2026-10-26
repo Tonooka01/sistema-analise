@@ -2854,7 +2854,7 @@ async function renderAlertasAcaoTab() {
                 'Situação Retirada':_SIT_LABEL[r.situacao_retirada] || r.situacao_retirada || '',
                 'OS Retirada':      r.ret_assunto_aberta || r.ret_ultimo_assunto || '',
                 'Equipamento':      r.equipamentos || '',
-                'WhatsApp':         r.whatsapp || '',
+                'Telefone Celular': r.telefone_celular || '',
             }));
 
             const ws = XLSX.utils.json_to_sheet(rows);
