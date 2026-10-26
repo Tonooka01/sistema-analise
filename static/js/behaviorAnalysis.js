@@ -2541,6 +2541,7 @@ async function renderAlertasAcaoTab() {
                 </div>
             </div>
             <button id="btnFilterAlerta" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
+            <button id="btnExportAlerta" class="bg-green-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-green-700 transition font-semibold text-sm h-10" title="Exportar todos os registros filtrados para Excel">↓ Excel</button>
         </div>
         <div id="alerta-table-area"></div>
     `;
@@ -2781,6 +2782,68 @@ async function renderAlertasAcaoTab() {
     tabContent.addEventListener('click', (e) => {
         const tr = e.target.closest('tr[data-contrato]');
         if (tr && typeof showClientDetail === 'function') showClientDetail(tr.dataset.contrato);
+    });
+
+    // Export Excel
+    tabContent.querySelector('#btnExportAlerta').addEventListener('click', async () => {
+        const btn = tabContent.querySelector('#btnExportAlerta');
+        btn.textContent = '⏳ Exportando…';
+        btn.disabled = true;
+        try {
+            const p = new URLSearchParams({
+                city:        _alertaFilters.city,
+                tier:        _alertaFilters.tier,
+                cliente:     _alertaFilters.cliente,
+                equipamento: _alertaFilters.equipamento,
+                limit:       9999,
+                offset:      0
+            });
+            _alertaFilters.retirada.forEach(v => p.append('retirada', v));
+            _alertaFilters.assunto_ret.forEach(v => p.append('assunto_ret', v));
+
+            const resp = await fetch(`${state.API_BASE_URL}/api/behavior/action_alerts?${p}`);
+            if (!resp.ok) throw new Error('Erro ao buscar dados');
+            const result = await resp.json();
+
+            const _SIT_LABEL = {
+                'ret_aberta':      'Retirada — OS aberta',
+                'ret_encaminhada': 'Retirada — OS encaminhada',
+                'ret_fin_sem_neg': 'Retirada finalizada — negativação pendente',
+                'neg_com_retirada':'Negativado — retirada concluída',
+                'neg_sem_retirada':'Negativado — sem OS de retirada',
+            };
+
+            const rows = (result.data || []).map((r, i) => ({
+                '#':                i + 1,
+                'Contrato':         r.contrato,
+                'Cliente':          r.cliente,
+                'Cidade':           r.cidade,
+                'Urgência':         r.tier,
+                'Ação Recomendada': r.acao,
+                'Fat. Vencidas':    r.fat_vencidas,
+                'Dias Atraso':      r.dias_vencido,
+                'Sem Conexão (d)':  r.sem_conexao,
+                'Situação Retirada':_SIT_LABEL[r.situacao_retirada] || r.situacao_retirada || '',
+                'OS Retirada':      r.ret_assunto_aberta || r.ret_ultimo_assunto || '',
+                'Equipamento':      r.equipamentos || '',
+                'WhatsApp':         r.whatsapp || '',
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(rows);
+            ws['!cols'] = [
+                {wch:4},{wch:10},{wch:30},{wch:18},{wch:10},{wch:60},
+                {wch:12},{wch:12},{wch:14},{wch:30},{wch:30},{wch:30},{wch:16}
+            ];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Alertas de Ação');
+            const hoje = new Date().toISOString().slice(0,10);
+            XLSX.writeFile(wb, `alertas_acao_${hoje}.xlsx`);
+        } catch(e) {
+            alert('Erro ao exportar: ' + e.message);
+        } finally {
+            btn.textContent = '↓ Excel';
+            btn.disabled = false;
+        }
     });
 
     window._alertaRefresh = () => fetchAndRenderAlertaTable(_alertaCurrentPage);
