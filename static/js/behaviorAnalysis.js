@@ -2447,7 +2447,7 @@ async function renderAlertasAcaoTab() {
     if (!tabContent) return;
 
     let _alertaCurrentPage = 1;
-    let _alertaFilters = { city: '', tier: '', cliente: '', retirada: [], assunto_ret: [] };
+    let _alertaFilters = { city: '', tier: '', cliente: '', equipamento: '', retirada: [], assunto_ret: [] };
 
     const TIER_STYLE = {
         'Crítico': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
@@ -2508,6 +2508,11 @@ async function renderAlertasAcaoTab() {
                     </label>
                 </div>
             </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mr-1">Equipamento:</label>
+                <input type="text" id="alertaEquipamentoFilter" placeholder="Ex: ONU, HG6143..."
+                    class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm min-w-[160px]">
+            </div>
             <div style="position:relative;">
                 <label class="text-sm font-medium text-gray-700 mr-1">Assunto OS:</label>
                 <button type="button" id="alertaAssuntoBtn"
@@ -2549,10 +2554,11 @@ async function renderAlertasAcaoTab() {
         const rowsPerPage = 50;
         const offset = (page - 1) * rowsPerPage;
         const p = new URLSearchParams({
-            city:    _alertaFilters.city,
-            tier:    _alertaFilters.tier,
-            cliente: _alertaFilters.cliente,
-            limit:   rowsPerPage,
+            city:        _alertaFilters.city,
+            tier:        _alertaFilters.tier,
+            cliente:     _alertaFilters.cliente,
+            equipamento: _alertaFilters.equipamento,
+            limit:       rowsPerPage,
             offset
         });
         _alertaFilters.retirada.forEach(v => p.append('retirada', v));
@@ -2751,9 +2757,10 @@ async function renderAlertasAcaoTab() {
     _assuntoMenu.addEventListener('click', e => e.stopPropagation());
 
     tabContent.querySelector('#btnFilterAlerta').addEventListener('click', () => {
-        _alertaFilters.city    = document.getElementById('alertaCityFilter')?.value || '';
-        _alertaFilters.tier    = document.getElementById('alertaTierFilter')?.value || '';
-        _alertaFilters.cliente = document.getElementById('alertaClienteFilter')?.value.trim() || '';
+        _alertaFilters.city        = document.getElementById('alertaCityFilter')?.value || '';
+        _alertaFilters.tier        = document.getElementById('alertaTierFilter')?.value || '';
+        _alertaFilters.cliente     = document.getElementById('alertaClienteFilter')?.value.trim() || '';
+        _alertaFilters.equipamento = document.getElementById('alertaEquipamentoFilter')?.value.trim() || '';
         const checked = [...tabContent.querySelectorAll('.retirada-chk:checked')].map(c => c.value);
         _alertaFilters.retirada = checked;
         _retLbl.textContent = checked.length === 0 ? 'Todas' : checked.length === 1 ? _RET_LABELS[checked[0]] : `${checked.length} selecionados`;
@@ -2763,8 +2770,11 @@ async function renderAlertasAcaoTab() {
         fetchAndRenderAlertaTable(1);
     });
 
-    // Enter no campo cliente também filtra
+    // Enter nos campos de texto também filtra
     tabContent.querySelector('#alertaClienteFilter').addEventListener('keydown', e => {
+        if (e.key === 'Enter') tabContent.querySelector('#btnFilterAlerta').click();
+    });
+    tabContent.querySelector('#alertaEquipamentoFilter')?.addEventListener('keydown', e => {
         if (e.key === 'Enter') tabContent.querySelector('#btnFilterAlerta').click();
     });
 

@@ -947,6 +947,8 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
     <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
             data-tab="atendimentos" onclick="switchCdpTab('atendimentos')">Atendimentos</button>
     <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
+            data-tab="os" onclick="switchCdpTab('os')">OS</button>
+    <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
             data-tab="acomp" onclick="switchCdpTab('acomp')">📋 Acomp.</button>
   </div>
 
@@ -1000,6 +1002,11 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
     <!-- Atendimentos tab -->
     <div id="cdp-tab-atendimentos" class="cdp-tab-pane p-5 hidden">
       <div id="cdp-atend-list" class="space-y-3"></div>
+    </div>
+
+    <!-- OS tab -->
+    <div id="cdp-tab-os" class="cdp-tab-pane p-4 hidden">
+      <div id="cdp-os-tab-list" class="space-y-2"></div>
     </div>
 
     <!-- Acompanhamento tab -->
@@ -1542,24 +1549,45 @@ function _renderClientDetail(d) {
     osListEl.innerHTML = ordens.length === 0
       ? '<p class="text-xs text-gray-500">Nenhuma OS encontrada para este contrato.</p>'
       : `<div>
-          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Ordens de Serviço</p>
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Ordens de Serviço (últimas ${ordens.length})</p>
           <div class="space-y-2">
-            ${ordens.map(o => {
+            ${ordens.slice(0,5).map(o => {
               const statusCls = _osStatusCls[o.Status] || 'bg-gray-100 text-gray-600';
-              const dtFin = o.data_fin && o.data_fin !== '0000-00-00' ? _fmtDate(o.data_fin) : '';
               const dtAb  = _fmtDate(o.Abertura);
-              const msg = (o.Mensagem || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
               return `<div class="border border-gray-200 rounded-lg p-2.5">
                 <div class="flex justify-between items-start gap-2 mb-1">
                   <span class="text-xs font-medium text-gray-800">#${o.ID} — ${o.Assunto || '—'}</span>
                   <span class="px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${statusCls}">${o.Status}</span>
                 </div>
-                <div class="text-xs text-gray-500">${dtAb}${dtFin ? ' → ' + dtFin : ''}</div>
-                ${msg ? `<p class="text-xs text-gray-600 mt-1">${msg.slice(0,120)}${msg.length>120?'…':''}</p>` : ''}
+                <div class="text-xs text-gray-500">${dtAb}</div>
               </div>`;
             }).join('')}
+            ${ordens.length > 5 ? `<p class="text-xs text-gray-400">+ ${ordens.length - 5} mais — veja a aba OS</p>` : ''}
           </div>
         </div>`;
+  }
+
+  const osTabEl = document.getElementById('cdp-os-tab-list');
+  if (osTabEl) {
+    osTabEl.innerHTML = ordens.length === 0
+      ? '<p class="text-sm text-gray-400">Nenhuma OS encontrada para este contrato.</p>'
+      : ordens.map(o => {
+          const statusCls = _osStatusCls[o.Status] || 'bg-gray-100 text-gray-600';
+          const dtFin = o.data_fin && o.data_fin !== '0000-00-00' ? _fmtDate(o.data_fin) : '';
+          const dtAb  = _fmtDate(o.Abertura);
+          const msg = (o.Mensagem || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          return `<div class="border border-gray-200 rounded-lg p-3">
+            <div class="flex justify-between items-start gap-2 mb-1">
+              <span class="text-sm font-medium text-gray-800">#${o.ID} — ${o.Assunto || '—'}</span>
+              <span class="px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${statusCls}">${o.Status}</span>
+            </div>
+            <div class="flex gap-3 text-xs text-gray-500 mt-1">
+              <span>📅 ${dtAb}${dtFin ? ' → ' + dtFin : ''}</span>
+              ${o.Colaborador ? `<span>👤 ${o.Colaborador}</span>` : ''}
+            </div>
+            ${msg ? `<p class="text-xs text-gray-600 mt-2 leading-relaxed">${msg}</p>` : ''}
+          </div>`;
+        }).join('');
   }
 
   // --- ABA ATENDIMENTOS ---

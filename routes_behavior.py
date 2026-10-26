@@ -2207,9 +2207,10 @@ def api_behavior_action_alerts():
     conn = get_db()
     try:
         _ensure_acompanhamento_table(conn)
-        city    = request.args.get('city',    '').strip()
-        tier    = request.args.get('tier',    '').strip()
-        cliente = request.args.get('cliente', '').strip()
+        city       = request.args.get('city',       '').strip()
+        tier       = request.args.get('tier',       '').strip()
+        cliente    = request.args.get('cliente',    '').strip()
+        equipamento = request.args.get('equipamento', '').strip()
         limit   = request.args.get('limit',  50,  type=int)
         offset  = request.args.get('offset', 0,   type=int)
 
@@ -2224,6 +2225,18 @@ def api_behavior_action_alerts():
 
         cliente_cond = "AND A.cliente LIKE ?" if cliente else ""
         cliente_p    = [f"%{cliente}%"] if cliente else []
+
+        if equipamento:
+            equipamento_cond = """AND EXISTS (
+                SELECT 1 FROM Equipamento eq2
+                WHERE CAST(eq2.ID_contrato AS TEXT) = CAST(A.contrato AS TEXT)
+                  AND eq2.Status_comodato = 'Emprestado'
+                  AND eq2.Descricao_produto LIKE ?
+            )"""
+            equipamento_p = [f"%{equipamento}%"]
+        else:
+            equipamento_cond = ""
+            equipamento_p    = []
 
         if assunto_ret_vals:
             _ph_ar = ','.join('?' * len(assunto_ret_vals))
@@ -2471,7 +2484,7 @@ def api_behavior_action_alerts():
         """
 
         count_sql = base_cte + f"""
-            SELECT COUNT(*) AS cnt FROM Alerted A WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond}
+            SELECT COUNT(*) AS cnt FROM Alerted A WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond} {equipamento_cond}
         """
 
         data_sql = base_cte + f"""
@@ -2495,7 +2508,7 @@ def api_behavior_action_alerts():
                 WHERE Status_comodato = 'Emprestado'
                 GROUP BY CAST(ID_contrato AS TEXT)
             ) EQ ON CAST(A.contrato AS TEXT) = EQ.id_c
-            WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond}
+            WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond} {equipamento_cond}
             ORDER BY A.score DESC
             LIMIT ? OFFSET ?
         """
@@ -2510,7 +2523,7 @@ def api_behavior_action_alerts():
 
         # ret_params aparece 2x no base_cte: ret_all + pos_ret_os
         base_p      = tuple(ret_params) + tuple(ret_params) + tuple(city_p)
-        filter_p    = tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + tuple(assunto_ret_p)
+        filter_p    = tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + tuple(assunto_ret_p) + tuple(equipamento_p)
         summary_row = conn.execute(summary_sql, base_p).fetchone()
         total_rows  = conn.execute(count_sql,   base_p + filter_p).fetchone()[0]
         data_rows   = conn.execute(data_sql,    base_p + filter_p + (limit, offset)).fetchall()
@@ -3491,7 +3504,7 @@ def api_behavior_client_detail(contrato_id):
             FROM OS o
             WHERE CAST(o.Contrato AS TEXT) = ?
             ORDER BY o.Abertura DESC
-            LIMIT 20
+            LIMIT 50
         """, (str(contrato_id),)).fetchall()
 
         # --- Equipamentos em comodato ---
