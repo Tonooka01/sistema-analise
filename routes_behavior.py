@@ -2208,7 +2208,7 @@ def api_behavior_action_alerts():
     try:
         _ensure_acompanhamento_table(conn)
         city       = request.args.get('city',       '').strip()
-        tier       = request.args.get('tier',       '').strip()
+        tier_vals  = request.args.getlist('tier')
         cliente    = request.args.get('cliente',    '').strip()
         equipamento_vals = request.args.getlist('equipamento')
         limit   = request.args.get('limit',  50,  type=int)
@@ -2220,8 +2220,13 @@ def api_behavior_action_alerts():
         retirada_vals   = request.args.getlist('retirada')
         assunto_ret_vals = request.args.getlist('assunto_ret')
 
-        tier_cond    = "AND tier = ?" if tier else ""
-        tier_p       = [tier] if tier else []
+        if tier_vals:
+            _ph_tier = ','.join('?' * len(tier_vals))
+            tier_cond = f"AND tier IN ({_ph_tier})"
+            tier_p    = list(tier_vals)
+        else:
+            tier_cond = ""
+            tier_p    = []
 
         cliente_cond = "AND A.cliente LIKE ?" if cliente else ""
         cliente_p    = [f"%{cliente}%"] if cliente else []

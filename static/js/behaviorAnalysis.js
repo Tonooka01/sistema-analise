@@ -2447,7 +2447,7 @@ async function renderAlertasAcaoTab() {
     if (!tabContent) return;
 
     let _alertaCurrentPage = 1;
-    let _alertaFilters = { city: '', tier: '', cliente: '', equipamento: [], retirada: [], assunto_ret: [] };
+    let _alertaFilters = { city: '', tier: [], cliente: '', equipamento: [], retirada: [], assunto_ret: [] };
 
     const TIER_STYLE = {
         'Crítico': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
@@ -2472,15 +2472,26 @@ async function renderAlertasAcaoTab() {
                     <option value="">Todas</option>
                 </select>
             </div>
-            <div>
+            <div style="position:relative;">
                 <label class="text-sm font-medium text-gray-700 mr-1">Urgência:</label>
-                <select id="alertaTierFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
-                    <option value="">Todos</option>
-                    <option value="Crítico">Crítico</option>
-                    <option value="Alto">Alto</option>
-                    <option value="Médio">Médio</option>
-                    <option value="Baixo">Baixo</option>
-                </select>
+                <button type="button" id="alertaTierBtn"
+                    style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;background:white;border-radius:6px;font-size:0.875rem;cursor:pointer;min-width:110px;justify-content:space-between;box-shadow:0 1px 2px rgba(0,0,0,.05);">
+                    <span id="alertaTierLabel">Todos</span><span style="font-size:0.7em;">▾</span>
+                </button>
+                <div id="alertaTierMenu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:white;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:200;min-width:140px;padding:6px 0;">
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="Crítico" class="tier-chk"> 🔴 Crítico
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="Alto" class="tier-chk"> 🟠 Alto
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="Médio" class="tier-chk"> 🟡 Médio
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="Baixo" class="tier-chk"> 🔵 Baixo
+                    </label>
+                </div>
             </div>
             <div style="position:relative;">
                 <label class="text-sm font-medium text-gray-700 mr-1">Retirada:</label>
@@ -2564,11 +2575,11 @@ async function renderAlertasAcaoTab() {
         const offset = (page - 1) * rowsPerPage;
         const p = new URLSearchParams({
             city:    _alertaFilters.city,
-            tier:    _alertaFilters.tier,
             cliente: _alertaFilters.cliente,
             limit:   rowsPerPage,
             offset
         });
+        _alertaFilters.tier.forEach(v => p.append('tier', v));
         _alertaFilters.equipamento.forEach(v => p.append('equipamento', v));
         _alertaFilters.retirada.forEach(v => p.append('retirada', v));
         _alertaFilters.assunto_ret.forEach(v => p.append('assunto_ret', v));
@@ -2743,6 +2754,18 @@ async function renderAlertasAcaoTab() {
         }
     }
 
+    // Urgência dropdown toggle
+    const _tierBtn  = tabContent.querySelector('#alertaTierBtn');
+    const _tierMenu = tabContent.querySelector('#alertaTierMenu');
+    const _tierLbl  = tabContent.querySelector('#alertaTierLabel');
+    _tierBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        _retMenu.style.display  = 'none';
+        _assuntoMenu.style.display = 'none';
+        _eqMenu.style.display   = 'none';
+        _tierMenu.style.display = _tierMenu.style.display === 'none' ? 'block' : 'none';
+    });
+
     // Retirada dropdown toggle
     const _retBtn  = tabContent.querySelector('#alertaRetiradaBtn');
     const _retMenu = tabContent.querySelector('#alertaRetiradaMenu');
@@ -2750,9 +2773,10 @@ async function renderAlertasAcaoTab() {
     const _RET_LABELS = { ret_aberta: '🔴 Aberta', ret_encaminhada: '🟡 Encaminhada', ret_fin_sem_neg: '⚠️ Finalizada — neg. pendente', neg_com_retirada: '✅ Finalizada — completo', neg_sem_retirada: '🔴 Negativado — sem OS', sem_retirada: 'Sem retirada' };
     _retBtn.addEventListener('click', e => {
         e.stopPropagation();
+        _tierMenu.style.display    = 'none';
         _assuntoMenu.style.display = 'none';
-        _eqMenu.style.display = 'none';
-        _retMenu.style.display = _retMenu.style.display === 'none' ? 'block' : 'none';
+        _eqMenu.style.display      = 'none';
+        _retMenu.style.display     = _retMenu.style.display === 'none' ? 'block' : 'none';
     });
 
     // Assunto OS dropdown toggle
@@ -2769,8 +2793,9 @@ async function renderAlertasAcaoTab() {
     };
     _assuntoBtn.addEventListener('click', e => {
         e.stopPropagation();
-        _retMenu.style.display = 'none';
-        _eqMenu.style.display = 'none';
+        _tierMenu.style.display = 'none';
+        _retMenu.style.display  = 'none';
+        _eqMenu.style.display   = 'none';
         _assuntoMenu.style.display = _assuntoMenu.style.display === 'none' ? 'block' : 'none';
     });
 
@@ -2780,20 +2805,29 @@ async function renderAlertasAcaoTab() {
     const _eqLbl  = tabContent.querySelector('#alertaEquipamentoLabel');
     _eqBtn.addEventListener('click', e => {
         e.stopPropagation();
-        _retMenu.style.display = 'none';
+        _tierMenu.style.display    = 'none';
+        _retMenu.style.display     = 'none';
         _assuntoMenu.style.display = 'none';
-        _eqMenu.style.display = _eqMenu.style.display === 'none' ? 'block' : 'none';
+        _eqMenu.style.display      = _eqMenu.style.display === 'none' ? 'block' : 'none';
     });
 
-    document.addEventListener('click', () => { _retMenu.style.display = 'none'; _assuntoMenu.style.display = 'none'; _eqMenu.style.display = 'none'; });
+    document.addEventListener('click', () => {
+        _tierMenu.style.display    = 'none';
+        _retMenu.style.display     = 'none';
+        _assuntoMenu.style.display = 'none';
+        _eqMenu.style.display      = 'none';
+    });
+    _tierMenu.addEventListener('click', e => e.stopPropagation());
     _retMenu.addEventListener('click', e => e.stopPropagation());
     _assuntoMenu.addEventListener('click', e => e.stopPropagation());
     _eqMenu.addEventListener('click', e => e.stopPropagation());
 
     tabContent.querySelector('#btnFilterAlerta').addEventListener('click', () => {
-        _alertaFilters.city        = document.getElementById('alertaCityFilter')?.value || '';
-        _alertaFilters.tier        = document.getElementById('alertaTierFilter')?.value || '';
-        _alertaFilters.cliente     = document.getElementById('alertaClienteFilter')?.value.trim() || '';
+        _alertaFilters.city    = document.getElementById('alertaCityFilter')?.value || '';
+        _alertaFilters.cliente = document.getElementById('alertaClienteFilter')?.value.trim() || '';
+        const checkedTier = [...tabContent.querySelectorAll('.tier-chk:checked')].map(c => c.value);
+        _alertaFilters.tier = checkedTier;
+        _tierLbl.textContent = checkedTier.length === 0 ? 'Todos' : checkedTier.length === 1 ? checkedTier[0] : `${checkedTier.length} selecionados`;
         const checkedEq = [...tabContent.querySelectorAll('.equipamento-chk:checked')].map(c => c.value);
         _alertaFilters.equipamento = checkedEq;
         _eqLbl.textContent = checkedEq.length === 0 ? 'Todos' : `${checkedEq.length} selecionados`;
@@ -2824,11 +2858,11 @@ async function renderAlertasAcaoTab() {
         try {
             const p = new URLSearchParams({
                 city:    _alertaFilters.city,
-                tier:    _alertaFilters.tier,
                 cliente: _alertaFilters.cliente,
                 limit:   9999,
                 offset:  0
             });
+            _alertaFilters.tier.forEach(v => p.append('tier', v));
             _alertaFilters.equipamento.forEach(v => p.append('equipamento', v));
             _alertaFilters.retirada.forEach(v => p.append('retirada', v));
             _alertaFilters.assunto_ret.forEach(v => p.append('assunto_ret', v));
