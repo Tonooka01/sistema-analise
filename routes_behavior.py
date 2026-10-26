@@ -2474,21 +2474,8 @@ def api_behavior_action_alerts():
             )
         """
 
-        summary_sql = base_cte + """
-            SELECT
-                SUM(CASE WHEN tier = 'Crítico' THEN 1 ELSE 0 END) AS critico,
-                SUM(CASE WHEN tier = 'Alto'    THEN 1 ELSE 0 END) AS alto,
-                SUM(CASE WHEN tier = 'Médio'   THEN 1 ELSE 0 END) AS medio,
-                SUM(CASE WHEN tier = 'Baixo'   THEN 1 ELSE 0 END) AS baixo,
-                COUNT(*) AS total
-            FROM Alerted
-        """
-
-        count_sql = base_cte + f"""
-            SELECT COUNT(*) AS cnt FROM Alerted A WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond} {equipamento_cond}
-        """
-
-        data_sql = base_cte + f"""
+        # data_sql referencia Alerted A — será trocado por _alerted_tmp A depois
+        data_sql = f"""
             SELECT A.contrato, A.cliente, A.cidade, A.fat_vencidas, A.dias_vencido,
                    A.atend_30d, A.sem_conexao, A.score, A.tier,
                    COALESCE(A.situacao_retirada, '') AS situacao_retirada,
@@ -2515,34 +2502,63 @@ def api_behavior_action_alerts():
             LIMIT ? OFFSET ?
         """
 
-        cities_sql = """
-            SELECT DISTINCT Cidade FROM Contratos
-            WHERE Status_contrato = 'Ativo'
-              AND Cidade IS NOT NULL AND TRIM(Cidade) != ''
-              AND Cidade NOT GLOB '*[0-9]*'
-            ORDER BY Cidade
-        """
+        # ── Índices para acelerar as queries do base_cte (idempotente) ──────────
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_os_assunto_contrato ON OS(Assunto, Contrato)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_os_abertura_cliente  ON OS(Abertura, Cliente)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_ctr_status_acesso    ON Contratos(Status_contrato, Status_acesso, Cidade)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_acomp_snooze         ON Acompanhamento_Clientes(contrato_id, snooze_ate)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_cr_contrato_venc     ON Contas_a_Receber(ID_Contrato_Recorrente, Status, Vencimento)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_logins_contrato_cx   ON Logins(ID_contrato, ltima_conex_o_final)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_atend_criado_cliente ON Atendimentos(Criado_em, Cliente)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_equip_contrato_stat  ON Equipamento(ID_contrato, Status_comodato)")
+            conn.commit()
+        except Exception:
+            pass
 
-        # ret_params aparece 2x no base_cte: ret_all + pos_ret_os
+        # ── Materializa Alerted numa temp table (CTE roda UMA vez) ───────────
         base_p   = tuple(ret_params) + tuple(ret_params) + tuple(city_p)
         filter_p = tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + tuple(assunto_ret_p) + tuple(equipamento_p)
-        summary_row = conn.execute(summary_sql, base_p).fetchone()
-        total_rows  = conn.execute(count_sql,   base_p + filter_p).fetchone()[0]
-        data_rows   = conn.execute(data_sql,    base_p + filter_p + (limit, offset)).fetchall()
-        cities      = [r[0] for r in conn.execute(cities_sql).fetchall() if r[0]]
-        # Só busca lista de equipamentos na primeira página para evitar rodar base_cte duas vezes
+
+        conn.execute("DROP TABLE IF EXISTS _alerted_tmp")
+        conn.execute(f"CREATE TEMP TABLE _alerted_tmp AS {base_cte} SELECT * FROM Alerted", base_p)
+
+        # Todas as queries seguintes batem na temp table (sem re-executar o CTE)
+        summary_row = conn.execute("""
+            SELECT
+                SUM(CASE WHEN tier = 'Crítico' THEN 1 ELSE 0 END) AS critico,
+                SUM(CASE WHEN tier = 'Alto'    THEN 1 ELSE 0 END) AS alto,
+                SUM(CASE WHEN tier = 'Médio'   THEN 1 ELSE 0 END) AS medio,
+                SUM(CASE WHEN tier = 'Baixo'   THEN 1 ELSE 0 END) AS baixo,
+                COUNT(*) AS total
+            FROM _alerted_tmp
+        """).fetchone()
+
+        count_sql = f"SELECT COUNT(*) FROM _alerted_tmp A WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond} {equipamento_cond}"
+        total_rows = conn.execute(count_sql, filter_p).fetchone()[0]
+
+        data_sql = data_sql.replace("FROM Alerted A", "FROM _alerted_tmp A")
+        data_rows = conn.execute(data_sql, filter_p + (limit, offset)).fetchall()
+
+        cities = [r[0] for r in conn.execute("""
+            SELECT DISTINCT cidade FROM _alerted_tmp
+            WHERE cidade IS NOT NULL AND TRIM(cidade) != '' AND NOT (cidade GLOB '[0-9]*')
+            ORDER BY cidade
+        """).fetchall() if r[0]]
+
         if offset == 0:
-            equipamentos_sql = base_cte + """
+            equipamentos_list = [r[0] for r in conn.execute("""
                 SELECT DISTINCT eq.Descricao_produto
-                FROM Alerted A
+                FROM _alerted_tmp A
                 JOIN Equipamento eq ON CAST(eq.ID_contrato AS TEXT) = CAST(A.contrato AS TEXT)
                 WHERE eq.Status_comodato = 'Emprestado'
                   AND eq.Descricao_produto IS NOT NULL AND TRIM(eq.Descricao_produto) != ''
                 ORDER BY eq.Descricao_produto
-            """
-            equipamentos_list = [r[0] for r in conn.execute(equipamentos_sql, base_p).fetchall() if r[0]]
+            """).fetchall() if r[0]]
         else:
             equipamentos_list = []
+
+        conn.execute("DROP TABLE IF EXISTS _alerted_tmp")
 
         summary = dict(summary_row) if summary_row else {
             "critico": 0, "alto": 0, "medio": 0, "baixo": 0, "total": 0
