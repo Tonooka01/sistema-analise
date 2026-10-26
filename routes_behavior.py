@@ -2521,6 +2521,13 @@ def api_behavior_action_alerts():
             ORDER BY Cidade
         """
 
+        equipamentos_sql = """
+            SELECT DISTINCT Descricao_produto FROM Equipamento
+            WHERE Status_comodato = 'Emprestado'
+              AND Descricao_produto IS NOT NULL AND TRIM(Descricao_produto) != ''
+            ORDER BY Descricao_produto
+        """
+
         # ret_params aparece 2x no base_cte: ret_all + pos_ret_os
         base_p      = tuple(ret_params) + tuple(ret_params) + tuple(city_p)
         filter_p    = tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + tuple(assunto_ret_p) + tuple(equipamento_p)
@@ -2528,6 +2535,7 @@ def api_behavior_action_alerts():
         total_rows  = conn.execute(count_sql,   base_p + filter_p).fetchone()[0]
         data_rows   = conn.execute(data_sql,    base_p + filter_p + (limit, offset)).fetchall()
         cities      = [r[0] for r in conn.execute(cities_sql).fetchall() if r[0]]
+        equipamentos_list = [r[0] for r in conn.execute(equipamentos_sql).fetchall() if r[0]]
 
         summary = dict(summary_row) if summary_row else {
             "critico": 0, "alto": 0, "medio": 0, "baixo": 0, "total": 0
@@ -2594,10 +2602,11 @@ def api_behavior_action_alerts():
             data.append(row)
 
         return jsonify({
-            "summary":    summary,
-            "data":       data,
-            "total_rows": total_rows,
-            "cities":     cities,
+            "summary":      summary,
+            "data":         data,
+            "total_rows":   total_rows,
+            "cities":       cities,
+            "equipamentos": equipamentos_list,
         })
 
     except Exception as e:
@@ -4614,6 +4623,7 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
         'id_contrato':       str(id_contrato),
         'id_ticket_setor':   id_ticket_setor,
         'origem_endereco':   'CC',
+        'id_ticket_origem':  'I',
         'prioridade':        'M',
         'menssagem':         mensagem or titulo or '',
         'status':            'A',
@@ -4630,6 +4640,7 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
         payload['id_colaborador']         = _atendente_final
         payload['id_responsavel_tecnico'] = _atendente_final
         payload['id_usuario']             = _atendente_final
+        payload['id_usuarios']            = _atendente_final
     try:
         resp = requests.post(f'{_IXC_BASE}/su_ticket', json=payload,
                              headers=headers, timeout=15, verify=False)
