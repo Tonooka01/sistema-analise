@@ -178,7 +178,15 @@ document.addEventListener('DOMContentLoaded', () => {
                                    placeholder="—"
                                    onchange="saveUserIxcColaborador(${u.id}, this.value)"
                                    class="border rounded px-2 py-0.5 text-xs text-center w-20 focus:ring-1 focus:ring-blue-400 focus:outline-none"
-                                   title="ID do colaborador no IXC">
+                                   title="ID do colaborador no IXC (funcionarios.id)">
+                        </td>
+                        <td class="py-2 px-3 text-center">
+                            <input type="text"
+                                   value="${u.ixc_usuario_id || ''}"
+                                   placeholder="—"
+                                   onchange="saveUserIxcUsuario(${u.id}, this.value)"
+                                   class="border rounded px-2 py-0.5 text-xs text-center w-20 focus:ring-1 focus:ring-green-400 focus:outline-none"
+                                   title="ID do usuário no IXC (usuarios.id — para campo Usuário no ticket)">
                         </td>
                         <td class="py-2 px-3 text-center">
                             <button onclick="openPermissions(${u.id})"
@@ -203,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch (e) {
             console.error("Erro ao listar usuários", e);
-            usersTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-red-500 py-2">Erro ao carregar.</td></tr>';
+            usersTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-red-500 py-2">Erro ao carregar.</td></tr>';
         }
     }
 
@@ -218,10 +226,22 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch(e) { alert('Erro de conexão.'); }
     };
 
+    window.saveUserIxcUsuario = async function(userId, value) {
+        try {
+            const res = await fetch('/api/admin/users/ixc-usuario', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: userId, ixc_usuario_id: value})
+            });
+            if (!res.ok) { const err = await res.json(); alert('Erro: ' + err.error); }
+        } catch(e) { alert('Erro de conexão.'); }
+    };
+
     // Info do usuário logado injetada pelo servidor (sem fetch async)
     window._currentUserInfo = {
         username: {{ current_user.username | tojson if current_user.is_authenticated else '""' }},
-        ixc_colaborador_id: {{ current_ixc_colab_id | default('') | tojson }}
+        ixc_colaborador_id: {{ current_ixc_colab_id | default('') | tojson }},
+        ixc_usuario_id: {{ current_ixc_usuario_id | default('') | tojson }}
     };
 
     window.toggleUserStatus = async function(userId) {

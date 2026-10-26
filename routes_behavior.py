@@ -2521,11 +2521,13 @@ def api_behavior_action_alerts():
             ORDER BY Cidade
         """
 
-        equipamentos_sql = """
-            SELECT DISTINCT Descricao_produto FROM Equipamento
-            WHERE Status_comodato = 'Emprestado'
-              AND Descricao_produto IS NOT NULL AND TRIM(Descricao_produto) != ''
-            ORDER BY Descricao_produto
+        equipamentos_sql = base_cte + """
+            SELECT DISTINCT eq.Descricao_produto
+            FROM Alerted A
+            JOIN Equipamento eq ON CAST(eq.ID_contrato AS TEXT) = CAST(A.contrato AS TEXT)
+            WHERE eq.Status_comodato = 'Emprestado'
+              AND eq.Descricao_produto IS NOT NULL AND TRIM(eq.Descricao_produto) != ''
+            ORDER BY eq.Descricao_produto
         """
 
         # ret_params aparece 2x no base_cte: ret_all + pos_ret_os
@@ -2535,7 +2537,7 @@ def api_behavior_action_alerts():
         total_rows  = conn.execute(count_sql,   base_p + filter_p).fetchone()[0]
         data_rows   = conn.execute(data_sql,    base_p + filter_p + (limit, offset)).fetchall()
         cities      = [r[0] for r in conn.execute(cities_sql).fetchall() if r[0]]
-        equipamentos_list = [r[0] for r in conn.execute(equipamentos_sql).fetchall() if r[0]]
+        equipamentos_list = [r[0] for r in conn.execute(equipamentos_sql, base_p).fetchall() if r[0]]
 
         summary = dict(summary_row) if summary_row else {
             "critico": 0, "alto": 0, "medio": 0, "baixo": 0, "total": 0
@@ -3616,6 +3618,7 @@ def api_behavior_acompanhamento_post():
         abre_os             = bool(data.get('abre_os') or data.get('abrir_os_ixc', False))
         id_cliente_ixc      = data.get('id_cliente_ixc')
         colaborador_ixc_id  = (data.get('colaborador_ixc_id') or '').strip() or None
+        usuario_ixc_id      = (data.get('usuario_ixc_id') or '').strip() or None
         usuario             = current_user.username if current_user.is_authenticated else 'sistema'
 
         if not contrato_id or not tipo_acao:
@@ -3678,6 +3681,7 @@ def api_behavior_acompanhamento_post():
                         fechar=not abre_os,
                         id_assunto_ixc=id_assunto_ixc,
                         id_atendente_override=colaborador_ixc_id,
+                        id_usuarios_override=usuario_ixc_id,
                     )
                     logger.info(f"acompanhamento_post: ixc_os_id={ixc_os_id!r}")
                 else:
@@ -4556,7 +4560,7 @@ def _ixc_post(endpoint, payload, token):
         return None
 
 
-def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titulo='', fechar=False, id_assunto_ixc='', id_atendente_override=None):
+def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titulo='', fechar=False, id_assunto_ixc='', id_atendente_override=None, id_usuarios_override=None):
     """Cria um ticket de suporte no IXC (su_ticket). Retorna ID ou None."""
     # Busca endereço e login do contrato no banco local
     endereco = bairro = complemento = id_cidade = id_login = ''
@@ -4640,7 +4644,10 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
         payload['id_colaborador']         = _atendente_final
         payload['id_responsavel_tecnico'] = _atendente_final
         payload['id_usuario']             = _atendente_final
-        payload['id_usuarios']            = _atendente_final
+    # id_usuarios = usuarios.id no IXC (diferente de funcionarios.id)
+    _usuarios_final = str(id_usuarios_override or '')
+    if _usuarios_final:
+        payload['id_usuarios'] = _usuarios_final
     try:
         resp = requests.post(f'{_IXC_BASE}/su_ticket', json=payload,
                              headers=headers, timeout=15, verify=False)

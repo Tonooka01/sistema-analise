@@ -219,7 +219,8 @@ def require_login_for_api():
 @app.route('/')
 @login_required
 def index():
-    ixc_colab_id = ''
+    ixc_colab_id   = ''
+    ixc_usuario_id = ''
     try:
         conn = get_db_connection()
         try:
@@ -227,17 +228,24 @@ def index():
             conn.commit()
         except Exception:
             pass
+        try:
+            conn.execute("ALTER TABLE Users ADD COLUMN ixc_usuario_id TEXT")
+            conn.commit()
+        except Exception:
+            pass
         row = conn.execute(
-            "SELECT ixc_colaborador_id FROM Users WHERE id = ?", (current_user.id,)
+            "SELECT ixc_colaborador_id, ixc_usuario_id FROM Users WHERE id = ?", (current_user.id,)
         ).fetchone()
         if row:
-            ixc_colab_id = row['ixc_colaborador_id'] or ''
+            ixc_colab_id   = row['ixc_colaborador_id'] or ''
+            ixc_usuario_id = row['ixc_usuario_id'] or ''
         conn.close()
     except Exception:
         pass
     return render_template('index.html',
                            current_username=current_user.username,
-                           current_ixc_colab_id=ixc_colab_id)
+                           current_ixc_colab_id=ixc_colab_id,
+                           current_ixc_usuario_id=ixc_usuario_id)
 
 
 @app.route('/resumo/<token>')

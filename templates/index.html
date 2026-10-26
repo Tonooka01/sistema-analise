@@ -1845,6 +1845,7 @@ function cdpAcompSalvar() {
       os_assunto:         osAssunto || null,
       id_cliente_ixc:     _cdpCurrentClienteIxcId,
       colaborador_ixc_id: _userInfo.ixc_colaborador_id || null,
+      usuario_ixc_id:     _userInfo.ixc_usuario_id || null,
     })
   })
   .then(r => r.json())

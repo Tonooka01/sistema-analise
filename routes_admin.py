@@ -85,7 +85,12 @@ def get_users():
         conn.commit()
     except Exception:
         pass
-    users = conn.execute("SELECT id, username, is_active, last_seen, permissions, ixc_colaborador_id FROM Users").fetchall()
+    try:
+        conn.execute("ALTER TABLE Users ADD COLUMN ixc_usuario_id TEXT")
+        conn.commit()
+    except Exception:
+        pass
+    users = conn.execute("SELECT id, username, is_active, last_seen, permissions, ixc_colaborador_id, ixc_usuario_id FROM Users").fetchall()
     conn.close()
 
     now = datetime.now()
@@ -106,6 +111,7 @@ def get_users():
             "is_online": is_online,
             "permissions": u['permissions'],
             "ixc_colaborador_id": u['ixc_colaborador_id'] or '',
+            "ixc_usuario_id":     u['ixc_usuario_id'] or '',
         })
 
     return jsonify(users_list)
@@ -132,19 +138,50 @@ def set_user_ixc_colaborador():
         conn.close()
 
 
+@admin_bp.route('/api/admin/users/ixc-usuario', methods=['POST'])
+@login_required
+def set_user_ixc_usuario():
+    if current_user.username != 'admin':
+        return jsonify({"error": "Acesso negado"}), 403
+    data    = request.json or {}
+    user_id = data.get('user_id')
+    ixc_uid = (data.get('ixc_usuario_id') or '').strip()
+    if not user_id:
+        return jsonify({"error": "user_id obrigatório"}), 400
+    conn = get_db_connection()
+    try:
+        try:
+            conn.execute("ALTER TABLE Users ADD COLUMN ixc_usuario_id TEXT")
+            conn.commit()
+        except Exception:
+            pass
+        conn.execute("UPDATE Users SET ixc_usuario_id = ? WHERE id = ?", (ixc_uid or None, user_id))
+        conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
 @admin_bp.route('/api/user/me', methods=['GET'])
 @login_required
 def get_current_user_info():
     conn = get_db_connection()
     try:
-        # garante que a coluna existe antes de consultar
+        # garante que as colunas existem antes de consultar
         try:
             conn.execute("ALTER TABLE Users ADD COLUMN ixc_colaborador_id TEXT")
             conn.commit()
         except Exception:
             pass
+        try:
+            conn.execute("ALTER TABLE Users ADD COLUMN ixc_usuario_id TEXT")
+            conn.commit()
+        except Exception:
+            pass
         u = conn.execute(
-            "SELECT id, username, ixc_colaborador_id FROM Users WHERE id = ?", (current_user.id,)
+            "SELECT id, username, ixc_colaborador_id, ixc_usuario_id FROM Users WHERE id = ?", (current_user.id,)
         ).fetchone()
         if not u:
             return jsonify({"error": "Usuário não encontrado"}), 404
@@ -152,6 +189,7 @@ def get_current_user_info():
             "id": u['id'],
             "username": u['username'],
             "ixc_colaborador_id": u['ixc_colaborador_id'] or '',
+            "ixc_usuario_id":     u['ixc_usuario_id'] or '',
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
