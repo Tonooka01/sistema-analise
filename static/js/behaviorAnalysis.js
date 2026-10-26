@@ -2447,7 +2447,7 @@ async function renderAlertasAcaoTab() {
     if (!tabContent) return;
 
     let _alertaCurrentPage = 1;
-    let _alertaFilters = { city: '', tier: '', cliente: '', equipamento: '', retirada: [], assunto_ret: [] };
+    let _alertaFilters = { city: '', tier: '', cliente: '', equipamento: [], retirada: [], assunto_ret: [] };
 
     const TIER_STYLE = {
         'Crítico': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
@@ -2508,18 +2508,13 @@ async function renderAlertasAcaoTab() {
                     </label>
                 </div>
             </div>
-            <div style="position:relative;min-width:180px;">
-                <label class="text-sm font-medium text-gray-700 mr-1 block mb-1">Equipamento:</label>
-                <div style="position:relative;">
-                    <input id="alertaEquipamentoInput" type="text" placeholder="Todos equipamentos"
-                        autocomplete="off"
-                        style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.875rem;box-shadow:0 1px 2px rgba(0,0,0,.05);">
-                    <input id="alertaEquipamentoFilter" type="hidden" value="">
-                    <div id="alertaEquipamentoDropdown"
-                        style="display:none;position:absolute;top:100%;left:0;right:0;z-index:300;
-                               background:#fff;border:1px solid #d1d5db;border-radius:6px;
-                               max-height:220px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15);">
-                    </div>
+            <div style="position:relative;">
+                <label class="text-sm font-medium text-gray-700 mr-1">Equipamento:</label>
+                <button type="button" id="alertaEquipamentoBtn"
+                    style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;background:white;border-radius:6px;font-size:0.875rem;cursor:pointer;min-width:130px;justify-content:space-between;box-shadow:0 1px 2px rgba(0,0,0,.05);">
+                    <span id="alertaEquipamentoLabel">Todos</span><span style="font-size:0.7em;">▾</span>
+                </button>
+                <div id="alertaEquipamentoMenu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:white;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:200;min-width:260px;max-height:280px;overflow-y:auto;padding:6px 0;">
                 </div>
             </div>
             <div style="position:relative;">
@@ -2564,13 +2559,13 @@ async function renderAlertasAcaoTab() {
         const rowsPerPage = 50;
         const offset = (page - 1) * rowsPerPage;
         const p = new URLSearchParams({
-            city:        _alertaFilters.city,
-            tier:        _alertaFilters.tier,
-            cliente:     _alertaFilters.cliente,
-            equipamento: _alertaFilters.equipamento,
-            limit:       rowsPerPage,
+            city:    _alertaFilters.city,
+            tier:    _alertaFilters.tier,
+            cliente: _alertaFilters.cliente,
+            limit:   rowsPerPage,
             offset
         });
+        _alertaFilters.equipamento.forEach(v => p.append('equipamento', v));
         _alertaFilters.retirada.forEach(v => p.append('retirada', v));
         _alertaFilters.assunto_ret.forEach(v => p.append('assunto_ret', v));
 
@@ -2611,41 +2606,15 @@ async function renderAlertasAcaoTab() {
                 utils.populateCityFilter(cityFilter, result.cities, _alertaFilters.city);
             }
 
-            // Populate equipment dropdown on first load
-            const _eqDrop = document.getElementById('alertaEquipamentoDropdown');
-            if (_eqDrop && result.equipamentos?.length && _eqDrop.children.length === 0) {
-                const _eqItems = [{ val: '', label: 'Todos equipamentos', italic: true }, ...result.equipamentos.map(e => ({ val: e, label: e }))];
-                _eqDrop.innerHTML = _eqItems.map(item =>
-                    `<div class="alerta-eq-opt" data-val="${item.val}"
-                        style="padding:6px 10px;cursor:pointer;font-size:0.82rem;${item.italic ? 'color:#6b7280;font-style:italic;' : 'color:#111827;'}"
-                        onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">
-                        ${item.label}
-                    </div>`
-                ).join('');
-                // Wire up dropdown events once populated
-                const _eqInput  = document.getElementById('alertaEquipamentoInput');
-                const _eqHidden = document.getElementById('alertaEquipamentoFilter');
-                const _allOpts  = () => Array.from(_eqDrop.querySelectorAll('.alerta-eq-opt'));
-                function _eqFilter(q) {
-                    const lq = q.toLowerCase().trim();
-                    _allOpts().forEach(o => {
-                        if (!o.dataset.val) { o.style.display = ''; return; }
-                        o.style.display = !lq || o.dataset.val.toLowerCase().includes(lq) ? '' : 'none';
-                    });
-                }
-                _eqInput.addEventListener('focus', () => { _eqFilter(_eqInput.value); _eqDrop.style.display = 'block'; });
-                _eqInput.addEventListener('input', () => { _eqHidden.value = ''; _eqFilter(_eqInput.value); _eqDrop.style.display = 'block'; });
-                document.addEventListener('mousedown', e => {
-                    if (!_eqInput.contains(e.target) && !_eqDrop.contains(e.target)) _eqDrop.style.display = 'none';
-                });
-                _eqDrop.addEventListener('mousedown', e => {
-                    const opt = e.target.closest('.alerta-eq-opt');
-                    if (!opt) return;
-                    e.preventDefault();
-                    _eqInput.value  = opt.dataset.val ? opt.dataset.val : '';
-                    _eqHidden.value = opt.dataset.val;
-                    _eqDrop.style.display = 'none';
-                });
+            // Populate equipment checkboxes on first load (offset 0 only)
+            const _eqMenuPop = document.getElementById('alertaEquipamentoMenu');
+            if (_eqMenuPop && result.equipamentos?.length && _eqMenuPop.children.length === 0) {
+                _eqMenuPop.innerHTML = result.equipamentos.map(e => {
+                    const esc = e.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+                    return `<label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:0.82rem;" class="hover:bg-gray-50">
+                        <input type="checkbox" value="${esc}" class="equipamento-chk"> ${esc}
+                    </label>`;
+                }).join('');
             }
 
             const n = result.total_rows || 0;
@@ -2778,6 +2747,7 @@ async function renderAlertasAcaoTab() {
     _retBtn.addEventListener('click', e => {
         e.stopPropagation();
         _assuntoMenu.style.display = 'none';
+        _eqMenu.style.display = 'none';
         _retMenu.style.display = _retMenu.style.display === 'none' ? 'block' : 'none';
     });
 
@@ -2796,18 +2766,33 @@ async function renderAlertasAcaoTab() {
     _assuntoBtn.addEventListener('click', e => {
         e.stopPropagation();
         _retMenu.style.display = 'none';
+        _eqMenu.style.display = 'none';
         _assuntoMenu.style.display = _assuntoMenu.style.display === 'none' ? 'block' : 'none';
     });
 
-    document.addEventListener('click', () => { _retMenu.style.display = 'none'; _assuntoMenu.style.display = 'none'; });
+    // Equipamento dropdown toggle
+    const _eqBtn  = tabContent.querySelector('#alertaEquipamentoBtn');
+    const _eqMenu = tabContent.querySelector('#alertaEquipamentoMenu');
+    const _eqLbl  = tabContent.querySelector('#alertaEquipamentoLabel');
+    _eqBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        _retMenu.style.display = 'none';
+        _assuntoMenu.style.display = 'none';
+        _eqMenu.style.display = _eqMenu.style.display === 'none' ? 'block' : 'none';
+    });
+
+    document.addEventListener('click', () => { _retMenu.style.display = 'none'; _assuntoMenu.style.display = 'none'; _eqMenu.style.display = 'none'; });
     _retMenu.addEventListener('click', e => e.stopPropagation());
     _assuntoMenu.addEventListener('click', e => e.stopPropagation());
+    _eqMenu.addEventListener('click', e => e.stopPropagation());
 
     tabContent.querySelector('#btnFilterAlerta').addEventListener('click', () => {
         _alertaFilters.city        = document.getElementById('alertaCityFilter')?.value || '';
         _alertaFilters.tier        = document.getElementById('alertaTierFilter')?.value || '';
         _alertaFilters.cliente     = document.getElementById('alertaClienteFilter')?.value.trim() || '';
-        _alertaFilters.equipamento = document.getElementById('alertaEquipamentoFilter')?.value || '';
+        const checkedEq = [...tabContent.querySelectorAll('.equipamento-chk:checked')].map(c => c.value);
+        _alertaFilters.equipamento = checkedEq;
+        _eqLbl.textContent = checkedEq.length === 0 ? 'Todos' : `${checkedEq.length} selecionados`;
         const checked = [...tabContent.querySelectorAll('.retirada-chk:checked')].map(c => c.value);
         _alertaFilters.retirada = checked;
         _retLbl.textContent = checked.length === 0 ? 'Todas' : checked.length === 1 ? _RET_LABELS[checked[0]] : `${checked.length} selecionados`;
@@ -2820,9 +2805,6 @@ async function renderAlertasAcaoTab() {
     // Enter nos campos de texto também filtra
     tabContent.querySelector('#alertaClienteFilter').addEventListener('keydown', e => {
         if (e.key === 'Enter') tabContent.querySelector('#btnFilterAlerta').click();
-    });
-    tabContent.querySelector('#alertaEquipamentoInput')?.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { document.getElementById('alertaEquipamentoDropdown').style.display = 'none'; tabContent.querySelector('#btnFilterAlerta').click(); }
     });
 
     tabContent.addEventListener('click', (e) => {
@@ -2837,13 +2819,13 @@ async function renderAlertasAcaoTab() {
         btn.disabled = true;
         try {
             const p = new URLSearchParams({
-                city:        _alertaFilters.city,
-                tier:        _alertaFilters.tier,
-                cliente:     _alertaFilters.cliente,
-                equipamento: _alertaFilters.equipamento,
-                limit:       9999,
-                offset:      0
+                city:    _alertaFilters.city,
+                tier:    _alertaFilters.tier,
+                cliente: _alertaFilters.cliente,
+                limit:   9999,
+                offset:  0
             });
+            _alertaFilters.equipamento.forEach(v => p.append('equipamento', v));
             _alertaFilters.retirada.forEach(v => p.append('retirada', v));
             _alertaFilters.assunto_ret.forEach(v => p.append('assunto_ret', v));
 

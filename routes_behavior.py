@@ -2210,7 +2210,7 @@ def api_behavior_action_alerts():
         city       = request.args.get('city',       '').strip()
         tier       = request.args.get('tier',       '').strip()
         cliente    = request.args.get('cliente',    '').strip()
-        equipamento = request.args.get('equipamento', '').strip()
+        equipamento_vals = request.args.getlist('equipamento')
         limit   = request.args.get('limit',  50,  type=int)
         offset  = request.args.get('offset', 0,   type=int)
 
@@ -2226,14 +2226,15 @@ def api_behavior_action_alerts():
         cliente_cond = "AND A.cliente LIKE ?" if cliente else ""
         cliente_p    = [f"%{cliente}%"] if cliente else []
 
-        if equipamento:
-            equipamento_cond = """AND EXISTS (
+        if equipamento_vals:
+            _ph_eq = ','.join('?' * len(equipamento_vals))
+            equipamento_cond = f"""AND EXISTS (
                 SELECT 1 FROM Equipamento eq2
                 WHERE CAST(eq2.ID_contrato AS TEXT) = CAST(A.contrato AS TEXT)
                   AND eq2.Status_comodato = 'Emprestado'
-                  AND eq2.Descricao_produto LIKE ?
+                  AND eq2.Descricao_produto IN ({_ph_eq})
             )"""
-            equipamento_p = [f"%{equipamento}%"]
+            equipamento_p = list(equipamento_vals)
         else:
             equipamento_cond = ""
             equipamento_p    = []
@@ -2521,23 +2522,26 @@ def api_behavior_action_alerts():
             ORDER BY Cidade
         """
 
-        equipamentos_sql = base_cte + """
-            SELECT DISTINCT eq.Descricao_produto
-            FROM Alerted A
-            JOIN Equipamento eq ON CAST(eq.ID_contrato AS TEXT) = CAST(A.contrato AS TEXT)
-            WHERE eq.Status_comodato = 'Emprestado'
-              AND eq.Descricao_produto IS NOT NULL AND TRIM(eq.Descricao_produto) != ''
-            ORDER BY eq.Descricao_produto
-        """
-
         # ret_params aparece 2x no base_cte: ret_all + pos_ret_os
-        base_p      = tuple(ret_params) + tuple(ret_params) + tuple(city_p)
-        filter_p    = tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + tuple(assunto_ret_p) + tuple(equipamento_p)
+        base_p   = tuple(ret_params) + tuple(ret_params) + tuple(city_p)
+        filter_p = tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + tuple(assunto_ret_p) + tuple(equipamento_p)
         summary_row = conn.execute(summary_sql, base_p).fetchone()
         total_rows  = conn.execute(count_sql,   base_p + filter_p).fetchone()[0]
         data_rows   = conn.execute(data_sql,    base_p + filter_p + (limit, offset)).fetchall()
         cities      = [r[0] for r in conn.execute(cities_sql).fetchall() if r[0]]
-        equipamentos_list = [r[0] for r in conn.execute(equipamentos_sql, base_p).fetchall() if r[0]]
+        # Só busca lista de equipamentos na primeira página para evitar rodar base_cte duas vezes
+        if offset == 0:
+            equipamentos_sql = base_cte + """
+                SELECT DISTINCT eq.Descricao_produto
+                FROM Alerted A
+                JOIN Equipamento eq ON CAST(eq.ID_contrato AS TEXT) = CAST(A.contrato AS TEXT)
+                WHERE eq.Status_comodato = 'Emprestado'
+                  AND eq.Descricao_produto IS NOT NULL AND TRIM(eq.Descricao_produto) != ''
+                ORDER BY eq.Descricao_produto
+            """
+            equipamentos_list = [r[0] for r in conn.execute(equipamentos_sql, base_p).fetchall() if r[0]]
+        else:
+            equipamentos_list = []
 
         summary = dict(summary_row) if summary_row else {
             "critico": 0, "alto": 0, "medio": 0, "baixo": 0, "total": 0
