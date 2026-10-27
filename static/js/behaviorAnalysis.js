@@ -2892,13 +2892,19 @@ async function renderAlertasAcaoTab() {
                 'Situação Retirada':_SIT_LABEL[r.situacao_retirada] || r.situacao_retirada || '',
                 'OS Retirada':      r.ret_assunto_aberta || r.ret_ultimo_assunto || '',
                 'Equipamento':      r.equipamentos || '',
-                'Telefone Celular': r.telefone_celular || '',
+                'Tel. Celular':     r.telefone_celular || '',
+                'Tel. Residencial': r.telefone_residencial || '',
+                'Telefone Cliente': r.telefone_cliente || '',
+                'Tel. Comercial':   r.telefone_comercial || '',
+                'Cel. Cliente':     r.telefone_cel_cliente || '',
+                'WhatsApp':         r.whatsapp_cliente || '',
             }));
 
             const ws = XLSX.utils.json_to_sheet(rows);
             ws['!cols'] = [
                 {wch:4},{wch:10},{wch:30},{wch:18},{wch:10},{wch:60},
-                {wch:12},{wch:12},{wch:14},{wch:30},{wch:30},{wch:30},{wch:16}
+                {wch:12},{wch:12},{wch:14},{wch:30},{wch:30},{wch:30},
+                {wch:14},{wch:16},{wch:16},{wch:16},{wch:14},{wch:14}
             ];
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Alertas de Ação');
