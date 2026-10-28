@@ -295,6 +295,8 @@ document.addEventListener('DOMContentLoaded', () => {
         { id: 'dre2',        label: '📊 Gestão Financeira' },
         { id: 'crescimento', label: '📈 Crescimento Analítico' },
         { id: 'retiradas',   label: '📦 Retirada de Equipamentos' },
+        // explicit: nunca vem marcado por "pleno acesso" (permissions = null); só quem é marcado aqui (ou o admin) entra no Bot UNM
+        { id: 'unm',         label: '📡 Bot UNM (monitor das OLTs e envio de mensagens)', explicit: true },
     ];
 
     const _ANALYSIS_GROUPS = [
@@ -402,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
                           border:1px solid #e5e7eb;border-radius:.375rem;background:#f9fafb;margin-bottom:.2rem;">
                 <input type="checkbox" class="perm-mod" value="${m.id}"
                        style="width:1rem;height:1rem;cursor:pointer;"
-                       ${!perms || perms.includes(m.id) ? 'checked' : ''}>
+                       ${(m.explicit ? ((perms && perms.includes(m.id)) || u.username === 'admin') : (!perms || perms.includes(m.id))) ? 'checked' : ''}>
                 <span style="font-size:.82rem;color:#374151;">${m.label}</span>
             </label>`).join('');
 
@@ -559,13 +561,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // null = pleno acesso (todos módulos + todos grupos completos + behavior + todas as abas)
-        const allMods   = _MODULES.every(m => modChecks.includes(m.id));
+        const allMods   = _MODULES.filter(m => !m.explicit).every(m => modChecks.includes(m.id));
+        const explicitOn = _MODULES.some(m => m.explicit && modChecks.includes(m.id));
         const allGroups = _ANALYSIS_GROUPS.every(g => {
             if (!modChecks.includes(g.id)) return false;
             const subChecks = document.querySelectorAll(`.perm-grp-item[data-group="${g.id}"]:checked`);
             return subChecks.length === g.items.length;
         });
-        const sendNull  = allMods && allGroups && behaviorOn && allTabs;
+        const sendNull  = allMods && allGroups && behaviorOn && allTabs && !explicitOn;
 
         try {
             const res = await fetch('/api/admin/users/permissions', {

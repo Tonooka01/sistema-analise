@@ -216,6 +216,12 @@ document.addEventListener('DOMContentLoaded', () => {
 <div class="nv-topbar">
     <h1>Dashboard Analítico · NetVale</h1>
     <div class="nv-topbar-actions">
+        {% if can_unm %}
+        <a href="/unm/" target="_blank" rel="noopener" title="Abrir o monitor de ONUs e alarmes das OLTs (Bot UNM)"
+           style="display:inline-flex;align-items:center;gap:0.5rem;padding:0.55rem 1rem;border-radius:8px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.35);color:#ffffff;font-weight:600;font-size:0.9rem;text-decoration:none;">
+            📡 Bot UNM
+        </a>
+        {% endif %}
     </div>
 </div>
 

@@ -61,6 +61,7 @@ from routes_crescimento import crescimento_bp
 
 # --- Blueprint Sync IXC ---
 from routes_ixc_sync import ixc_sync_bp, _tg_send
+from routes_unm import unm_bp, user_can_unm
 
 # ---------------------------------------------------------------------------
 # App
@@ -165,6 +166,8 @@ def _tg_track(username: str, path: str, method: str, status: int):
 def log_request(response):
     if request.path.startswith('/static') or request.path.startswith('/favicon.ico'):
         return response
+    if request.path.startswith('/unm/api/') and request.method == 'GET':
+        return response  # consulta periódica do Bot UNM (a cada poucos segundos): não vira linha no log de acessos
 
     username = 'Visitante'
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -243,6 +246,7 @@ def index():
     except Exception:
         pass
     return render_template('index.html',
+                           can_unm=user_can_unm(current_user),
                            current_username=current_user.username,
                            current_ixc_colab_id=ixc_colab_id,
                            current_ixc_usuario_id=ixc_usuario_id)
@@ -291,6 +295,10 @@ app.register_blueprint(dre_bp,              url_prefix='/api/dre')
 app.register_blueprint(dre2_bp)
 app.register_blueprint(crescimento_bp,     url_prefix='/api/crescimento')
 app.register_blueprint(ixc_sync_bp,         url_prefix='/api/ixc')
+app.register_blueprint(unm_bp)
+# o Bot UNM consulta o estado a cada poucos segundos: fora do limite por IP (que valeria para o resto do Analise também)
+limiter.exempt(app.view_functions['unm_bp.unm_proxy'])
+limiter.exempt(app.view_functions['unm_bp.unm_root'])
 
 # Agendamento semanal
 from routes_ixc_sync import start_weekly_scheduler
