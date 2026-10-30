@@ -2641,7 +2641,7 @@ def api_behavior_action_alerts():
         trabalhados_rows = conn.execute("""
             SELECT DISTINCT CAST(contrato_id AS TEXT) AS cid
             FROM Acompanhamento_Clientes
-            WHERE DATE(criado_em) = ?
+            WHERE DATE(data_registro) = ?
         """, (hoje_str,)).fetchall()
         contratos_trabalhados = {r['cid'] for r in trabalhados_rows}
 
@@ -2649,7 +2649,7 @@ def api_behavior_action_alerts():
         acomp_hoje = conn.execute("""
             SELECT usuario, tipo_acao, COUNT(*) AS cnt
             FROM Acompanhamento_Clientes
-            WHERE DATE(criado_em) = ?
+            WHERE DATE(data_registro) = ?
             GROUP BY usuario, tipo_acao
             ORDER BY cnt DESC
         """, (hoje_str,)).fetchall()
