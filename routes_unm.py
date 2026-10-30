@@ -82,6 +82,11 @@ def unm_proxy(path):
         return jsonify({"error": "Bot UNM indisponível no momento"}), 502
 
     body = r.content
+    # Inject heartbeat so the main tab knows the UNM page is open and skips inactivity logout
+    if 'text/html' in r.headers.get('Content-Type', ''):
+        _hb = (b'<script>(function(){function p(){try{localStorage.setItem("unm_heartbeat",Date.now());}catch(e){}}'
+               b'p();setInterval(p,30000);})();</script>')
+        body = body.replace(b'</body>', _hb + b'</body>', 1) if b'</body>' in body else body + _hb
     out = Response(body, status=r.status_code)
     for h in _FORWARD_RESPONSE_HEADERS:
         if h in r.headers:

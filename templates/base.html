@@ -295,8 +295,8 @@ document.addEventListener('DOMContentLoaded', () => {
         { id: 'dre2',        label: '📊 Gestão Financeira' },
         { id: 'crescimento', label: '📈 Crescimento Analítico' },
         { id: 'retiradas',   label: '📦 Retirada de Equipamentos' },
-        // explicit: nunca vem marcado por "pleno acesso" (permissions = null); só quem é marcado aqui (ou o admin) entra no Bot UNM
-        { id: 'unm',         label: '📡 Bot UNM (monitor das OLTs e envio de mensagens)', explicit: true },
+        // explicit: nunca vem marcado por "pleno acesso" (permissions = null); só quem é marcado aqui (ou o admin) acessa a Rede em tempo Real
+        { id: 'unm',         label: '📡 Rede em tempo Real (monitor das OLTs e envio de mensagens)', explicit: true },
     ];
 
     const _ANALYSIS_GROUPS = [
@@ -818,8 +818,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const limit = timeoutMinutes * 60 * 1000;
 
         if (elapsed > limit) {
+            // Não desloga se a aba "Rede em tempo Real" (UNM) estiver aberta (heartbeat < 90s)
+            try {
+                const hb = localStorage.getItem('unm_heartbeat');
+                if (hb && (Date.now() - parseInt(hb)) < 90000) return;
+            } catch(e) {}
             console.warn(`Sessão expirada por inatividade (${timeoutMinutes} min). Redirecionando para login.`);
-            window.location.href = "/logout?reason=inactivity"; 
+            window.location.href = "/logout?reason=inactivity";
         }
     }
     // ------------------------------------------
