@@ -3060,17 +3060,68 @@ function _retornoRenderRight(reg) {
           <div class="font-bold text-gray-900 text-lg leading-tight">${reg.cliente || '—'}</div>
           <div class="text-sm text-gray-500">${reg.cidade || '—'} · Contrato <strong>#${reg.contrato_id}</strong></div>
         </div>
-        <button onclick="if(typeof showClientDetail==='function') showClientDetail('${reg.contrato_id}')"
-          class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 flex-shrink-0">
-          📋 Detalhes / Nova Ação
-        </button>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button id="ret-btn-resolver"
+            style="font-size:0.75rem;background:#059669;color:#fff;padding:6px 12px;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+            ✅ Resolver retorno
+          </button>
+          <button id="ret-btn-excluir"
+            style="font-size:0.75rem;background:#fff;color:#dc2626;padding:6px 10px;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-weight:600;">
+            🗑 Excluir
+          </button>
+          <button onclick="if(typeof showClientDetail==='function') showClientDetail('${reg.contrato_id}')"
+            style="font-size:0.75rem;background:#2563eb;color:#fff;padding:6px 10px;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+            📋 Detalhes
+          </button>
+        </div>
+      </div>
+
+      <!-- Form rápido de resolução (oculto por padrão) -->
+      <div id="ret-resolver-form" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;font-size:0.82rem;">
+        <div class="font-semibold text-green-800 mb-2 text-xs uppercase tracking-wide">Registrar retorno realizado</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <label style="font-size:0.72rem;color:#6b7280;display:block;margin-bottom:2px;">Tipo de contato *</label>
+            <select id="ret-form-tipo" style="width:100%;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;font-size:0.8rem;">
+              <option value="">Selecione...</option>
+              <option value="whatsapp">💬 WhatsApp</option>
+              <option value="ligacao">📞 Ligação</option>
+              <option value="visita">🏠 Visita</option>
+              <option value="email">✉️ E-mail</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.72rem;color:#6b7280;display:block;margin-bottom:2px;">Resultado *</label>
+            <select id="ret-form-resultado" style="width:100%;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;font-size:0.8rem;">
+              <option value="">Selecione...</option>
+              <option value="retido">✅ Retido</option>
+              <option value="negociacao">🤝 Em negociação</option>
+              <option value="reagendou">📅 Reagendou</option>
+              <option value="sem_resposta">📵 Sem resposta</option>
+              <option value="cancelou">❌ Cancelou</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:0.72rem;color:#6b7280;display:block;margin-bottom:2px;">Novo retorno (deixe vazio para fechar)</label>
+          <input id="ret-form-data-retorno" type="date" style="border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;font-size:0.8rem;width:180px;">
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:0.72rem;color:#6b7280;display:block;margin-bottom:2px;">Observação</label>
+          <input id="ret-form-obs" type="text" placeholder="Opcional..." style="width:100%;border:1px solid #d1d5db;border-radius:4px;padding:4px 6px;font-size:0.8rem;">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button id="ret-form-salvar" style="background:#059669;color:#fff;border:none;border-radius:5px;padding:6px 14px;font-size:0.8rem;font-weight:600;cursor:pointer;">Salvar e fechar</button>
+          <button id="ret-form-cancelar" style="background:none;border:1px solid #d1d5db;border-radius:5px;padding:6px 12px;font-size:0.8rem;cursor:pointer;">Cancelar</button>
+          <span id="ret-form-msg" style="font-size:0.75rem;"></span>
+        </div>
       </div>
 
       <!-- Contato -->
       <div class="bg-gray-50 rounded-lg p-3 grid grid-cols-2 gap-2 text-sm">
         <div><span class="text-gray-500 text-xs">WhatsApp</span><div>${wa}</div></div>
         <div><span class="text-gray-500 text-xs">Telefone</span><div class="text-gray-800">${tel}</div></div>
-        <div><span class="text-gray-500 text-xs">Retorno previsto</span><div class="text-gray-800">${reg.snooze_ate || '—'} · ${atrasoTxt}</div></div>
+        <div><span class="text-gray-500 text-xs">Retorno previsto</span><div class="text-gray-800">${reg.data_retorno || '—'}</div></div>
         <div><span class="text-gray-500 text-xs">Último contato por</span><div class="text-gray-800">${reg.usuario || '—'}</div></div>
       </div>
 
@@ -3115,6 +3166,79 @@ function _retornoRenderRight(reg) {
                 if (ok) { ok.classList.remove('hidden'); setTimeout(() => ok.classList.add('hidden'), 1800); }
             });
         });
+    });
+
+    // Botão Excluir
+    panel.querySelector('#ret-btn-excluir').addEventListener('click', async () => {
+        if (!confirm(`Excluir este registro de acompanhamento de ${reg.cliente || '#' + reg.contrato_id}?`)) return;
+        const btn = panel.querySelector('#ret-btn-excluir');
+        btn.disabled = true; btn.textContent = 'Excluindo...';
+        try {
+            const r = await fetch(`/api/behavior/acompanhamento/${reg.id}`, { method: 'DELETE' });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error || 'Erro ao excluir');
+            _retornoRegistros = _retornoRegistros.filter(x => x.id !== reg.id);
+            _retornoSelected = null;
+            panel.innerHTML = '<div class="p-8 text-center text-gray-400">Registro excluído.</div>';
+            _retornoRenderList();
+            // Atualiza contador
+            const badge = document.querySelector('#tab-content-retorno .bg-orange-100');
+            if (badge) badge.textContent = _retornoRegistros.length;
+        } catch(e) {
+            btn.disabled = false; btn.textContent = '🗑 Excluir';
+            alert('Erro: ' + e.message);
+        }
+    });
+
+    // Botão Resolver — abre/fecha form
+    const resolverForm = panel.querySelector('#ret-resolver-form');
+    panel.querySelector('#ret-btn-resolver').addEventListener('click', () => {
+        resolverForm.style.display = resolverForm.style.display === 'none' ? 'block' : 'none';
+    });
+    panel.querySelector('#ret-form-cancelar').addEventListener('click', () => {
+        resolverForm.style.display = 'none';
+    });
+
+    // Submit do form de resolver
+    panel.querySelector('#ret-form-salvar').addEventListener('click', async () => {
+        const tipo    = panel.querySelector('#ret-form-tipo').value;
+        const result  = panel.querySelector('#ret-form-resultado').value;
+        const obs     = panel.querySelector('#ret-form-obs').value.trim();
+        const retorno = panel.querySelector('#ret-form-data-retorno').value;
+        const msg     = panel.querySelector('#ret-form-msg');
+
+        if (!tipo || !result) { msg.textContent = '⚠️ Preencha tipo e resultado.'; msg.style.color = '#dc2626'; return; }
+
+        const btn = panel.querySelector('#ret-form-salvar');
+        btn.disabled = true; btn.textContent = 'Salvando...';
+        msg.textContent = '';
+
+        try {
+            const r = await fetch('/api/behavior/acompanhamento', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contrato_id:  reg.contrato_id,
+                    tipo_acao:    tipo,
+                    resultado:    result,
+                    observacao:   obs || null,
+                    data_retorno: retorno || null,
+                }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error || 'Erro');
+
+            // Remove da lista se não tem novo retorno, ou atualiza
+            _retornoRegistros = _retornoRegistros.filter(x => x.id !== reg.id);
+            _retornoSelected = null;
+            panel.innerHTML = '<div class="p-8 text-center text-green-600 font-semibold">✅ Retorno registrado!</div>';
+            _retornoRenderList();
+            const badge = document.querySelector('#tab-content-retorno .bg-orange-100');
+            if (badge) badge.textContent = _retornoRegistros.length;
+        } catch(e) {
+            btn.disabled = false; btn.textContent = 'Salvar e fechar';
+            msg.textContent = 'Erro: ' + e.message; msg.style.color = '#dc2626';
+        }
     });
 }
 

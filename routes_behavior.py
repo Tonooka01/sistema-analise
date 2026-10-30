@@ -3955,12 +3955,15 @@ def api_behavior_acompanhamento_put(record_id):
 def api_behavior_acompanhamento_delete(record_id):
     if not current_user.is_authenticated:
         return jsonify({"error": "Não autenticado"}), 401
-    if current_user.username != 'admin':
-        return jsonify({"error": "Apenas administradores podem excluir registros"}), 403
 
     conn = get_db()
     try:
         _ensure_acompanhamento_table(conn)
+        row = conn.execute("SELECT usuario FROM Acompanhamento_Clientes WHERE id = ?", (record_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "Registro não encontrado"}), 404
+        if current_user.username != 'admin' and row['usuario'] != current_user.username:
+            return jsonify({"error": "Você só pode excluir seus próprios registros"}), 403
         conn.execute("DELETE FROM Acompanhamento_Clientes WHERE id = ?", (record_id,))
         conn.commit()
         return jsonify({"ok": True})
