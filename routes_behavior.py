@@ -2634,12 +2634,52 @@ def api_behavior_action_alerts():
             row['acao'] = make_acao(row)
             data.append(row)
 
+        # ── Stats diários (trabalhados hoje) ─────────────────────────────────
+        hoje_str = conn.execute("SELECT DATE('now','localtime')").fetchone()[0]
+
+        # Contratos da lista que já receberam acompanhamento hoje
+        trabalhados_rows = conn.execute("""
+            SELECT DISTINCT CAST(contrato_id AS TEXT) AS cid
+            FROM Acompanhamento_Clientes
+            WHERE DATE(criado_em) = ?
+        """, (hoje_str,)).fetchall()
+        contratos_trabalhados = {r['cid'] for r in trabalhados_rows}
+
+        # Acompanhamentos por usuário e tipo hoje
+        acomp_hoje = conn.execute("""
+            SELECT usuario, tipo_acao, COUNT(*) AS cnt
+            FROM Acompanhamento_Clientes
+            WHERE DATE(criado_em) = ?
+            GROUP BY usuario, tipo_acao
+            ORDER BY cnt DESC
+        """, (hoje_str,)).fetchall()
+        acomp_hoje_list = [dict(r) for r in acomp_hoje]
+
+        # WhatsApp (ChatMix) enviados hoje
+        wa_hoje = conn.execute("""
+            SELECT usuario, COUNT(*) AS cnt
+            FROM chatmix_send_log
+            WHERE DATE(enviado_em) = ?
+            GROUP BY usuario
+            ORDER BY cnt DESC
+        """, (hoje_str,)).fetchall()
+        wa_hoje_list = [dict(r) for r in wa_hoje]
+
+        # Marca nas rows quais já foram trabalhadas hoje
+        for row in data:
+            row['trabalhado_hoje'] = str(row.get('contrato', '')) in contratos_trabalhados
+
         return jsonify({
             "summary":      summary,
             "data":         data,
             "total_rows":   total_rows,
             "cities":       cities,
             "equipamentos": equipamentos_list,
+            "daily": {
+                "contratos_trabalhados": list(contratos_trabalhados),
+                "acomp_hoje":            acomp_hoje_list,
+                "wa_hoje":               wa_hoje_list,
+            },
         })
 
     except Exception as e:
@@ -3247,7 +3287,7 @@ def api_behavior_payment_profile():
                              AND COALESCE(PH.fat_vencidas_hoje, 0) = 0
                              THEN 'Nunca atrasou'
                         WHEN COALESCE(PH.total_atrasos, 0) = 0
-                             AND COALESCE(PH.fat_vencidas_hoje, 0) = 1
+                             AND COALESCE(PH.fat_vencidas_hoje, 0) >= 1
                              THEN 'Atrasou pela 1ª vez'
                         WHEN COALESCE(PH.total_pagas, 0) > 0
                              AND COALESCE(PH.total_atrasos, 0) * 1.0 / PH.total_pagas >= 0.5
@@ -3661,7 +3701,7 @@ def api_behavior_acompanhamento_post():
         elif data_retorno:
             snooze_ate = data_retorno
         else:
-            snooze_ate = (date.today() + timedelta(days=30)).isoformat()
+            snooze_ate = (date.today() + timedelta(days=15)).isoformat()
 
         # Busca id_ixc do assunto selecionado no config
         # Labels podem ter o ID embutido como "[18] INFORMAÇÃO"
@@ -3828,22 +3868,24 @@ def api_behavior_retorno():
             LEFT JOIN Clientes  cl ON cl.Raz_o_social = C.Cliente
             WHERE A.id IN (
                 SELECT MAX(id) FROM Acompanhamento_Clientes
-                {('WHERE ' + usr_cond.lstrip('AND ')) if usr_cond else ''}
+                WHERE data_retorno IS NOT NULL AND TRIM(data_retorno) != ''
+                {usr_cond}
                 GROUP BY contrato_id
             )
-            AND (A.snooze_ate IS NULL OR A.snooze_ate <= date('now', '+1 day'))
-            ORDER BY A.snooze_ate ASC, A.data_registro ASC
+            AND A.data_retorno IS NOT NULL AND TRIM(A.data_retorno) != ''
+            ORDER BY A.data_retorno ASC, A.data_registro ASC
             LIMIT ? OFFSET ?
         """, params + [limit, offset]).fetchall()
 
         total = conn.execute(f"""
             SELECT COUNT(*) FROM (
                 SELECT MAX(id) AS mid FROM Acompanhamento_Clientes
-                {('WHERE ' + usr_cond.lstrip('AND ')) if usr_cond else ''}
+                WHERE data_retorno IS NOT NULL AND TRIM(data_retorno) != ''
+                {usr_cond}
                 GROUP BY contrato_id
             ) sub
             JOIN Acompanhamento_Clientes A ON A.id = sub.mid
-            WHERE (A.snooze_ate IS NULL OR A.snooze_ate <= date('now', '+1 day'))
+            WHERE A.data_retorno IS NOT NULL AND TRIM(A.data_retorno) != ''
         """, params).fetchone()[0]
 
         usuarios = [r[0] for r in conn.execute(

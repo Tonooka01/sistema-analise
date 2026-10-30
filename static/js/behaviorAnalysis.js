@@ -2557,11 +2557,17 @@ async function renderAlertasAcaoTab() {
                 </div>
             </div>
             <button id="btnFilterAlerta" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
+            <button id="btnOcultarTrabalhados"
+                style="display:inline-flex;align-items:center;gap:5px;padding:8px 12px;border:1px solid #d1d5db;background:white;border-radius:6px;font-size:0.82rem;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.05);white-space:nowrap;"
+                title="Ocultar clientes já trabalhados hoje">
+                <span id="btnOcultarIcon">☐</span> Ocultar trabalhados
+            </button>
         </div>
         <button id="btnExportAlerta"
             style="position:absolute;top:0;right:0;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:0.82rem;font-weight:600;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.15);white-space:nowrap;"
             title="Exportar todos os registros filtrados para Excel">↓ Excel</button>
         </div>
+        <div id="alerta-daily-bar" style="display:none;margin-bottom:10px;padding:8px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:0.8rem;color:#166534;align-items:center;gap:16px;flex-wrap:wrap;"></div>
         <div id="alerta-table-area"></div>
     `;
 
@@ -2589,12 +2595,28 @@ async function renderAlertasAcaoTab() {
             if (!response.ok) throw new Error(await utils.handleFetchError(response, 'Erro ao carregar alertas de ação.'));
             const result = await response.json();
             window._cmCurrentAlertasData = result.data || [];
+            window._alertaTrabalhados = new Set((result.daily?.contratos_trabalhados || []).map(String));
             await _loadChatmixTemplates();
 
             // KPI tiles on first page
             const kpiRow = document.getElementById('alerta-kpi-row');
             if (kpiRow && result.summary && page === 1) {
                 const s = result.summary;
+                const daily = result.daily || {};
+                const trabalhados = (daily.contratos_trabalhados || []).length;
+
+                // Acompanhamentos hoje por tipo
+                const acompHoje = daily.acomp_hoje || [];
+                const totalAcomp = acompHoje.reduce((sum, r) => sum + (r.cnt || 0), 0);
+                const acompByTipo = {};
+                acompHoje.forEach(r => { acompByTipo[r.tipo_acao] = (acompByTipo[r.tipo_acao] || 0) + r.cnt; });
+                const TIPO_ICON = { ligacao: '📞', whatsapp: '💬', visita: '🏠', email: '✉️' };
+                const acompDetail = Object.entries(acompByTipo).map(([t, n]) => `${TIPO_ICON[t] || '•'} ${n}`).join('  ');
+
+                // WhatsApp (ChatMix) hoje
+                const waHoje = daily.wa_hoje || [];
+                const totalWa = waHoje.reduce((sum, r) => sum + (r.cnt || 0), 0);
+
                 kpiRow.innerHTML = `
                     <div class="summary-card" style="border-left:4px solid #7c3aed;">
                         <div class="summary-card-title">Crítico</div>
@@ -2612,7 +2634,45 @@ async function renderAlertasAcaoTab() {
                         <div class="summary-card-title">Baixo</div>
                         <div class="summary-card-value" style="color:#eab308;">${s.baixo || 0}</div>
                     </div>
+                    <div class="summary-card" style="border-left:4px solid #059669;min-width:130px;">
+                        <div class="summary-card-title">Trabalhados hoje</div>
+                        <div class="summary-card-value" style="color:#059669;">${trabalhados}</div>
+                    </div>
+                    <div class="summary-card" style="border-left:4px solid #0284c7;min-width:200px;flex:1;max-width:340px;">
+                        <div class="summary-card-title" style="margin-bottom:4px;">Contatos hoje</div>
+                        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                            <div style="display:flex;align-items:center;gap:5px;">
+                                <span style="font-size:0.7rem;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Sistema</span>
+                                <span style="font-size:1.1rem;font-weight:700;color:#0284c7;">${totalAcomp}</span>
+                                ${acompDetail ? `<span style="font-size:0.72rem;color:#64748b;">${acompDetail}</span>` : ''}
+                            </div>
+                            <div style="width:1px;height:24px;background:#e2e8f0;"></div>
+                            <div style="display:flex;align-items:center;gap:5px;">
+                                <span style="font-size:0.7rem;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">WhatsApp</span>
+                                <span style="font-size:1.1rem;font-weight:700;color:#059669;">${totalWa}</span>
+                            </div>
+                        </div>
+                    </div>
                 `;
+
+                // Barra diária com detalhamento por usuário
+                const dailyBar = document.getElementById('alerta-daily-bar');
+                if (dailyBar && (totalAcomp > 0 || totalWa > 0)) {
+                    const userAcomp = {};
+                    acompHoje.forEach(r => { userAcomp[r.usuario] = (userAcomp[r.usuario] || 0) + r.cnt; });
+                    const userWa = {};
+                    waHoje.forEach(r => { userWa[r.usuario] = (userWa[r.usuario] || 0) + r.cnt; });
+                    const allUsers = [...new Set([...Object.keys(userAcomp), ...Object.keys(userWa)])];
+                    const userHtml = allUsers.map(u => {
+                        const ac = userAcomp[u] || 0;
+                        const wa = userWa[u] || 0;
+                        return `<span style="background:white;border:1px solid #bbf7d0;border-radius:5px;padding:2px 8px;">
+                            <strong>${u}</strong>: ${ac > 0 ? `${ac} no sistema` : ''}${ac > 0 && wa > 0 ? ' · ' : ''}${wa > 0 ? `${wa} WhatsApp` : ''}
+                        </span>`;
+                    }).join('');
+                    dailyBar.style.display = 'flex';
+                    dailyBar.innerHTML = `<span style="font-weight:600;">Hoje:</span> ${userHtml || '—'}`;
+                }
             }
 
             // Populate city filter on first load
@@ -2640,8 +2700,10 @@ async function renderAlertasAcaoTab() {
                 const rows = result.data.map((r, i) => {
                     const tierStyle = TIER_STYLE[r.tier] || '';
                     const acaoText = (r.acao || '');
-                    return `<tr data-contrato="${r.contrato}" style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;cursor:pointer;" title="Clique para ver detalhes">
-                        <td data-col="num" style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${(page - 1) * rowsPerPage + i + 1}</td>
+                    const trabalhado = r.trabalhado_hoje || window._alertaTrabalhados?.has(String(r.contrato));
+                    const rowBg = trabalhado ? (i % 2 === 0 ? '#f0fdf4' : '#dcfce7') : (i % 2 === 0 ? '#fff' : '#f8fafc');
+                    return `<tr data-contrato="${r.contrato}" data-trabalhado="${trabalhado ? '1' : '0'}" style="background:${rowBg};border-bottom:1px solid #f1f5f9;cursor:pointer;" title="Clique para ver detalhes">
+                        <td data-col="num" style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${trabalhado ? '<span title="Trabalhado hoje" style="color:#059669;font-weight:700;">✓</span>' : (page - 1) * rowsPerPage + i + 1}</td>
                         <td data-col="contrato" style="padding:6px 10px;font-size:.78rem;font-family:monospace;">#${r.contrato || ''}</td>
                         <td data-col="cliente" style="padding:6px 10px;font-size:.8rem;font-weight:500;">${r.cliente || ''}</td>
                         <td data-col="cidade" style="padding:6px 10px;font-size:.78rem;">${r.cidade || ''}</td>
@@ -2838,6 +2900,22 @@ async function renderAlertasAcaoTab() {
         _alertaFilters.assunto_ret = checkedA;
         _assuntoLbl.textContent = checkedA.length === 0 ? 'Todos' : checkedA.length === 1 ? _ASSUNTO_SHORT[checkedA[0]] || checkedA[0] : `${checkedA.length} selecionados`;
         fetchAndRenderAlertaTable(1);
+    });
+
+    // Ocultar/mostrar trabalhados hoje
+    let _ocultarTrabalhados = false;
+    tabContent.querySelector('#btnOcultarTrabalhados').addEventListener('click', () => {
+        _ocultarTrabalhados = !_ocultarTrabalhados;
+        const icon = tabContent.querySelector('#btnOcultarIcon');
+        if (icon) icon.textContent = _ocultarTrabalhados ? '☑' : '☐';
+        const btn = tabContent.querySelector('#btnOcultarTrabalhados');
+        if (btn) btn.style.background = _ocultarTrabalhados ? '#dcfce7' : 'white';
+        const tbody = tabContent.querySelector('#alerta-table-area tbody');
+        if (tbody) {
+            tbody.querySelectorAll('tr[data-trabalhado]').forEach(tr => {
+                tr.style.display = (_ocultarTrabalhados && tr.dataset.trabalhado === '1') ? 'none' : '';
+            });
+        }
     });
 
     // Enter nos campos de texto também filtra
@@ -3050,23 +3128,28 @@ function _retornoRenderList() {
     const RESULTADO_CLS = { sem_resposta:'bg-red-100 text-red-700', reagendou:'bg-yellow-100 text-yellow-700', negociacao:'bg-blue-100 text-blue-700', retido:'bg-green-100 text-green-700', cancelou:'bg-gray-100 text-gray-600' };
     const RESULTADO_LBL = { sem_resposta:'Sem resposta', reagendou:'Reagendou', negociacao:'Em negociação', retido:'Retido', cancelou:'Cancelou' };
 
+    const hoje = new Date().toISOString().slice(0, 10);
     container.innerHTML = _retornoRegistros.map(reg => {
-        const diasAtra = reg.snooze_ate ? Math.floor((new Date() - new Date(reg.snooze_ate)) / 86400000) : 0;
+        const retDate = reg.data_retorno || '';
+        const diasAtra = retDate ? Math.floor((new Date(hoje) - new Date(retDate)) / 86400000) : 0;
         const resCls = RESULTADO_CLS[reg.resultado] || 'bg-gray-100 text-gray-600';
         const resLbl = RESULTADO_LBL[reg.resultado] || reg.resultado || '—';
         const ativo  = _retornoSelected === reg.id;
+        const retLabel = retDate === hoje ? '<span class="text-xs text-green-600 flex-shrink-0">hoje</span>'
+                       : diasAtra > 0     ? `<span class="text-xs text-red-600 font-semibold flex-shrink-0">${diasAtra}d atrasado</span>`
+                       :                    `<span class="text-xs text-blue-600 flex-shrink-0">${retDate}</span>`;
         return `<div class="border-b border-gray-100 p-3 cursor-pointer hover:bg-blue-50 transition ${ativo ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}"
                      data-retorno-contrato="${reg.contrato_id}"
                      onclick="window._retornoSelect(${reg.id})">
           <div class="flex items-center justify-between mb-0.5">
             <span class="font-medium text-sm text-gray-900 truncate max-w-[60%]">${reg.cliente || '—'}</span>
-            ${diasAtra > 0 ? `<span class="text-xs text-red-600 font-semibold flex-shrink-0">${diasAtra}d atrasado</span>` : '<span class="text-xs text-green-600 flex-shrink-0">hoje</span>'}
+            ${retLabel}
           </div>
           <div class="flex items-center gap-2 mt-1">
             <span class="text-xs text-gray-400">${reg.cidade || '—'} · #${reg.contrato_id}</span>
             <span class="text-xs px-1.5 py-0.5 rounded-full font-medium ${resCls}">${resLbl}</span>
           </div>
-          <div class="text-xs text-gray-400 mt-0.5">Retorno: ${reg.snooze_ate || '—'} · por ${reg.usuario || '—'}</div>
+          <div class="text-xs text-gray-400 mt-0.5">Retorno: ${retDate} · por ${reg.usuario || '—'}</div>
         </div>`;
     }).join('');
 }
@@ -3558,11 +3641,11 @@ function renderPerfilPagamentoTab() {
                   <th data-col="cliente" class="px-3 py-2 text-left">Cliente</th>
                   <th data-col="cidade" class="px-3 py-2 text-left">Cidade</th>
                   <th data-col="perfil" class="px-3 py-2 text-center">Perfil</th>
-                  <th data-col="pagas" class="px-3 py-2 text-right">Pagas</th>
-                  <th data-col="atrasos" class="px-3 py-2 text-right">Atrasos</th>
+                  <th data-col="pagas" class="px-3 py-2 text-right" title="Faturas pagas (quitadas no histórico)">Pagas</th>
+                  <th data-col="atrasos" class="px-3 py-2 text-right" title="Faturas que foram pagas com atraso (já quitadas)">Atrasos Hist.</th>
                   <th data-col="pct_atraso" class="px-3 py-2 text-right">% Atraso</th>
                   <th data-col="med_atraso" class="px-3 py-2 text-right">Med. Atraso</th>
-                  <th data-col="vencidas_hoje" class="px-3 py-2 text-right">Vencidas Hoje</th>
+                  <th data-col="vencidas_hoje" class="px-3 py-2 text-right" title="Faturas vencidas ainda não pagas (atraso atual)">Vencidas Agora</th>
                 </tr>
               </thead>
               <tbody id="pf-table-body" class="divide-y divide-gray-100"></tbody>
@@ -5507,11 +5590,11 @@ async function renderAcompanhamentoTab() {
       <h2 class="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-100">Acompanhamento de Clientes</h2>
       <div class="flex flex-wrap gap-3 mb-4 items-end">
         <div>
-          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Status Snooze</label>
+          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Status Soneca</label>
           <select id="acomp-filter-status" class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800 dark:text-gray-100">
             <option value="">Todos</option>
             <option value="ativos">Com retorno agendado</option>
-            <option value="vencidos">Sem snooze / vencido</option>
+            <option value="vencidos">Sem soneca / vencido</option>
           </select>
         </div>
         <div>
@@ -5619,7 +5702,7 @@ function _renderAcompTable() {
           <th class="px-3 py-2 border-b border-gray-200 max-w-xs">Observação</th>
           <th class="px-3 py-2 border-b border-gray-200">Registrado em</th>
           <th class="px-3 py-2 border-b border-gray-200">Retorno</th>
-          <th class="px-3 py-2 border-b border-gray-200">Snooze</th>
+          <th class="px-3 py-2 border-b border-gray-200">Soneca</th>
           <th class="px-3 py-2 border-b border-gray-200">Usuário</th>
           ${acoesHeader}
         </tr>
@@ -5698,7 +5781,7 @@ window._acompEdit = function(id) {
             <input id="ae-retorno" type="date" value="${r.data_retorno||''}" class="border rounded px-2 py-1 text-sm">
           </div>
           <div>
-            <label class="block text-xs text-gray-500 mb-1">Snooze até</label>
+            <label class="block text-xs text-gray-500 mb-1">Soneca até</label>
             <input id="ae-snooze" type="date" value="${r.snooze_ate||''}" class="border rounded px-2 py-1 text-sm">
           </div>
           <div style="flex:1;min-width:180px;">

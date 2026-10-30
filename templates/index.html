@@ -1786,7 +1786,7 @@ function cdpAcompLoad(contratoId) {
           ${r.observacao ? `<p class="text-xs text-gray-600 mt-1">${r.observacao}</p>` : ''}
           <div class="flex gap-3 mt-1 text-xs text-gray-400 flex-wrap">
             ${r.data_retorno ? `<span>Retorno: ${r.data_retorno}</span>` : ''}
-            ${snoozeOk ? `<span class="text-blue-600">Snoozed até ${r.snooze_ate}</span>` : ''}
+            ${snoozeOk ? `<span class="text-blue-600">Soneca até ${r.snooze_ate}</span>` : ''}
             <span>por ${r.usuario}</span>
           </div>
         </div>`;
@@ -1865,7 +1865,7 @@ function cdpAcompSalvar() {
       msg.textContent = `⚠️ Salvo localmente. Falha ao criar atendimento no IXC${detalhe}.`;
       msg.className = 'text-xs mt-1 text-orange-500';
     } else {
-      msg.textContent = `✅ Salvo! Cliente removido das listas até ${data.snooze_ate || '—'}.`;
+      msg.textContent = `✅ Salvo! Cliente em soneca até ${data.snooze_ate || '—'}.`;
       msg.className = 'text-xs mt-1 text-green-600';
     }
     msg.classList.remove('hidden');
@@ -1886,6 +1886,15 @@ function cdpAcompSalvar() {
       el.style.opacity = '0'; el.style.transform = 'translateX(20px)';
       setTimeout(() => el.remove(), 420);
     });
+    // Atualiza contador "Trabalhados hoje" nos KPIs de Alertas de Ação
+    if (window._alertaTrabalhados) {
+      const cid = String(_cdpCurrentContrato);
+      if (!window._alertaTrabalhados.has(cid)) {
+        window._alertaTrabalhados.add(cid);
+        const kpiTrab = document.querySelector('#alerta-kpi-row .summary-card:nth-child(5) .summary-card-value');
+        if (kpiTrab) kpiTrab.textContent = window._alertaTrabalhados.size;
+      }
+    }
     setTimeout(() => msg.classList.add('hidden'), 6000);
   })
   .catch(() => { msg.textContent = 'Erro de conexão.'; msg.className = 'text-xs mt-1 text-red-600'; msg.classList.remove('hidden'); })
