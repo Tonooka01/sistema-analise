@@ -1213,7 +1213,16 @@ h1{margin:0 0 3px;font-size:1.2rem;font-weight:700}
 <div class="hd">
   <div><h1>Status dos Contratos — Tempo Real</h1>
     <p class="sub">Dados direto da API IXC &nbsp;·&nbsp; sem depender da sync local</p></div>
-  <button class="btn" id="btn" onclick="load()">↻ Buscar agora</button>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button class="btn" id="btn" onclick="load()">↻ Buscar agora</button>
+    <a href="https://claude.ai/artifact/TWkjgHsQ297wZjG48xHyZE?sk=ptm_gQQSICEatAQzD4jocA"
+       target="_blank" rel="noopener"
+       style="padding:8px 14px;border-radius:7px;font-size:.85rem;font-weight:600;
+              background:var(--sf);border:1px solid var(--bd);color:var(--fg);
+              text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+      📊 Análise FA — Out/26
+    </a>
+  </div>
 </div>
 <div id="out"><div class="state">Clique em "Buscar agora" para consultar o IXC em tempo real.</div></div>
 <script>
