@@ -11,7 +11,7 @@ import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from datetime import datetime, timedelta
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, render_template_string
 from flask_login import login_required, current_user
 
 ixc_sync_bp = Blueprint('ixc_sync_bp', __name__)
@@ -1161,6 +1161,166 @@ def cancel_sync():
         return jsonify({"success": True})
     finally:
         conn.close()
+
+
+_STATUS_RT_PAGE = """<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Status Contratos — Tempo Real</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap">
+<style>
+:root{--bg:#f1f5f9;--sf:#fff;--bd:#e2e8f0;--fg:#0f172a;--mu:#64748b;
+  --ok:#15803d;--wa:#b45309;--da:#dc2626;--ac:#2563eb;--or:#c2410c;--ne:#6b7280;}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#0f172a;--sf:#1e293b;--bd:#334155;--fg:#f1f5f9;--mu:#94a3b8;
+  --ok:#4ade80;--wa:#fbbf24;--da:#f87171;--ac:#60a5fa;--or:#fb923c;--ne:#9ca3af;
+  color-scheme:dark;}}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:"Inter",sans-serif;font-size:14px;
+  padding:24px 20px 40px;}
+.hd{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px}
+h1{margin:0 0 3px;font-size:1.2rem;font-weight:700}
+.sub{margin:0;font-size:.78rem;color:var(--mu)}
+.btn{padding:8px 16px;border-radius:7px;font-size:.85rem;font-weight:600;cursor:pointer;
+  border:none;background:var(--ac);color:#fff;font-family:inherit;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{opacity:.85}.btn:disabled{opacity:.5;cursor:default}
+.sp{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);
+  border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.state{text-align:center;padding:40px;color:var(--mu)}
+.err{color:var(--da)}
+.ts{font-size:.75rem;color:var(--mu);margin-bottom:14px}
+.ts strong{color:var(--ok)}
+.tot{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:14px 18px;
+  margin-bottom:16px;display:flex;align-items:center;gap:16px}
+.tot-v{font-size:2rem;font-weight:900;font-variant-numeric:tabular-nums;line-height:1}
+.tot-l{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--mu)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:560px){.grid{grid-template-columns:1fr}}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px}
+.card h3{margin:0 0 12px;font-size:.7rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--mu)}
+.sl{display:flex;flex-direction:column;gap:9px}
+.si{display:grid;grid-template-columns:11px 1fr auto auto;align-items:center;gap:7px}
+.dot{width:11px;height:11px;border-radius:50%}
+.sn{font-size:.87rem}
+.sc{font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.sp2{font-size:.73rem;color:var(--mu);text-align:right;min-width:36px}
+.tr{grid-column:2/5;background:var(--bd);border-radius:3px;height:6px;overflow:hidden;margin-top:-3px}
+.fi{height:100%;border-radius:3px;transition:width .6s}
+</style></head><body>
+<div class="hd">
+  <div><h1>Status dos Contratos — Tempo Real</h1>
+    <p class="sub">Dados direto da API IXC &nbsp;·&nbsp; sem depender da sync local</p></div>
+  <button class="btn" id="btn" onclick="load()">↻ Buscar agora</button>
+</div>
+<div id="out"><div class="state">Clique em "Buscar agora" para consultar o IXC em tempo real.</div></div>
+<script>
+const C={ok:'#15803d',wa:'#b45309',da:'#dc2626',ac:'#2563eb',or:'#c2410c',ne:'#6b7280'};
+const CT=[
+  {k:'Ativo',c:'ok'},{k:'Inativo',c:'ne'},{k:'Negativado',c:'da'},
+  {k:'Desistente',c:'wa'},{k:'Pendente',c:'ac'},
+];
+const SA=[
+  {k:'Ativo',c:'ok'},{k:'Bloqueio Automático',c:'da'},{k:'Bloqueio Manual',c:'wa'},
+  {k:'Financeiro em atraso',c:'or'},{k:'Desativado',c:'ne'},{k:'Aguardando Assinatura',c:'ac'},
+];
+function fN(n){return Number(n).toLocaleString('pt-BR')}
+function list(data,cfg,tot){
+  return cfg.filter(x=>(data[x.k]||0)>0).sort((a,b)=>(data[b.k]||0)-(data[a.k]||0)).map(x=>{
+    const n=data[x.k]||0, p=tot>0?(n/tot*100).toFixed(1):0;
+    const hex=getComputedStyle(document.documentElement).getPropertyValue('--'+x.c).trim()||C[x.c];
+    return `<div class="si">
+      <span class="dot" style="background:${hex}"></span>
+      <span class="sn">${x.k}</span>
+      <span class="sc" style="color:${hex}">${fN(n)}</span>
+      <span class="sp2">${p}%</span>
+      <div class="tr"><div class="fi" style="width:${p}%;background:${hex}"></div></div>
+    </div>`;
+  }).join('');
+}
+async function load(){
+  const btn=document.getElementById('btn');
+  btn.disabled=true;
+  btn.innerHTML='<span class="sp"></span> Buscando...';
+  document.getElementById('out').innerHTML='<div class="state">Consultando IXC...</div>';
+  try{
+    const r=await fetch('/api/ixc/status_rt');
+    if(!r.ok){const e=await r.json().catch(()=>({error:r.statusText}));throw new Error(e.error||r.statusText);}
+    const d=await r.json();
+    const nAtivos=d.por_status['Ativo']||0;
+    document.getElementById('out').innerHTML=`
+      <div class="ts">Atualizado: <strong>${d.gerado_em}</strong></div>
+      <div class="tot"><div>
+        <div class="tot-l">Total de contratos</div>
+        <div class="tot-v">${fN(d.total)}</div>
+      </div></div>
+      <div class="grid">
+        <div class="card"><h3>Status do contrato</h3><div class="sl">${list(d.por_status,CT,d.total)}</div></div>
+        <div class="card"><h3>Status de acesso — ativos (${fN(nAtivos)})</h3><div class="sl">${list(d.ativos_por_acesso,SA,nAtivos)}</div></div>
+      </div>`;
+  }catch(e){
+    document.getElementById('out').innerHTML=`<div class="state err">❌ ${e.message}</div>`;
+  }finally{
+    btn.disabled=false;btn.innerHTML='↻ Buscar agora';
+  }
+}
+</script></body></html>"""
+
+
+@ixc_sync_bp.route('/status_rt_page')
+@login_required
+def status_rt_page():
+    return render_template_string(_STATUS_RT_PAGE)
+
+
+@ixc_sync_bp.route('/status_rt', methods=['GET'])
+@login_required
+def status_rt():
+    """Puxa status dos contratos em tempo real via GROUP BY direto na API IXC."""
+    conn = get_db()
+    try:
+        token = _get_token(conn)
+        if not token:
+            return jsonify({"error": "Token IXC não configurado"}), 400
+    finally:
+        conn.close()
+
+    MAP_CT = {'A': 'Ativo', 'I': 'Inativo', 'P': 'Pendente', 'N': 'Negativado', 'D': 'Desistente'}
+    MAP_SA = {'A': 'Ativo', 'D': 'Desativado', 'CM': 'Bloqueio Manual',
+              'CA': 'Bloqueio Automático', 'FA': 'Financeiro em atraso', 'AA': 'Aguardando Assinatura'}
+
+    try:
+        # Contagem por status do contrato
+        rows_ct = _ixc_query_builder(
+            "SELECT status, COUNT(*) AS cnt FROM cliente_contrato GROUP BY status", token
+        ) or []
+        # Contagem por status de acesso (apenas ativos)
+        rows_sa = _ixc_query_builder(
+            "SELECT status_internet, COUNT(*) AS cnt FROM cliente_contrato WHERE status='A' GROUP BY status_internet", token
+        ) or []
+    except Exception as e:
+        return jsonify({"error": f"Erro ao consultar IXC: {e}"}), 502
+
+    por_status = {}
+    total = 0
+    for r in rows_ct:
+        label = MAP_CT.get(str(r.get('status', '')), r.get('status', '?'))
+        cnt   = int(r.get('cnt', 0))
+        por_status[label] = cnt
+        total += cnt
+
+    ativos_por_acesso = {}
+    for r in rows_sa:
+        label = MAP_SA.get(str(r.get('status_internet', '')), r.get('status_internet', '?'))
+        ativos_por_acesso[label] = int(r.get('cnt', 0))
+
+    return jsonify({
+        "total":             total,
+        "por_status":        por_status,
+        "ativos_por_acesso": ativos_por_acesso,
+        "gerado_em":         datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+    })
 
 
 @ixc_sync_bp.route('/start', methods=['POST'])
