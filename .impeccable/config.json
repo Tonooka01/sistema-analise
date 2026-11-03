@@ -7,6 +7,22 @@
         "rule": "overused-font",
         "value": "inter",
         "createdAt": "2026-09-21T19:43:43.029Z"
+      },
+      {
+        "rule": "ai-color-palette",
+        "value": "*",
+        "files": [
+          "templates/termos.html"
+        ],
+        "createdAt": "2026-11-03T14:50:13.224Z"
+      },
+      {
+        "rule": "ai-color-palette",
+        "value": "*",
+        "files": [
+          "templates/privacidade.html"
+        ],
+        "createdAt": "2026-11-03T14:50:16.484Z"
       }
     ]
   }
