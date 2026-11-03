@@ -395,13 +395,16 @@ _ACOMP_CONFIG_DEFAULT = {
         {"value": "email",    "label": "E-mail",    "emoji": "✉️", "ativo": True},
     ],
     "assuntos_os": [
-        {"label": "Sem sinal",               "abre_os": False},
-        {"label": "Lentidão",                "abre_os": False},
-        {"label": "Retirada de equipamento", "abre_os": False},
-        {"label": "Instalação",              "abre_os": False},
-        {"label": "Suporte técnico",         "abre_os": False},
-        {"label": "Mudança de endereço",     "abre_os": False},
-        {"label": "Outros",                  "abre_os": False},
+        {"label": "[18] INFORMAÇÃO",                       "abre_os": False},
+        {"label": "[43] AÇÃO DE COBRANÇA",                 "abre_os": False},
+        {"label": "[50] COBRANÇA EFETIVA RECEPTIVA",       "abre_os": False},
+        {"label": "Sem sinal",                             "abre_os": False},
+        {"label": "Lentidão",                              "abre_os": False},
+        {"label": "Retirada de equipamento",               "abre_os": False},
+        {"label": "Instalação",                            "abre_os": False},
+        {"label": "Suporte técnico",                       "abre_os": False},
+        {"label": "Mudança de endereço",                   "abre_os": False},
+        {"label": "Outros",                                "abre_os": False},
     ],
 }
 
@@ -437,10 +440,18 @@ def api_behavior_acomp_config():
         cfg['tipos_acao'] = [t for t in cfg.get('tipos_acao', []) if t.get('ativo', True)]
         # Normaliza assuntos para {label, abre_os}
         raw = cfg.get('assuntos_os', [])
-        cfg['assuntos_os'] = [
-            s if isinstance(s, dict) else {"label": s, "abre_os": False}
-            for s in raw
+        assuntos = [s if isinstance(s, dict) else {"label": s, "abre_os": False} for s in raw]
+        # Garante que os assuntos de cobrança (com IDs IXC) estejam sempre presentes
+        _cobranca = [
+            {"label": "[18] INFORMAÇÃO",                 "abre_os": False},
+            {"label": "[43] AÇÃO DE COBRANÇA",           "abre_os": False},
+            {"label": "[50] COBRANÇA EFETIVA RECEPTIVA", "abre_os": False},
         ]
+        existing_labels = {s.get('label') for s in assuntos}
+        for a in reversed(_cobranca):
+            if a['label'] not in existing_labels:
+                assuntos.insert(0, a)
+        cfg['assuntos_os'] = assuntos
         return jsonify(cfg)
     except Exception as e:
         logger.warning(f"acomp-config: {e}")

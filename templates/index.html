@@ -952,15 +952,15 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
     <button class="cdp-tab active px-4 py-3 text-sm font-medium border-b-2 border-blue-600 text-blue-700 whitespace-nowrap"
             data-tab="mensagens" onclick="switchCdpTab('mensagens')">💬 Mensagens</button>
     <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
-            data-tab="contrato" onclick="switchCdpTab('contrato')">Contrato</button>
+            data-tab="contrato" onclick="switchCdpTab('contrato')">📄 Contrato</button>
     <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
-            data-tab="contato" onclick="switchCdpTab('contato')">Contato</button>
+            data-tab="contato" onclick="switchCdpTab('contato')">👤 Contato</button>
     <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
-            data-tab="financeiro" onclick="switchCdpTab('financeiro')">Financeiro</button>
+            data-tab="financeiro" onclick="switchCdpTab('financeiro')">💰 Financeiro</button>
     <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
-            data-tab="atendimentos" onclick="switchCdpTab('atendimentos')">Atendimentos</button>
+            data-tab="atendimentos" onclick="switchCdpTab('atendimentos')">🎫 Atendimentos</button>
     <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
-            data-tab="os" onclick="switchCdpTab('os')">OS</button>
+            data-tab="os" onclick="switchCdpTab('os')">🔧 OS</button>
     <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
             data-tab="acomp" onclick="switchCdpTab('acomp')">📋 Acomp.</button>
   </div>
@@ -984,7 +984,6 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
       <div id="cdp-status-badges" class="flex gap-2 flex-wrap"></div>
       <div id="cdp-contrato-grid" class="grid grid-cols-2 gap-3 text-sm"></div>
       <div id="cdp-equip-list"></div>
-      <div id="cdp-os-list"></div>
     </div>
 
     <!-- Contato tab -->
@@ -1013,8 +1012,27 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
     </div>
 
     <!-- Atendimentos tab -->
-    <div id="cdp-tab-atendimentos" class="cdp-tab-pane p-5 hidden">
-      <div id="cdp-atend-list" class="space-y-3"></div>
+    <div id="cdp-tab-atendimentos" class="cdp-tab-pane hidden" style="display:flex;flex-direction:column;min-height:0;overflow:hidden;">
+      <!-- Ações rápidas -->
+      <div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;flex-shrink:0;background:#f9fafb;">
+        <div class="flex gap-2 flex-wrap">
+          <button onclick="switchCdpTab('acomp')"
+                  style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#2563eb;color:#fff;border:none;border-radius:7px;font-size:.8rem;font-weight:600;cursor:pointer;transition:background .15s;"
+                  onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563eb'">
+            📋 Novo Atendimento (Sistema)
+          </button>
+          <a id="cdp-link-ixc-atend" href="https://sistema.netvaletelecom.com" target="_blank" rel="noopener"
+             style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#fff;color:#374151;border:1px solid #d1d5db;border-radius:7px;font-size:.8rem;font-weight:600;cursor:pointer;text-decoration:none;transition:border-color .15s;"
+             onmouseover="this.style.borderColor='#9ca3af'" onmouseout="this.style.borderColor='#d1d5db'">
+            🌐 Abrir no IXCSoft
+          </a>
+        </div>
+      </div>
+      <!-- Lista de atendimentos -->
+      <div style="flex:1;overflow-y:auto;padding:16px;">
+        <p style="font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Histórico de Atendimentos</p>
+        <div id="cdp-atend-list" class="space-y-3"></div>
+      </div>
     </div>
 
     <!-- OS tab -->
@@ -1038,6 +1056,7 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
             <label class="text-xs text-gray-500 block mb-1">Resultado</label>
             <select id="cdp-acomp-resultado" class="w-full border rounded px-2 py-1 text-sm">
               <option value="">Selecione…</option>
+              <option value="mensagem_enviada">💬 Mensagem enviada</option>
               <option value="retido">✅ Retido</option>
               <option value="negociacao">🤝 Em negociação</option>
               <option value="sem_resposta">📵 Sem resposta</option>
@@ -1129,7 +1148,7 @@ function switchCdpTab(name) {
   });
   // Acomp tem scroll interno próprio — desativa o scroll externo para não duplicar
   const content = document.getElementById('cdp-content');
-  if (content) content.style.overflowY = name === 'acomp' ? 'hidden' : 'auto';
+  if (content) content.style.overflowY = (name === 'acomp' || name === 'atendimentos') ? 'hidden' : 'auto';
 }
 function _cdpCopiarMsg(el, texto) {
   navigator.clipboard.writeText(texto).then(() => {
@@ -1309,19 +1328,29 @@ async function _cdpRenderMensagens(c, s, cl) {
        <div class="flex flex-col gap-2" id="cdp-cm-cards">${cmTemplates.map(_cmCardHtml).join('')}</div>`
     : '';
 
-  pane.innerHTML = `
-    ${situacaoHtml}
-    <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-1">Mensagens Prontas</div>
-    ${templates.map(t => `
+  const _waTemplates     = templates.filter(t => t.icon === '💬');
+  const _scriptTemplates = templates.filter(t => t.icon === '📞');
+  const _tplCard = t => `
     <div class="border border-gray-200 rounded-lg p-3 bg-white hover:border-blue-300 cursor-pointer transition group"
          onclick="_cdpCopiarMsg(this, ${JSON.stringify(t.msg)})">
       <div class="flex items-center justify-between mb-1.5">
-        <span class="text-xs font-semibold text-gray-600">${t.icon} ${t.label}</span>
+        <span class="text-xs font-semibold text-gray-600">${t.label}</span>
         <span class="text-xs text-blue-500 group-hover:text-blue-700 flex-shrink-0">📋 Copiar</span>
       </div>
       <p class="text-xs text-gray-700 leading-relaxed whitespace-pre-line">${t.msg}</p>
       <div class="cdp-copy-ok hidden mt-1.5 text-xs text-green-600 font-medium">✅ Copiado para a área de transferência!</div>
-    </div>`).join('')}
+    </div>`;
+
+  pane.innerHTML = `
+    ${situacaoHtml}
+    ${_waTemplates.length ? `
+      <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-1 mb-1.5">📱 Mensagens WhatsApp</div>
+      ${_waTemplates.map(_tplCard).join('')}
+    ` : ''}
+    ${_scriptTemplates.length ? `
+      <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-3 mb-1.5">📞 Scripts de Ligação</div>
+      ${_scriptTemplates.map(_tplCard).join('')}
+    ` : ''}
     ${cmSection}
     <div style="border-top:1px solid #e5e7eb;margin-top:10px;padding-top:8px;">
       <div style="font-size:0.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
@@ -1345,12 +1374,6 @@ async function _cdpRenderMensagens(c, s, cl) {
           </div>`;
         }).join('') : '<div style="font-size:0.72rem;color:#9ca3af;padding:4px 2px;">Nenhum envio registrado ainda.</div>'}
       </div>
-    </div>
-    <div class="pt-1 border-t border-gray-100 mt-2">
-      <button onclick="switchCdpTab('acomp')"
-        class="w-full text-center text-xs text-blue-600 hover:text-blue-800 py-1.5 font-medium">
-        📋 Registrar Ação após o contato →
-      </button>
     </div>`;
 
   // Wire up ChatMix buttons via addEventListener (safe, no JSON in attributes)
@@ -1400,16 +1423,46 @@ async function _cdpRenderMensagens(c, s, cl) {
           }
           // Adiciona entrada no histórico visível imediatamente
           const histBox = document.querySelector('#cdp-chatmix-historico');
+          const now = new Date();
+          const pad = n => String(n).padStart(2,'0');
+          const dtStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
           if (histBox) {
-            const now = new Date();
-            const pad = n => String(n).padStart(2,'0');
-            const dtStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
             const numFmt = selectedNum.replace(/^55(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3');
             const entry = document.createElement('div');
             entry.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:5px 8px;gap:8px;';
             entry.innerHTML = `<div style="flex:1;min-width:0;"><div style="font-size:0.76rem;font-weight:600;color:#111827;">💬 ${t.nome || t.template_id}</div><div style="font-size:0.72rem;color:#6b7280;">→ ${numFmt || selectedNum}</div></div><div style="text-align:right;flex-shrink:0;"><div style="font-size:0.72rem;color:#374151;white-space:nowrap;">${dtStr}</div></div>`;
             histBox.prepend(entry);
           }
+          // Auto-registrar acompanhamento (assunto 18 INFORMAÇÃO) + snooze 7 dias
+          try {
+            const retornoDate = new Date(now);
+            retornoDate.setDate(retornoDate.getDate() + 7);
+            const retornoStr = retornoDate.toISOString().slice(0, 10);
+            const _uInfo = window._currentUserInfo || {};
+            await fetch('/api/behavior/acompanhamento', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                contrato_id:        String(contrato),
+                tipo_acao:          'whatsapp',
+                resultado:          'mensagem_enviada',
+                observacao:         `[ChatMix] ${t.nome}\n\n${resolvedBody}\n\nEnviado em: ${dtStr}`,
+                data_retorno:       retornoStr,
+                abre_os:            false,
+                os_assunto:         '[18] INFORMAÇÃO',
+                id_cliente_ixc:     _cdpCurrentClienteIxcId,
+                colaborador_ixc_id: _uInfo.ixc_colaborador_id || null,
+                usuario_ixc_id:     _uInfo.ixc_usuario_id || null,
+              })
+            });
+            // Remove cliente da lista de retorno por 7 dias
+            document.querySelectorAll(`tr[data-contrato="${contrato}"], [data-retorno-contrato="${contrato}"]`).forEach(el => {
+              el.style.transition = 'opacity 0.4s, transform 0.4s';
+              el.style.opacity = '0'; el.style.transform = 'translateX(20px)';
+              setTimeout(() => el.remove(), 420);
+            });
+            if (_cdpCurrentContrato) cdpAcompLoad(_cdpCurrentContrato);
+          } catch(e) { console.warn('auto-acomp:', e); }
         } else {
           this.disabled = false;
           this.textContent = '📤 Enviar WhatsApp';
@@ -1667,7 +1720,7 @@ function _tipoLabel(v) {
   }
   return _TIPO_LABEL[v] || v;
 }
-const _RES_LABEL  = { retido:'✅ Retido', negociacao:'🤝 Em negociação', sem_resposta:'📵 Sem resposta', reagendou:'📅 Reagendou', cancelou:'❌ Cancelou' };
+const _RES_LABEL  = { retido:'✅ Retido', negociacao:'🤝 Em negociação', sem_resposta:'📵 Sem resposta', reagendou:'📅 Reagendou', cancelou:'❌ Cancelou', mensagem_enviada:'💬 Mensagem enviada' };
 
 let _cdpAcompCfg = null;
 
