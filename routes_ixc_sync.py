@@ -9,6 +9,7 @@ import base64
 import time
 import requests
 import urllib3
+from concurrent.futures import ThreadPoolExecutor, as_completed
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request, current_app, render_template_string
@@ -1286,34 +1287,44 @@ def status_rt():
     finally:
         conn.close()
 
-    MAP_CT = {'A': 'Ativo', 'I': 'Inativo', 'P': 'Pendente', 'N': 'Negativado', 'D': 'Desistente'}
-    MAP_SA = {'A': 'Ativo', 'D': 'Desativado', 'CM': 'Bloqueio Manual',
-              'CA': 'Bloqueio Automático', 'FA': 'Financeiro em atraso', 'AA': 'Aguardando Assinatura'}
+    CONTRATOS = [('A','Ativo'),('I','Inativo'),('P','Pendente'),('N','Negativado'),('D','Desistente')]
+    ACESSOS   = [('A','Ativo'),('CA','Bloqueio Automático'),('CM','Bloqueio Manual'),
+                 ('FA','Financeiro em atraso'),('AA','Aguardando Assinatura'),('D','Desativado')]
+
+    hdrs = _ixc_headers(token)
+
+    def _count(qtype, code):
+        r = requests.post(
+            f'{IXC_BASE_URL}/cliente_contrato',
+            data={'qtype': f'cliente_contrato.{qtype}', 'query': code, 'oper': '=',
+                  'page': '1', 'rp': '1',
+                  'sortname': 'cliente_contrato.id', 'sortorder': 'asc'},
+            headers=hdrs, timeout=30, verify=False,
+        )
+        r.raise_for_status()
+        return int(r.json().get('total', 0))
 
     try:
-        # Contagem por status do contrato
-        rows_ct = _ixc_query_builder(
-            "SELECT status, COUNT(*) AS cnt FROM cliente_contrato GROUP BY status", token
-        ) or []
-        # Contagem por status de acesso (apenas ativos)
-        rows_sa = _ixc_query_builder(
-            "SELECT status_internet, COUNT(*) AS cnt FROM cliente_contrato WHERE status='A' GROUP BY status_internet", token
-        ) or []
+        por_status = {}
+        ativos_por_acesso = {}
+        tasks = (
+            [('status',          code, label, 'ct') for code, label in CONTRATOS] +
+            [('status_internet', code, label, 'sa') for code, label in ACESSOS]
+        )
+        with ThreadPoolExecutor(max_workers=11) as pool:
+            futs = {pool.submit(_count, qtype, code): (label, kind)
+                    for qtype, code, label, kind in tasks}
+            for fut in as_completed(futs):
+                label, kind = futs[fut]
+                cnt = fut.result()
+                if kind == 'ct':
+                    por_status[label] = cnt
+                else:
+                    ativos_por_acesso[label] = cnt
     except Exception as e:
         return jsonify({"error": f"Erro ao consultar IXC: {e}"}), 502
 
-    por_status = {}
-    total = 0
-    for r in rows_ct:
-        label = MAP_CT.get(str(r.get('status', '')), r.get('status', '?'))
-        cnt   = int(r.get('cnt', 0))
-        por_status[label] = cnt
-        total += cnt
-
-    ativos_por_acesso = {}
-    for r in rows_sa:
-        label = MAP_SA.get(str(r.get('status_internet', '')), r.get('status_internet', '?'))
-        ativos_por_acesso[label] = int(r.get('cnt', 0))
+    total = sum(por_status.values())
 
     return jsonify({
         "total":             total,
