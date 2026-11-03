@@ -1167,7 +1167,7 @@ def cancel_sync():
 _STATUS_RT_PAGE = """<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Status Contratos — Tempo Real</title>
+<title>Status Contratos — Filial 2 · Tempo Real</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap">
 <style>
 :root{--bg:#f1f5f9;--sf:#fff;--bd:#e2e8f0;--fg:#0f172a;--mu:#64748b;
@@ -1242,8 +1242,8 @@ h1{margin:0 0 3px;font-size:1.2rem;font-weight:700}
   border-top-color:var(--ac);border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;margin-right:8px}
 </style></head><body>
 <div class="hd">
-  <div><h1>Status dos Contratos — Tempo Real</h1>
-    <p class="sub">Dados direto da API IXC &nbsp;·&nbsp; sem depender da sync local</p></div>
+  <div><h1>Status dos Contratos — Filial 2 · Tempo Real</h1>
+    <p class="sub">Dados direto da API IXC &nbsp;·&nbsp; Presidente Dutra · São Domingos · Tuntum · Dom Pedro</p></div>
   <button class="btn" id="btn" onclick="carregar()">↻ Buscar agora</button>
 </div>
 <div id="out-status"><div class="state">Clique em "Buscar agora" para consultar o IXC em tempo real.</div></div>
@@ -1334,7 +1334,7 @@ function renderFA(d){
   const pctAntigos=d.total_fa>0?(antigos/d.total_fa*100).toFixed(0):0;
   return `<div class="fa-section">
     <div class="fa-sep"><div class="fa-sep-line"></div>
-      <div class="fa-sep-label">📊 Análise — ${fN(d.total_fa)} em Financeiro em Atraso</div>
+      <div class="fa-sep-label">📊 Análise Filial 2 — ${fN(d.total_fa)} em Financeiro em Atraso</div>
       <div class="fa-sep-line"></div></div>
     <div class="insight-box">
       <strong>Por que ${fN(d.total_fa)} contratos estão em FA?</strong>
@@ -1417,6 +1417,7 @@ def fa_analysis():
 
     all_fa = []
     page = 1
+    fetched = 0
     while True:
         resp = requests.post(f'{IXC_BASE_URL}/cliente_contrato', data={
             'qtype': 'cliente_contrato.status_internet', 'query': 'FA', 'oper': '=',
@@ -1429,8 +1430,10 @@ def fa_analysis():
         recs = data.get('registros', [])
         if not recs:
             break
-        all_fa.extend(recs)
-        if len(all_fa) >= int(data.get('total', 0)):
+        # Filtra apenas Filial 2 mas pagina pelo total geral
+        all_fa.extend(r for r in recs if str(r.get('id_filial', '')) == '2')
+        fetched += len(recs)
+        if fetched >= int(data.get('total', 0)):
             break
         page += 1
 
@@ -1489,7 +1492,8 @@ def status_rt_page():
 @ixc_sync_bp.route('/status_rt', methods=['GET'])
 @login_required
 def status_rt():
-    """Puxa status dos contratos em tempo real via GROUP BY direto na API IXC."""
+    """Puxa status dos contratos da Filial 2 em tempo real via paginação paralela da API IXC."""
+    import math as _math
     conn = get_db()
     try:
         token = _get_token(conn)
@@ -1498,40 +1502,48 @@ def status_rt():
     finally:
         conn.close()
 
-    CONTRATOS = [('A','Ativo'),('I','Inativo'),('P','Pendente'),('N','Negativado'),('D','Desistente')]
-    ACESSOS   = [('A','Ativo'),('CA','Bloqueio Automático'),('CM','Bloqueio Manual'),
-                 ('FA','Financeiro em atraso'),('AA','Aguardando Assinatura'),('D','Desativado')]
-
     hdrs = _ixc_headers(token)
 
-    def _count(qtype, code):
+    STATUS_MAP = {'A':'Ativo','I':'Inativo','P':'Pendente','N':'Negativado','D':'Desistente'}
+    ACESSO_MAP = {'A':'Ativo','CA':'Bloqueio Automático','CM':'Bloqueio Manual',
+                  'FA':'Financeiro em atraso','AA':'Aguardando Assinatura','D':'Desativado'}
+
+    def _fetch_page(page):
         r = requests.post(
             f'{IXC_BASE_URL}/cliente_contrato',
-            data={'qtype': f'cliente_contrato.{qtype}', 'query': code, 'oper': '=',
-                  'page': '1', 'rp': '1',
+            data={'qtype': 'cliente_contrato.id_filial', 'query': '2', 'oper': '=',
+                  'page': str(page), 'rp': '1000',
                   'sortname': 'cliente_contrato.id', 'sortorder': 'asc'},
-            headers=hdrs, timeout=30, verify=False,
+            headers=hdrs, timeout=60, verify=False,
         )
         r.raise_for_status()
-        return int(r.json().get('total', 0))
+        j = r.json()
+        return j.get('registros', []), int(j.get('total', 0))
 
     try:
+        first_records, total_f2 = _fetch_page(1)
+        n_pages = _math.ceil(total_f2 / 1000)
+        all_records = list(first_records)
+
+        if n_pages > 1:
+            with ThreadPoolExecutor(max_workers=min(n_pages - 1, 10)) as pool:
+                futs = {pool.submit(_fetch_page, p): p for p in range(2, n_pages + 1)}
+                for fut in as_completed(futs):
+                    recs, _ = fut.result()
+                    all_records.extend(recs)
+
         por_status = {}
         ativos_por_acesso = {}
-        tasks = (
-            [('status',          code, label, 'ct') for code, label in CONTRATOS] +
-            [('status_internet', code, label, 'sa') for code, label in ACESSOS]
-        )
-        with ThreadPoolExecutor(max_workers=11) as pool:
-            futs = {pool.submit(_count, qtype, code): (label, kind)
-                    for qtype, code, label, kind in tasks}
-            for fut in as_completed(futs):
-                label, kind = futs[fut]
-                cnt = fut.result()
-                if kind == 'ct':
-                    por_status[label] = cnt
-                else:
-                    ativos_por_acesso[label] = cnt
+        for rec in all_records:
+            s  = rec.get('status', '')
+            si = rec.get('status_internet', '')
+            lbl_s = STATUS_MAP.get(s, s)
+            if lbl_s:
+                por_status[lbl_s] = por_status.get(lbl_s, 0) + 1
+            lbl_si = ACESSO_MAP.get(si, si)
+            if lbl_si:
+                ativos_por_acesso[lbl_si] = ativos_por_acesso.get(lbl_si, 0) + 1
+
     except Exception as e:
         return jsonify({"error": f"Erro ao consultar IXC: {e}"}), 502
 

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Termos e Condições · NetVale</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #09090b; --card-bg: #18181b; --card-border: #27272a;
+            --text-1: #fafafa; --text-2: #a1a1aa; --text-muted: #71717a;
+            --link: #a1a1aa; --link-hover: #fafafa; --accent: #10b981;
+            --text-muted: #94a3b8;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text-2);
+            min-height: 100vh;
+            padding: 2rem 1.5rem 4rem;
+            overflow: hidden auto;
+        }
+        .aurora-bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
+        .aurora-inner {
+            position: absolute; inset: -100%;
+            background-image:
+                repeating-linear-gradient(100deg, #3b82f6 10%, #a855f7 15%, #06b6d4 20%, #10b981 25%, #3b82f6 30%),
+                repeating-linear-gradient(100deg, #1d4ed8 0%, #7c3aed 8%, #0e7490 16%, #065f46 24%, #1d4ed8 32%);
+            background-size: 300% 300%, 250% 250%;
+            background-position: 50% 50%, 50% 50%;
+            filter: blur(72px) saturate(1.4);
+            opacity: 0.2;
+            animation: aurora 60s linear infinite;
+        }
+        @keyframes aurora { from { background-position: 50% 50%, 50% 50%; } to { background-position: 350% 50%, 350% 50%; } }
+        .page { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; }
+        .back {
+            display: inline-flex; align-items: center; gap: 6px;
+            color: var(--text-muted); text-decoration: none; font-size: .82rem;
+            margin-bottom: 2rem; transition: color .15s;
+        }
+        .back:hover { color: var(--text-1); }
+        .card {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 16px; padding: 2.5rem;
+        }
+        h1 { font-size: 1.55rem; font-weight: 700; color: var(--text-1); margin-bottom: .5rem; line-height: 1.3; }
+        .meta { font-size: 14px; color: var(--text-muted); margin-bottom: 2rem; }
+        .divider { height: 1px; background: var(--card-border); margin: 1.8rem 0; }
+        h2 { font-size: .95rem; font-weight: 600; color: var(--text-1); margin-bottom: .75rem; }
+        p { font-size: 14px; line-height: 1.7; margin-bottom: .9rem; }
+        ul { padding-left: 1.2rem; margin-bottom: .9rem; }
+        ul li { font-size: 14px; line-height: 1.7; margin-bottom: .35rem; }
+        .footer { text-align: center; font-size: 13px; color: var(--text-muted); margin-top: 2rem; }
+        .footer a { color: var(--link); text-decoration: none; }
+        .footer a:hover { color: var(--link-hover); }
+    </style>
+</head>
+<body>
+<div class="aurora-bg"><div class="aurora-inner"></div></div>
+<div class="page">
+    <a href="/login" class="back">← Voltar ao login</a>
+    <div class="card">
+        <h1>Termos e Condições de Uso</h1>
+        <p class="meta">Documento interno · Sistema de Gestão NetVale · Última atualização: novembro de 2026</p>
+
+        <h2>1. Acesso e Autenticação</h2>
+        <p>O acesso ao sistema de gestão da NetVale Telecom é restrito a colaboradores e parceiros autorizados. Cada usuário é responsável pelo sigilo de suas credenciais de acesso (usuário e senha).</p>
+        <ul>
+            <li>É proibido compartilhar credenciais com terceiros.</li>
+            <li>O acesso de cada usuário é registrado e monitorado para fins de segurança e auditoria.</li>
+            <li>Sessões inativas por período prolongado são encerradas automaticamente.</li>
+        </ul>
+
+        <div class="divider"></div>
+        <h2>2. Uso Aceitável</h2>
+        <p>Este sistema destina-se exclusivamente ao uso profissional para fins de gestão, análise e acompanhamento das operações da NetVale Telecom.</p>
+        <ul>
+            <li>É vedado o uso para finalidades pessoais, comerciais não autorizadas ou atividades ilícitas.</li>
+            <li>O usuário não deve tentar acessar funcionalidades ou dados além dos autorizados pelo seu perfil.</li>
+            <li>Tentativas de burlar controles de acesso ou segurança são passíveis de medidas disciplinares.</li>
+        </ul>
+
+        <div class="divider"></div>
+        <h2>3. Confidencialidade dos Dados</h2>
+        <p>Todas as informações acessadas por meio deste sistema — incluindo dados de clientes, contratos, faturamento e indicadores operacionais — são confidenciais e de propriedade da NetVale Telecom.</p>
+        <ul>
+            <li>É proibida a divulgação, cópia ou exportação não autorizada de qualquer dado do sistema.</li>
+            <li>Os dados de clientes devem ser tratados em conformidade com a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).</li>
+        </ul>
+
+        <div class="divider"></div>
+        <h2>4. Responsabilidades</h2>
+        <p>A NetVale Telecom compromete-se a manter o sistema disponível e seguro, realizando manutenções programadas com aviso prévio sempre que possível. No entanto, não garante disponibilidade ininterrupta.</p>
+        <p>O usuário é responsável pelas ações realizadas com suas credenciais. Em caso de suspeita de acesso indevido, deve comunicar imediatamente ao administrador do sistema.</p>
+
+        <div class="divider"></div>
+        <h2>5. Auditoria e Monitoramento</h2>
+        <p>O sistema registra logs de acesso, ações realizadas e alterações de dados para fins de auditoria interna e segurança. Esses registros podem ser consultados pela administração da empresa.</p>
+
+        <div class="divider"></div>
+        <h2>6. Atualizações</h2>
+        <p>Estes termos podem ser atualizados a qualquer momento. O uso continuado do sistema após a publicação de alterações implica aceitação dos novos termos.</p>
+
+        <div class="divider"></div>
+        <p style="font-size:.8rem;color:var(--text-muted);">Dúvidas ou irregularidades? Contate o administrador do sistema: <strong style="color:var(--text-2)">lucas.tonooka@netvaletelecom.com</strong></p>
+    </div>
+
+    <p class="footer" style="margin-top:1.5rem;">
+        NetVale Telecom · © 2026 &nbsp;·&nbsp;
+        <a href="/privacidade">Política de Privacidade</a> &nbsp;·&nbsp;
+        <a href="/login">Voltar ao login</a>
+    </p>
+</div>
+</body>
+</html>

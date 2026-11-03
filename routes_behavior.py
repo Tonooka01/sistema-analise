@@ -2025,11 +2025,12 @@ def api_behavior_signal_causes():
 def api_behavior_contact_list():
     conn = get_db()
     try:
-        city       = request.args.get('city',       '').strip()
-        risk_level = request.args.get('risk_level', '').strip()
-        min_score  = request.args.get('min_score',  25,  type=int)
-        limit      = request.args.get('limit',      200, type=int)
-        offset     = request.args.get('offset',     0,   type=int)
+        city             = request.args.get('city',             '').strip()
+        risk_level       = request.args.get('risk_level',       '').strip()
+        whatsapp_filter  = request.args.get('whatsapp_filter',  '').strip()  # 'sim'|'nao'|''
+        min_score        = request.args.get('min_score',  25,  type=int)
+        limit            = request.args.get('limit',      200, type=int)
+        offset           = request.args.get('offset',     0,   type=int)
 
         city_cond = "AND Cidade = ?" if city else ""
         city_p    = [city] if city else []
@@ -2043,6 +2044,25 @@ def api_behavior_contact_list():
             risk_sql = "AND score > 25 AND score <= 60"
         elif risk_level == 'Baixo':
             risk_sql = "AND score >= 10 AND score <= 25"
+
+        # Filtro WhatsApp: gera cláusula para usar no SELECT final
+        if whatsapp_filter == 'sim':
+            wa_filter_sql = """AND (
+                EXISTS (SELECT 1 FROM Acompanhamento_Clientes ac
+                        WHERE ac.contrato_id = S.contrato AND ac.tipo_acao = 'whatsapp')
+                OR EXISTS (SELECT 1 FROM chatmix_send_log cml
+                           WHERE CAST(cml.contrato AS INTEGER) = S.contrato)
+            )"""
+        elif whatsapp_filter == 'nao':
+            wa_filter_sql = """AND NOT EXISTS (
+                SELECT 1 FROM Acompanhamento_Clientes ac
+                WHERE ac.contrato_id = S.contrato AND ac.tipo_acao = 'whatsapp'
+            ) AND NOT EXISTS (
+                SELECT 1 FROM chatmix_send_log cml
+                WHERE CAST(cml.contrato AS INTEGER) = S.contrato
+            )"""
+        else:
+            wa_filter_sql = ""
 
         base_cte = f"""
             WITH ActiveContracts AS (
@@ -2143,11 +2163,11 @@ def api_behavior_contact_list():
                 SUM(CASE WHEN score > 25 AND score <= 60  THEN 1 ELSE 0 END) AS medio,
                 SUM(CASE WHEN score >= 10 AND score <= 25 THEN 1 ELSE 0 END) AS baixo,
                 COUNT(*) AS total
-            FROM Scored WHERE score >= {min_score}
+            FROM Scored S WHERE score >= {min_score} {wa_filter_sql}
         """
 
         count_sql = base_cte + f"""
-            SELECT COUNT(*) AS cnt FROM Scored WHERE score >= {min_score} {risk_sql}
+            SELECT COUNT(*) AS cnt FROM Scored S WHERE score >= {min_score} {risk_sql} {wa_filter_sql}
         """
 
         data_sql = base_cte + f"""
@@ -2161,10 +2181,22 @@ def api_behavior_contact_list():
                      WHEN S.score >= 10  THEN 'Baixo'
                      ELSE 'Saudável' END AS risco,
                 COALESCE(CLI.Telefone,  '') AS telefone,
-                COALESCE(CLI.WhatsApp, '') AS whatsapp
+                COALESCE(CLI.WhatsApp, '') AS whatsapp,
+                (
+                    SELECT MAX(sub_wa)
+                    FROM (
+                        SELECT MAX(ac.data_registro) AS sub_wa
+                        FROM Acompanhamento_Clientes ac
+                        WHERE ac.contrato_id = S.contrato AND ac.tipo_acao = 'whatsapp'
+                        UNION ALL
+                        SELECT MAX(cml.enviado_em) AS sub_wa
+                        FROM chatmix_send_log cml
+                        WHERE CAST(cml.contrato AS INTEGER) = S.contrato
+                    )
+                ) AS ultimo_whatsapp
             FROM Scored S
             LEFT JOIN Clientes CLI ON CLI.Raz_o_social = S.cliente
-            WHERE S.score >= {min_score} {risk_sql}
+            WHERE S.score >= {min_score} {risk_sql} {wa_filter_sql}
             ORDER BY S.score DESC
             LIMIT ? OFFSET ?
         """
@@ -4740,7 +4772,7 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
             return None
         os_id = str(os_id)
 
-        # Se deve fechar, envia mensagem de resolução via su_mensagens
+        # Se deve fechar, envia mensagem de resolução E atualiza status do ticket
         if fechar:
             try:
                 cr = requests.post(
@@ -4756,7 +4788,17 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
                 )
                 logger.info(f"_ixc_criar_os fechar su_mensagens status={cr.status_code} body={cr.text[:300]!r}")
             except Exception as ex:
-                logger.warning(f"_ixc_criar_os: falha ao fechar ticket {os_id}: {ex}")
+                logger.warning(f"_ixc_criar_os: falha ao fechar ticket {os_id} (su_mensagens): {ex}")
+            # PUT no ticket para definir status='F' (Finalizada) diretamente
+            try:
+                pr = requests.put(
+                    f'{_IXC_BASE}/su_ticket/{os_id}',
+                    json={'status': 'F', 'su_status': 'S'},
+                    headers=headers, timeout=15, verify=False
+                )
+                logger.info(f"_ixc_criar_os fechar PUT su_ticket/{os_id} status={pr.status_code} body={pr.text[:200]!r}")
+            except Exception as ex:
+                logger.warning(f"_ixc_criar_os: falha ao fechar ticket {os_id} (PUT status): {ex}")
 
         return os_id
     except Exception as ex:

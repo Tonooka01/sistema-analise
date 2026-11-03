@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Política de Privacidade · NetVale</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #09090b; --card-bg: #18181b; --card-border: #27272a;
+            --text-1: #fafafa; --text-2: #a1a1aa; --text-muted: #71717a;
+            --link: #a1a1aa; --link-hover: #fafafa; --accent: #3b82f6;
+            --text-muted: #94a3b8;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text-2);
+            min-height: 100vh;
+            padding: 2rem 1.5rem 4rem;
+            overflow: hidden auto;
+        }
+        .aurora-bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
+        .aurora-inner {
+            position: absolute; inset: -100%;
+            background-image:
+                repeating-linear-gradient(100deg, #3b82f6 10%, #a855f7 15%, #06b6d4 20%, #10b981 25%, #3b82f6 30%),
+                repeating-linear-gradient(100deg, #1d4ed8 0%, #7c3aed 8%, #0e7490 16%, #065f46 24%, #1d4ed8 32%);
+            background-size: 300% 300%, 250% 250%;
+            background-position: 50% 50%, 50% 50%;
+            filter: blur(72px) saturate(1.4);
+            opacity: 0.2;
+            animation: aurora 60s linear infinite;
+        }
+        @keyframes aurora { from { background-position: 50% 50%, 50% 50%; } to { background-position: 350% 50%, 350% 50%; } }
+        .page { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; }
+        .back {
+            display: inline-flex; align-items: center; gap: 6px;
+            color: var(--text-muted); text-decoration: none; font-size: .85rem;
+            margin-bottom: 2rem; transition: color .15s;
+        }
+        .back:hover { color: var(--text-1); }
+        .card {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 16px; padding: 2.5rem;
+        }
+        h1 { font-size: 1.55rem; font-weight: 700; color: var(--text-1); margin-bottom: .5rem; line-height: 1.3; }
+        .meta { font-size: 14px; color: var(--text-muted); margin-bottom: 2rem; }
+        .divider { height: 1px; background: var(--card-border); margin: 1.8rem 0; }
+        h2 { font-size: .95rem; font-weight: 600; color: var(--text-1); margin-bottom: .75rem; }
+        p { font-size: .9rem; line-height: 1.75; margin-bottom: .9rem; color: var(--text-2); }
+        ul { padding-left: 1.3rem; margin-bottom: .9rem; }
+        ul li { font-size: .9rem; line-height: 1.75; margin-bottom: .35rem; color: var(--text-2); }
+        .highlight {
+            background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.2);
+            border-radius: 6px; padding: 12px 16px; margin-bottom: 1.2rem;
+            font-size: 14px; line-height: 1.65; color: var(--text-2);
+        }
+        .footer-links { text-align: center; font-size: .78rem; color: var(--text-muted); margin-top: 1.5rem; }
+        .footer-links a { color: var(--link); text-decoration: none; }
+        .footer-links a:hover { color: var(--link-hover); }
+    </style>
+</head>
+<body>
+<div class="aurora-bg"><div class="aurora-inner"></div></div>
+<div class="page">
+    <a href="/login" class="back">← Voltar ao login</a>
+    <div class="card">
+        <h1>Política de Privacidade</h1>
+        <p class="meta">NetVale Telecom · Sistema de Gestão Interno · LGPD Lei nº 13.709/2018 · Novembro de 2026</p>
+
+        <div class="highlight">
+            Este sistema é de uso <strong style="color:#fafafa">exclusivamente interno</strong> da NetVale Telecom. Os dados aqui tratados referem-se a clientes, contratos e operações da empresa, processados em conformidade com a Lei Geral de Proteção de Dados (LGPD).
+        </div>
+
+        <h2>1. Quais dados são coletados</h2>
+        <p>O sistema coleta e processa os seguintes tipos de dados:</p>
+        <ul>
+            <li><strong style="color:#fafafa">Dados de clientes:</strong> nome, CPF/CNPJ, endereço, telefone, e-mail, plano contratado e histórico de pagamentos — importados do sistema IXCSoft.</li>
+            <li><strong style="color:#fafafa">Dados de contratos:</strong> status de acesso, inadimplência, datas de ativação e cancelamento.</li>
+            <li><strong style="color:#fafafa">Dados de uso do sistema:</strong> login, logout, ações realizadas, data e horário de acesso e IP do usuário.</li>
+            <li><strong style="color:#fafafa">Registros de acompanhamento:</strong> anotações de contatos com clientes feitas pelos colaboradores (sistema e WhatsApp).</li>
+        </ul>
+
+        <div class="divider"></div>
+        <h2>2. Para que os dados são utilizados</h2>
+        <ul>
+            <li>Gestão operacional e financeira da empresa.</li>
+            <li>Análise de inadimplência, churn e performance comercial.</li>
+            <li>Acompanhamento de atendimento e relacionamento com clientes.</li>
+            <li>Auditoria interna e controle de acesso ao sistema.</li>
+            <li>Geração de relatórios e dashboards para tomada de decisão.</li>
+        </ul>
+
+        <div class="divider"></div>
+        <h2>3. Base legal para o tratamento</h2>
+        <p>O tratamento dos dados neste sistema ocorre com base nas seguintes hipóteses legais previstas na LGPD:</p>
+        <ul>
+            <li><strong style="color:#fafafa">Execução de contrato</strong> (Art. 7º, V): dados necessários à prestação do serviço de internet contratado pelo cliente.</li>
+            <li><strong style="color:#fafafa">Legítimo interesse</strong> (Art. 7º, IX): análise de inadimplência e gestão de risco.</li>
+            <li><strong style="color:#fafafa">Cumprimento de obrigação legal</strong> (Art. 7º, II): registros fiscais e contábeis.</li>
+        </ul>
+
+        <div class="divider"></div>
+        <h2>4. Armazenamento e segurança</h2>
+        <p>Os dados são armazenados em banco de dados local protegido, com acesso controlado por autenticação de usuário. O sistema registra todas as sessões e ações para fins de auditoria.</p>
+        <ul>
+            <li>Senhas de usuários são armazenadas com hash criptográfico (scrypt).</li>
+            <li>O acesso ao sistema é restrito à rede interna ou VPN autorizada.</li>
+            <li>Logs de acesso são mantidos para rastreabilidade.</li>
+        </ul>
+
+        <div class="divider"></div>
+        <h2>5. Compartilhamento de dados</h2>
+        <p>Os dados tratados neste sistema não são compartilhados com terceiros, exceto nas situações previstas em lei ou por determinação judicial. A integração com o IXCSoft ocorre dentro do ambiente interno da empresa.</p>
+
+        <div class="divider"></div>
+        <h2>6. Direitos dos titulares</h2>
+        <p>Clientes da NetVale Telecom têm direito a solicitar acesso, correção, exclusão ou portabilidade de seus dados pessoais, conforme previsto nos Arts. 17 a 22 da LGPD. Solicitações podem ser feitas pelos canais oficiais de atendimento da empresa.</p>
+
+        <div class="divider"></div>
+        <h2>7. Encarregado de Dados (DPO)</h2>
+        <p>Responsável pelo tratamento de dados pessoais e implementação desta política:</p>
+        <p style="color:#fafafa;font-weight:500;">Lucas Tonooka &nbsp;·&nbsp; <span style="color:var(--text-2);font-weight:400">lucas.tonooka@netvaletelecom.com</span></p>
+    </div>
+
+    <p class="footer-links" style="margin-top:1.5rem;">
+        NetVale Telecom · © 2026 &nbsp;·&nbsp;
+        <a href="/termos">Termos e Condições</a> &nbsp;·&nbsp;
+        <a href="/login">Voltar ao login</a>
+    </p>
+</div>
+</body>
+</html>

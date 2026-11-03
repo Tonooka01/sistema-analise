@@ -18,6 +18,16 @@ _auth_log = logging.getLogger(__name__)
 auth_bp = Blueprint('auth_bp', __name__)
 
 
+@auth_bp.route('/termos')
+def termos():
+    return render_template('termos.html')
+
+
+@auth_bp.route('/privacidade')
+def privacidade():
+    return render_template('privacidade.html')
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':

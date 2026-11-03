@@ -2039,7 +2039,7 @@ async function renderListaRetencaoTab() {
     if (!tabContent) return;
 
     let _retCurrentPage = 1;
-    let _retFilters = { city: '', risk_level: '', min_score: 25 };
+    let _retFilters = { city: '', risk_level: '', whatsapp_filter: '', min_score: 25 };
 
     tabContent.innerHTML = `
         <div id="ret-kpi-row" class="summary-cards-container mb-4" style="border-bottom:none;padding-bottom:0;"></div>
@@ -2060,6 +2060,14 @@ async function renderListaRetencaoTab() {
                     <option value="Baixo">🟡 Baixo</option>
                 </select>
             </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mr-1">💬 WhatsApp:</label>
+                <select id="retWaFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
+                    <option value="">Todos</option>
+                    <option value="nao">Não contactado</option>
+                    <option value="sim">Já contactado</option>
+                </select>
+            </div>
             <button id="btnFilterRet" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
             <button id="btnExportRet" class="bg-green-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-green-700 transition font-semibold text-sm h-10">⬇ Baixar CSV</button>
         </div>
@@ -2073,14 +2081,15 @@ async function renderListaRetencaoTab() {
         'Baixo':     'background:#fefce8;color:#ca8a04;border:1px solid #fde047;',
     };
 
-    function buildRetUrl(page) {
-        const rowsPerPage = 50;
+    function buildRetUrl(page, limit = 50) {
+        const rowsPerPage = limit;
         const offset = (page - 1) * rowsPerPage;
         const p = new URLSearchParams({
-            city: _retFilters.city,
-            risk_level: _retFilters.risk_level,
-            min_score: _retFilters.min_score,
-            limit: rowsPerPage,
+            city:            _retFilters.city,
+            risk_level:      _retFilters.risk_level,
+            whatsapp_filter: _retFilters.whatsapp_filter,
+            min_score:       _retFilters.min_score,
+            limit:           rowsPerPage,
             offset
         });
         return `${state.API_BASE_URL}/api/behavior/contact_list?${p}`;
@@ -2144,6 +2153,14 @@ async function renderListaRetencaoTab() {
                         ? `<a href="https://wa.me/${wa}" target="_blank" class="text-green-600 font-bold">💬 WhatsApp</a>`
                         : '-';
                     const riskStyle = RISK_CLS[r.risco] || '';
+                    // Último contato WhatsApp
+                    let ultimoWaCell = '<span style="color:#9ca3af;font-size:.74rem;">Nunca</span>';
+                    if (r.ultimo_whatsapp) {
+                        const d = r.ultimo_whatsapp.slice(0, 10);
+                        const diffDays = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+                        const color = diffDays <= 3 ? '#16a34a' : diffDays <= 7 ? '#ca8a04' : '#6b7280';
+                        ultimoWaCell = `<span style="font-size:.74rem;color:${color};">${d.split('-').reverse().join('/')}</span>`;
+                    }
                     return `<tr data-contrato="${r.contrato}" style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;cursor:pointer;" title="Clique para ver detalhes">
                         <td data-col="num" style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${(page - 1) * rowsPerPage + i + 1}</td>
                         <td data-col="contrato" style="padding:6px 10px;font-size:.78rem;font-family:monospace;">#${r.contrato || ''}</td>
@@ -2157,12 +2174,13 @@ async function renderListaRetencaoTab() {
                         <td data-col="dias_vencido" style="padding:6px 10px;font-size:.78rem;${r.dias_vencido > 0 ? 'color:#dc2626;' : ''}">${r.dias_vencido > 0 ? r.dias_vencido + 'd' : '-'}</td>
                         <td data-col="atend_30d" style="padding:6px 10px;font-size:.78rem;">${r.atend_30d || 0}</td>
                         <td data-col="sem_conexao" style="padding:6px 10px;font-size:.78rem;${r.sem_conexao > 0 ? 'color:#ca8a04;' : ''}">${r.sem_conexao > 0 ? r.sem_conexao + 'd' : '-'}</td>
+                        <td data-col="ultimo_wa" style="padding:6px 10px;text-align:center;">${ultimoWaCell}</td>
                         <td data-col="telefone" style="padding:6px 10px;font-size:.78rem;">${r.telefone ? `<a href="tel:${r.telefone}">${r.telefone}</a>` : '-'}</td>
                         <td data-col="whatsapp" style="padding:6px 10px;font-size:.78rem;">${waCell}</td>
                     </tr>`;
                 }).join('');
 
-                const _CHURN_COLS = [{key:'num',label:'#'},{key:'contrato',label:'Contrato'},{key:'cliente',label:'Cliente'},{key:'cidade',label:'Cidade'},{key:'risco',label:'Risco'},{key:'score',label:'Score'},{key:'fat_vencidas',label:'Fat. Vencidas'},{key:'dias_vencido',label:'Dias Vencido'},{key:'atend_30d',label:'Atend. 30d'},{key:'sem_conexao',label:'Sem Conexão'},{key:'telefone',label:'Telefone'},{key:'whatsapp',label:'WhatsApp'}];
+                const _CHURN_COLS = [{key:'num',label:'#'},{key:'contrato',label:'Contrato'},{key:'cliente',label:'Cliente'},{key:'cidade',label:'Cidade'},{key:'risco',label:'Risco'},{key:'score',label:'Score'},{key:'fat_vencidas',label:'Fat. Vencidas'},{key:'dias_vencido',label:'Dias Vencido'},{key:'atend_30d',label:'Atend. 30d'},{key:'sem_conexao',label:'Sem Conexão'},{key:'ultimo_wa',label:'Último WA'},{key:'telefone',label:'Telefone'},{key:'whatsapp',label:'WhatsApp'}];
                 tableHtml = `
                     <div data-coltable="churn_cols" style="overflow-x:auto;">
                         ${_colToggleHtml('churn_cols', _CHURN_COLS)}
@@ -2178,6 +2196,7 @@ async function renderListaRetencaoTab() {
                                 <th data-col="dias_vencido" style="padding:8px 10px;text-align:left;white-space:nowrap;">Dias Vencido</th>
                                 <th data-col="atend_30d" style="padding:8px 10px;text-align:left;white-space:nowrap;">Atend. 30d</th>
                                 <th data-col="sem_conexao" style="padding:8px 10px;text-align:left;white-space:nowrap;">Sem Conexão</th>
+                                <th data-col="ultimo_wa" style="padding:8px 10px;text-align:left;white-space:nowrap;">Último WA</th>
                                 <th data-col="telefone" style="padding:8px 10px;text-align:left;white-space:nowrap;">Telefone</th>
                                 <th data-col="whatsapp" style="padding:8px 10px;text-align:left;white-space:nowrap;">WhatsApp</th>
                             </tr></thead>
@@ -2220,21 +2239,15 @@ async function renderListaRetencaoTab() {
 
     // Filtrar button
     tabContent.querySelector('#btnFilterRet').addEventListener('click', () => {
-        _retFilters.city       = document.getElementById('retCityFilter')?.value || '';
-        _retFilters.risk_level = document.getElementById('retRiskFilter')?.value || '';
+        _retFilters.city             = document.getElementById('retCityFilter')?.value || '';
+        _retFilters.risk_level       = document.getElementById('retRiskFilter')?.value || '';
+        _retFilters.whatsapp_filter  = document.getElementById('retWaFilter')?.value   || '';
         fetchAndRenderRetTable(1);
     });
 
     // Export CSV button
     tabContent.querySelector('#btnExportRet').addEventListener('click', () => {
-        const p = new URLSearchParams({
-            city: _retFilters.city,
-            risk_level: _retFilters.risk_level,
-            min_score: _retFilters.min_score,
-            limit: 5000,
-            offset: 0
-        });
-        window.open(`${state.API_BASE_URL}/api/behavior/contact_list?${p}`);
+        window.open(buildRetUrl(1, 5000));
     });
 
     await fetchAndRenderRetTable(1);
