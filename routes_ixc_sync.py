@@ -1171,21 +1171,23 @@ _STATUS_RT_PAGE = """<!doctype html>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap">
 <style>
 :root{--bg:#f1f5f9;--sf:#fff;--bd:#e2e8f0;--fg:#0f172a;--mu:#64748b;
-  --ok:#15803d;--wa:#b45309;--da:#dc2626;--ac:#2563eb;--or:#c2410c;--ne:#6b7280;}
+  --ok:#15803d;--ok-bg:#dcfce7;--wa:#b45309;--wa-bg:#fef3c7;
+  --da:#dc2626;--da-bg:#fee2e2;--ac:#2563eb;--or:#c2410c;--or-bg:#ffedd5;--ne:#6b7280;}
 @media(prefers-color-scheme:dark){:root{
   --bg:#0f172a;--sf:#1e293b;--bd:#334155;--fg:#f1f5f9;--mu:#94a3b8;
-  --ok:#4ade80;--wa:#fbbf24;--da:#f87171;--ac:#60a5fa;--or:#fb923c;--ne:#9ca3af;
+  --ok:#4ade80;--ok-bg:#14532d;--wa:#fbbf24;--wa-bg:#451a03;
+  --da:#f87171;--da-bg:#450a0a;--ac:#60a5fa;--or:#fb923c;--or-bg:#431407;--ne:#9ca3af;
   color-scheme:dark;}}
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:"Inter",sans-serif;font-size:14px;
-  padding:24px 20px 40px;}
+  padding:24px 20px 48px;}
 .hd{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px}
 h1{margin:0 0 3px;font-size:1.2rem;font-weight:700}
 .sub{margin:0;font-size:.78rem;color:var(--mu)}
 .btn{padding:8px 16px;border-radius:7px;font-size:.85rem;font-weight:600;cursor:pointer;
   border:none;background:var(--ac);color:#fff;font-family:inherit;display:inline-flex;align-items:center;gap:6px}
 .btn:hover{opacity:.85}.btn:disabled{opacity:.5;cursor:default}
-.sp{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);
+.spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);
   border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 .state{text-align:center;padding:40px;color:var(--mu)}
@@ -1203,28 +1205,49 @@ h1{margin:0 0 3px;font-size:1.2rem;font-weight:700}
   letter-spacing:.07em;color:var(--mu)}
 .sl{display:flex;flex-direction:column;gap:9px}
 .si{display:grid;grid-template-columns:11px 1fr auto auto;align-items:center;gap:7px}
-.dot{width:11px;height:11px;border-radius:50%}
+.dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
 .sn{font-size:.87rem}
 .sc{font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
 .sp2{font-size:.73rem;color:var(--mu);text-align:right;min-width:36px}
 .tr{grid-column:2/5;background:var(--bd);border-radius:3px;height:6px;overflow:hidden;margin-top:-3px}
 .fi{height:100%;border-radius:3px;transition:width .6s}
+/* ── FA análise ── */
+.fa-section{margin-top:28px}
+.fa-sep{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.fa-sep-line{flex:1;height:1px;background:var(--bd)}
+.fa-sep-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);white-space:nowrap}
+.fa-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+@media(max-width:560px){.fa-grid{grid-template-columns:1fr}}
+.bar-row{display:grid;grid-template-columns:1fr 140px 48px;align-items:center;gap:8px;margin-bottom:8px}
+.bar-track{height:13px;background:var(--bd);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width .6s}
+.bar-lbl{font-size:.8rem;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-cnt{font-size:.8rem;font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.tl-row{display:grid;grid-template-columns:90px 1fr 44px;align-items:center;gap:8px;margin-bottom:9px}
+.tl-label{font-size:.78rem;font-weight:600}
+.tl-note{font-size:.68rem;color:var(--mu);grid-column:1/-1;padding-left:98px;margin-top:-5px;margin-bottom:4px}
+.insight-box{background:var(--or-bg);border-left:3px solid var(--or);border-radius:6px;
+  padding:10px 14px;font-size:.82rem;color:var(--fg);line-height:1.5;margin-bottom:14px}
+.insight-box strong{color:var(--or)}
+.trend-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.trend-chip{background:var(--sf);border:1px solid var(--bd);border-radius:6px;
+  padding:8px 10px;min-width:90px;flex:1}
+.trend-mes{font-size:.68rem;font-weight:600;color:var(--mu)}
+.trend-val{font-size:.95rem;font-weight:800;font-variant-numeric:tabular-nums;margin:2px 0 1px}
+.trend-brl{font-size:.68rem;color:var(--mu)}
+.trend-bar{height:3px;background:var(--bd);border-radius:2px;margin-top:4px;overflow:hidden}
+.trend-bf{height:100%;border-radius:2px;background:var(--or)}
+.fa-spin-wrap{text-align:center;padding:32px;color:var(--mu);font-size:.85rem}
+.fa-spin{display:inline-block;width:18px;height:18px;border:2px solid var(--bd);
+  border-top-color:var(--ac);border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;margin-right:8px}
 </style></head><body>
 <div class="hd">
   <div><h1>Status dos Contratos — Tempo Real</h1>
     <p class="sub">Dados direto da API IXC &nbsp;·&nbsp; sem depender da sync local</p></div>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <button class="btn" id="btn" onclick="load()">↻ Buscar agora</button>
-    <a href="https://claude.ai/artifact/TWkjgHsQ297wZjG48xHyZE?sk=ptm_gQQSICEatAQzD4jocA"
-       target="_blank" rel="noopener"
-       style="padding:8px 14px;border-radius:7px;font-size:.85rem;font-weight:600;
-              background:var(--sf);border:1px solid var(--bd);color:var(--fg);
-              text-decoration:none;display:inline-flex;align-items:center;gap:6px">
-      📊 Análise FA — Out/26
-    </a>
-  </div>
+  <button class="btn" id="btn" onclick="carregar()">↻ Buscar agora</button>
 </div>
-<div id="out"><div class="state">Clique em "Buscar agora" para consultar o IXC em tempo real.</div></div>
+<div id="out-status"><div class="state">Clique em "Buscar agora" para consultar o IXC em tempo real.</div></div>
+<div id="out-fa"></div>
 <script>
 const C={ok:'#15803d',wa:'#b45309',da:'#dc2626',ac:'#2563eb',or:'#c2410c',ne:'#6b7280'};
 const CT=[
@@ -1236,46 +1259,225 @@ const SA=[
   {k:'Financeiro em atraso',c:'or'},{k:'Desativado',c:'ne'},{k:'Aguardando Assinatura',c:'ac'},
 ];
 function fN(n){return Number(n).toLocaleString('pt-BR')}
-function list(data,cfg,tot){
+function fR(n){return 'R$ '+Number(n).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0})}
+function hex(v){return getComputedStyle(document.documentElement).getPropertyValue('--'+v).trim()||C[v]||'#888'}
+function statusList(data,cfg,tot){
   return cfg.filter(x=>(data[x.k]||0)>0).sort((a,b)=>(data[b.k]||0)-(data[a.k]||0)).map(x=>{
-    const n=data[x.k]||0, p=tot>0?(n/tot*100).toFixed(1):0;
-    const hex=getComputedStyle(document.documentElement).getPropertyValue('--'+x.c).trim()||C[x.c];
-    return `<div class="si">
-      <span class="dot" style="background:${hex}"></span>
+    const n=data[x.k]||0,p=tot>0?(n/tot*100).toFixed(1):0,h=hex(x.c);
+    return `<div class="si"><span class="dot" style="background:${h}"></span>
       <span class="sn">${x.k}</span>
-      <span class="sc" style="color:${hex}">${fN(n)}</span>
+      <span class="sc" style="color:${h}">${fN(n)}</span>
       <span class="sp2">${p}%</span>
-      <div class="tr"><div class="fi" style="width:${p}%;background:${hex}"></div></div>
-    </div>`;
+      <div class="tr"><div class="fi" style="width:${p}%;background:${h}"></div></div></div>`;
   }).join('');
 }
-async function load(){
+function barList(obj,maxVal,color){
+  return Object.entries(obj).sort((a,b)=>b[1]-a[1]).map(([k,v])=>{
+    const pct=maxVal>0?(v/maxVal*100).toFixed(1):0;
+    return `<div class="bar-row">
+      <div class="bar-lbl">${k}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div class="bar-cnt">${fN(v)}</div></div>`;
+  }).join('');
+}
+const ORDEM_TEMPO=['< 3 meses','3-6 meses','6-12 meses','1-2 anos','> 2 anos'];
+function tempoList(obj,maxVal){
+  return ORDEM_TEMPO.filter(k=>obj[k]).map(k=>{
+    const v=obj[k]||0,pct=maxVal>0?(v/maxVal*100).toFixed(1):0;
+    const cor=k.startsWith('<')||k.startsWith('3')?hex('wa'):hex('ok');
+    return `<div class="bar-row">
+      <div class="bar-lbl">${k}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${cor}"></div></div>
+      <div class="bar-cnt">${fN(v)}</div></div>`;
+  }).join('');
+}
+function tlNote(dt){
+  const d=new Date(dt+'T12:00:00');
+  const dia=d.getDate();
+  if(dia>=20&&dia<=22)return`Venc. dia ${dia} + 7 dias carência`;
+  if(dia>=23&&dia<=24)return`Venc. dia 23 + 7 dias carência`;
+  if(dia>=25&&dia<=27)return`Venc. dia 25 + 7 dias (sáb→dom→seg)`;
+  return'';
+}
+function tlColor(cnt,max){return cnt===max?hex('da'):cnt>max*0.3?hex('or'):hex('wa')}
+function renderFA(d){
+  if(!d||!d.total_fa)return'';
+  const tl=d.timeline||[];
+  const maxTL=tl.reduce((m,r)=>Math.max(m,r.cnt),1);
+  const tlRows=tl.slice(0,6).map(r=>{
+    const note=tlNote(r.dt);
+    const dt=r.dt.split('-').reverse().join('/').slice(0,5);
+    const col=tlColor(r.cnt,maxTL);
+    return `<div class="tl-row">
+        <div class="tl-label">${dt}</div>
+        <div class="bar-track" style="height:20px"><div class="bar-fill" style="width:${(r.cnt/maxTL*100).toFixed(0)}%;background:${col};height:20px"></div></div>
+        <div class="bar-cnt">${fN(r.cnt)}</div></div>
+      ${note?`<div class="tl-note">${note}</div>`:''}`;
+  }).join('');
+  const cidades=d.por_cidade||{};
+  const maxCid=Math.max(...Object.values(cidades),1);
+  const tempo=d.por_tempo||{};
+  const maxTempo=Math.max(...Object.values(tempo),1);
+  const boletos=(d.boletos_abertos||[]).slice(0,8);
+  const maxBol=Math.max(...boletos.map(b=>b.cnt),1);
+  const chips=boletos.map(b=>{
+    const pct=b.cnt/maxBol*100;
+    const mes=b.mes.split('-').reverse().join('/').replace(/^\d+\//,'');
+    return `<div class="trend-chip">
+      <div class="trend-mes">${mes}</div>
+      <div class="trend-val" style="color:${b.cnt>1000?hex('or'):b.cnt>500?hex('wa'):'var(--fg)'}">${fN(b.cnt)}</div>
+      <div class="trend-brl">${fR(b.total)}</div>
+      <div class="trend-bar"><div class="trend-bf" style="width:${pct.toFixed(0)}%"></div></div>
+    </div>`;
+  }).join('');
+  const antigos=((tempo['1-2 anos']||0)+(tempo['> 2 anos']||0));
+  const pctAntigos=d.total_fa>0?(antigos/d.total_fa*100).toFixed(0):0;
+  return `<div class="fa-section">
+    <div class="fa-sep"><div class="fa-sep-line"></div>
+      <div class="fa-sep-label">📊 Análise — ${fN(d.total_fa)} em Financeiro em Atraso</div>
+      <div class="fa-sep-line"></div></div>
+    <div class="insight-box">
+      <strong>Por que ${fN(d.total_fa)} contratos estão em FA?</strong>
+      É o efeito do ciclo de vencimentos — os dias <strong>23 e 25</strong> são os mais comuns e, após 7 dias de carência, geram o maior volume de FA em bloco.
+      ${pctAntigos>=40?`<strong>${pctAntigos}% são clientes com mais de 1 ano</strong> — não é problema de cliente novo.`:''}
+      Dados do dia ${d.gerado_em}.
+    </div>
+    <div class="fa-grid">
+      <div class="card"><h3>Quando entraram em FA</h3>${tlRows}</div>
+      <div class="card"><h3>FA por cidade</h3>${barList(cidades,maxCid,hex('ac'))}</div>
+    </div>
+    <div class="fa-grid">
+      <div class="card"><h3>FA por tempo de contrato</h3>${tempoList(tempo,maxTempo)}</div>
+      <div class="card"><h3>Boletos em aberto por mês (banco local)</h3>
+        <div class="trend-row">${chips}</div>
+      </div>
+    </div>
+  </div>`;
+}
+async function carregar(){
   const btn=document.getElementById('btn');
   btn.disabled=true;
-  btn.innerHTML='<span class="sp"></span> Buscando...';
-  document.getElementById('out').innerHTML='<div class="state">Consultando IXC...</div>';
-  try{
-    const r=await fetch('/api/ixc/status_rt');
-    if(!r.ok){const e=await r.json().catch(()=>({error:r.statusText}));throw new Error(e.error||r.statusText);}
-    const d=await r.json();
+  btn.innerHTML='<span class="spin"></span> Buscando...';
+  document.getElementById('out-status').innerHTML='<div class="state">Consultando IXC...</div>';
+  document.getElementById('out-fa').innerHTML='<div class="fa-spin-wrap"><span class="fa-spin"></span>Carregando análise FA (pode levar ~10s)...</div>';
+  const [resStatus,resFA]=await Promise.allSettled([
+    fetch('/api/ixc/status_rt').then(r=>{if(!r.ok)throw new Error(r.statusText);return r.json();}),
+    fetch('/api/ixc/fa_analysis').then(r=>{if(!r.ok)throw new Error(r.statusText);return r.json();})
+  ]);
+  if(resStatus.status==='fulfilled'){
+    const d=resStatus.value;
     const nAtivos=d.por_status['Ativo']||0;
-    document.getElementById('out').innerHTML=`
+    document.getElementById('out-status').innerHTML=`
       <div class="ts">Atualizado: <strong>${d.gerado_em}</strong></div>
       <div class="tot"><div>
         <div class="tot-l">Total de contratos</div>
         <div class="tot-v">${fN(d.total)}</div>
       </div></div>
       <div class="grid">
-        <div class="card"><h3>Status do contrato</h3><div class="sl">${list(d.por_status,CT,d.total)}</div></div>
-        <div class="card"><h3>Status de acesso — ativos (${fN(nAtivos)})</h3><div class="sl">${list(d.ativos_por_acesso,SA,nAtivos)}</div></div>
+        <div class="card"><h3>Status do contrato</h3><div class="sl">${statusList(d.por_status,CT,d.total)}</div></div>
+        <div class="card"><h3>Status de acesso — ativos (${fN(nAtivos)})</h3><div class="sl">${statusList(d.ativos_por_acesso,SA,nAtivos)}</div></div>
       </div>`;
-  }catch(e){
-    document.getElementById('out').innerHTML=`<div class="state err">❌ ${e.message}</div>`;
-  }finally{
-    btn.disabled=false;btn.innerHTML='↻ Buscar agora';
+  }else{
+    document.getElementById('out-status').innerHTML=`<div class="state err">❌ Status: ${resStatus.reason?.message||'Erro'}</div>`;
   }
+  if(resFA.status==='fulfilled'){
+    document.getElementById('out-fa').innerHTML=renderFA(resFA.value);
+  }else{
+    document.getElementById('out-fa').innerHTML=`<div class="state err" style="font-size:.8rem">⚠ Análise FA: ${resFA.reason?.message||'Erro'}</div>`;
+  }
+  btn.disabled=false;btn.innerHTML='↻ Buscar agora';
 }
 </script></body></html>"""
+
+
+@ixc_sync_bp.route('/fa_analysis', methods=['GET'])
+@login_required
+def fa_analysis():
+    """Análise detalhada dos contratos FA: timeline, cidades, tempo de contrato, boletos em aberto."""
+    from collections import Counter
+
+    conn = get_db()
+    try:
+        token = _get_token(conn)
+        if not token:
+            return jsonify({"error": "Token IXC não configurado"}), 400
+        boletos = conn.execute("""
+            SELECT substr(Vencimento,1,7) AS mes, COUNT(*) AS cnt, SUM(Valor_aberto) AS total
+            FROM Contas_a_Receber
+            WHERE Status = 'A receber' AND Vencimento >= '2025-01-01'
+            GROUP BY mes ORDER BY mes DESC LIMIT 12
+        """).fetchall()
+        boletos_abertos = [{'mes': r['mes'], 'cnt': r['cnt'], 'total': float(r['total'] or 0)}
+                           for r in boletos]
+    finally:
+        conn.close()
+
+    hdrs = _ixc_headers(token)
+    hoje = datetime.now().date()
+
+    all_fa = []
+    page = 1
+    while True:
+        resp = requests.post(f'{IXC_BASE_URL}/cliente_contrato', data={
+            'qtype': 'cliente_contrato.status_internet', 'query': 'FA', 'oper': '=',
+            'sortname': 'cliente_contrato.id', 'sortorder': 'asc',
+            'page': str(page), 'rp': '200',
+            'fields': 'id,id_cliente,data_ativacao,pago_ate_data,dt_ult_finan_atraso,id_filial',
+        }, headers=hdrs, timeout=60, verify=False)
+        resp.raise_for_status()
+        data = resp.json()
+        recs = data.get('registros', [])
+        if not recs:
+            break
+        all_fa.extend(recs)
+        if len(all_fa) >= int(data.get('total', 0)):
+            break
+        page += 1
+
+    conn2 = get_db()
+    try:
+        ids = [int(c['id_cliente']) for c in all_fa if c.get('id_cliente')]
+        id_cidade = {}
+        for i in range(0, len(ids), 500):
+            batch = ids[i:i+500]
+            ph = ','.join('?' * len(batch))
+            for r in conn2.execute(f'SELECT ID, Cidade FROM Clientes WHERE ID IN ({ph})', batch).fetchall():
+                id_cidade[int(r['ID'])] = r['Cidade']
+    finally:
+        conn2.close()
+
+    timeline   = Counter()
+    por_cidade = Counter()
+    por_tempo  = Counter()
+    FAIXAS = [('< 3 meses', 90), ('3-6 meses', 180), ('6-12 meses', 365),
+              ('1-2 anos', 730), ('> 2 anos', 99999)]
+
+    for c in all_fa:
+        dt_fa = c.get('dt_ult_finan_atraso', '')
+        if dt_fa and not dt_fa.startswith('0000'):
+            timeline[dt_fa[:10]] += 1
+        cidade = id_cidade.get(int(c.get('id_cliente', 0) or 0), 'Outras')
+        por_cidade[cidade] += 1
+        dt_atv = c.get('data_ativacao', '')
+        if dt_atv and not dt_atv.startswith('0000'):
+            try:
+                dias = (hoje - datetime.strptime(dt_atv[:10], '%Y-%m-%d').date()).days
+                faixa = next(f for f, lim in FAIXAS if dias < lim)
+                por_tempo[faixa] += 1
+            except Exception:
+                pass
+
+    top_tl = [{'dt': dt, 'cnt': cnt}
+              for dt, cnt in sorted(timeline.items(), reverse=True)[:8]]
+
+    return jsonify({
+        'total_fa':       len(all_fa),
+        'timeline':       top_tl,
+        'por_cidade':     dict(por_cidade.most_common(8)),
+        'por_tempo':      dict(por_tempo),
+        'boletos_abertos': boletos_abertos,
+        'gerado_em':      datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+    })
 
 
 @ixc_sync_bp.route('/status_rt_page')
