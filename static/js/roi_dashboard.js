@@ -270,6 +270,126 @@ function _barSVGCount(labels, datasets, opts = {}) {
     </svg>`;
 }
 
+// ── Painel global: visão geral da base ───────────────────────────────────────
+function _painelGlobal(p, vd, roi) {
+    if (!p || p.error) return '';
+    const c  = p.contratos;
+    const m  = p.mrr;
+    const nv = vd?.mes_atual?.vendas_ok ?? '—';
+    const nvAnt = vd?.mes_passado?.vendas_ok ?? 0;
+    return `
+        <div style="margin-bottom:20px;">
+            <div style="font-size:.68rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #e5e7eb;">
+                📊 Visão Geral da Operação
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;">
+                ${_kpi('💰','MRR este mês', _fmtBRL(m.mrr_mes),
+                    `vs mês anterior: ${_pct(m.mrr_mes, m.mrr_ant)}`,
+                    _deltaClass(m.mrr_mes, m.mrr_ant), '#1d4ed8')}
+                ${_kpi('👥','Contratos ativos', _fmt(c.ativos),
+                    `Base total de contratos ativos`, '#6b7280', '#059669')}
+                ${_kpi('🚨','Cancelamentos este mês', _fmt(c.cancel_mes),
+                    `vs mês anterior: ${_pct(c.cancel_mes, c.cancel_ant)}`,
+                    c.cancel_mes <= c.cancel_ant ? '#16a34a' : '#dc2626', '#ef4444')}
+                ${_kpi('⚠️','Negativações este mês', _fmt(p.negativacoes.mes),
+                    `vs mês anterior: ${_pct(p.negativacoes.mes, p.negativacoes.ant)}`,
+                    p.negativacoes.mes <= p.negativacoes.ant ? '#16a34a' : '#dc2626', '#f59e0b')}
+                ${_kpi('💸','Faturas em aberto', _fmtBRL(m.aberto_valor),
+                    `${_fmt(m.aberto_qty)} faturas pendentes`, '#dc2626', '#dc2626')}
+                ${_kpi('📦','Novas vendas este mês', _fmt(nv),
+                    `vs mês anterior: ${_pct(nv, nvAnt)}`,
+                    nv >= nvAnt ? '#16a34a' : '#dc2626', '#10b981')}
+            </div>
+        </div>`;
+}
+
+// ── Cancelamentos: cidades, bairros, evolução ─────────────────────────────────
+function _painelCancelamentos(p) {
+    if (!p || p.error) return '';
+
+    const cidadesHtml = p.top_cidades.length ? p.top_cidades.map((r, i) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:.7rem;color:#9ca3af;min-width:16px;">${i+1}.</span>
+            <span style="flex:1;font-size:.8rem;color:#1f2937;font-weight:${i<3?'600':'400'};">${r.Cidade || r.cidade || '—'}</span>
+            <span style="font-size:.8rem;font-weight:700;color:#dc2626;">${_fmt(r.total)}</span>
+        </div>`).join('')
+        : '<div style="color:#9ca3af;font-size:.8rem;padding:12px 0;text-align:center;">Sem dados</div>';
+
+    const bairrosHtml = p.top_bairros.length ? p.top_bairros.map((r, i) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:.7rem;color:#9ca3af;min-width:16px;">${i+1}.</span>
+            <span style="flex:1;font-size:.8rem;color:#1f2937;font-weight:${i<3?'600':'400'};">${r.Bairro || r.bairro || '—'}</span>
+            <span style="font-size:.8rem;font-weight:700;color:#dc2626;">${_fmt(r.total)}</span>
+        </div>`).join('')
+        : '<div style="color:#9ca3af;font-size:.8rem;padding:12px 0;text-align:center;">Sem dados</div>';
+
+    // Dual-axis bar: MRR + cancelamentos por mês
+    const allMes = new Set([
+        ...(p.mrr_ev  || []).map(r => r.mes),
+        ...(p.cancel_ev || []).map(r => r.mes),
+    ]);
+    const sortedMes = [...allMes].sort();
+    const mrrByMes    = Object.fromEntries((p.mrr_ev    || []).map(r => [r.mes, r.receita]));
+    const cancelByMes = Object.fromEntries((p.cancel_ev || []).map(r => [r.mes, r.total]));
+    const labels = sortedMes.map(m => _monthLabel(m));
+    const cancelDs = [{ label: 'Cancelamentos', color: '#ef4444', data: sortedMes.map(m => cancelByMes[m] || 0) }];
+
+    return `
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:18px 22px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+            <div style="font-size:.7rem;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;border-bottom:2px solid #fee2e2;padding-bottom:8px;">
+                🚨 Cancelamentos e Negativações (últimos 3 meses)
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+                <div>
+                    <div style="font-size:.68rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📍 Por Cidade</div>
+                    ${cidadesHtml}
+                </div>
+                <div>
+                    <div style="font-size:.68rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">🏘️ Por Bairro</div>
+                    ${bairrosHtml}
+                </div>
+            </div>
+            <div style="border-top:1px solid #f3f4f6;padding-top:14px;">
+                <div style="font-size:.68rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">📊 Evolução mensal — cancelamentos (12 meses)</div>
+                ${_barSVGCount(labels, cancelDs, { h: 160 })}
+            </div>
+        </div>`;
+}
+
+// ── MRR + crescimento financeiro ──────────────────────────────────────────────
+function _painelFinanceiro(p) {
+    if (!p || p.error) return '';
+    const allMes = new Set((p.mrr_ev || []).map(r => r.mes));
+    const sortedMes = [...allMes].sort();
+    const mrrByMes = Object.fromEntries((p.mrr_ev || []).map(r => [r.mes, r.receita]));
+    const labels = sortedMes.map(m => _monthLabel(m));
+    const mrrDs  = [{ label: 'MRR (Recebido)', color: '#1d4ed8', data: sortedMes.map(m => mrrByMes[m] || 0) }];
+
+    return `
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:18px 22px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+            <div style="font-size:.7rem;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;border-bottom:2px solid #dbeafe;padding-bottom:8px;">
+                💰 Receita Mensal — MRR (12 meses)
+            </div>
+            ${_barSVG(labels, mrrDs, { h: 200 })}
+        </div>`;
+}
+
+// ── Operacional: OS + Atendimentos ────────────────────────────────────────────
+function _painelOperacional(p) {
+    if (!p || p.error) return '';
+    const os    = p.os    || { total: 0, abertas: 0 };
+    const atend = p.atendimentos || { mes: 0, ant: 0 };
+    return `
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+            ${_kpi('🔧','OS abertas', _fmt(os.abertas),
+                `Total no banco: ${_fmt(os.total)}`,
+                os.abertas > 50 ? '#dc2626' : '#6b7280', '#8b5cf6')}
+            ${_kpi('🎧','Atendimentos este mês', _fmt(atend.mes),
+                `vs mês anterior: ${_pct(atend.mes, atend.ant)}`,
+                '#6b7280', '#0ea5e9')}
+        </div>`;
+}
+
 // ── Main render ───────────────────────────────────────────────────────────────
 export async function renderROIDashboard(container) {
     if (!container) return;
@@ -278,16 +398,18 @@ export async function renderROIDashboard(container) {
             <div style="text-align:center;color:#9ca3af;padding:40px;font-size:.95rem;">⏳ Carregando Dashboard ROI...</div>
         </div>`;
 
-    let cfg, stats, vendasStats;
+    let cfg, stats, vendasStats, painel;
     try {
-        const [rc, rs, rv] = await Promise.all([
+        const [rc, rs, rv, rp] = await Promise.all([
             fetch('/api/roi/config'),
             fetch('/api/roi/stats'),
             fetch('/api/roi/vendas/stats'),
+            fetch('/api/painel/resumo'),
         ]);
         cfg         = await rc.json();
         stats       = await rs.json();
         vendasStats = rv.ok ? await rv.json() : { error: 'Falha ao carregar dados de vendas' };
+        painel      = rp.ok ? await rp.json() : null;
     } catch (e) {
         container.innerHTML = `<div style="padding:40px;text-align:center;color:#ef4444;">Erro ao carregar dados: ${e.message}</div>`;
         return;
@@ -335,13 +457,23 @@ export async function renderROIDashboard(container) {
             <!-- Header -->
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
                 <div>
-                    <h2 style="font-size:1.2rem;font-weight:800;color:#1e3a5f;margin:0;">💡 Dashboard ROI — Valor do Sistema</h2>
-                    <div style="font-size:.75rem;color:#6b7280;margin-top:3px;">Valor estimado gerado pela equipe utilizando o sistema</div>
+                    <h2 style="font-size:1.2rem;font-weight:800;color:#1e3a5f;margin:0;">📊 Painel Executivo</h2>
+                    <div style="font-size:.75rem;color:#6b7280;margin-top:3px;">Visão consolidada: MRR · Clientes · Cancelamentos · ROI Cobranças · Vendas · Financeiro</div>
                 </div>
                 <button onclick="window._roiRefresh && window._roiRefresh()"
                     style="font-size:.75rem;border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;color:#374151;">🔄 Atualizar</button>
             </div>
 
+            <!-- Visão Geral da base -->
+            ${_painelGlobal(painel, vendasStats, d)}
+
+            <!-- Alertas Operacionais -->
+            ${_painelOperacional(painel)}
+
+            <!-- ROI cobranças — KPI cards (separados da visão geral) -->
+            <div style="font-size:.68rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #e5e7eb;">
+                💡 ROI Cobranças — Valor Gerado pela Equipe
+            </div>
             <!-- KPI cards -->
             <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
                 ${_kpi('💰','Valor recuperado — este mês', _fmtBRL(d.mes_atual.valor_total),
@@ -380,6 +512,12 @@ export async function renderROIDashboard(container) {
 
             <!-- Seção Vendas -->
             ${_vendasSection(vendasStats)}
+
+            <!-- Cancelamentos / Churn -->
+            ${_painelCancelamentos(painel)}
+
+            <!-- MRR evolution -->
+            ${_painelFinanceiro(painel)}
 
             <!-- Disclaimer -->
             <div style="font-size:.7rem;color:#9ca3af;text-align:center;padding:8px;border-top:1px solid #e5e7eb;">
