@@ -148,41 +148,6 @@ function _breakdown(d, cfg) {
         </table>`;
 }
 
-// ── Config panel ──────────────────────────────────────────────────────────────
-function _configPanel(cfg, isAdmin) {
-    if (!isAdmin) return '';
-    return `
-        <div id="roi-config-panel" style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:18px 22px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;cursor:pointer;" onclick="document.getElementById('roi-cfg-body').style.display=document.getElementById('roi-cfg-body').style.display==='none'?'block':'none'">
-                <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;">⚙️ Parâmetros de Cálculo <span style="font-weight:400;color:#9ca3af;">(clique para expandir)</span></div>
-                <span id="roi-cfg-chev" style="color:#9ca3af;">▾</span>
-            </div>
-            <div id="roi-cfg-body" style="display:none;">
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:14px;">
-                    ${[
-                        { key:'custo_equipamento',      label:'Custo por equipamento perdido (R$)',      desc:'Valor que a empresa perde por equip. não recuperado' },
-                        { key:'multa_equipamento',      label:'Multa por equip. não devolvido (R$)',     desc:'Valor de multa cobrado do cliente' },
-                        { key:'ticket_medio_cobranca',  label:'Ticket médio de cobrança (R$)',           desc:'Valor médio da fatura que se recupera por contato' },
-                        { key:'mensalidade_media',      label:'Mensalidade média (R$)',                  desc:'Mensalidade média dos contratos ativos' },
-                        { key:'taxa_confirmacao_pagou', label:'Taxa de confirmação "pagou" (0–1)',        desc:'Ex: 0.85 = 85% dos "pagou" foram de fato pagos' },
-                        { key:'custo_operacional_mes',  label:'Custo operacional mensal (R$)',           desc:'Custo total da equipe/sistema por mês (para ROI)' },
-                    ].map(f => `
-                        <div>
-                            <label style="font-size:.72rem;font-weight:600;color:#374151;display:block;margin-bottom:3px;">${f.label}</label>
-                            <input id="roi-cfg-${f.key}" type="number" step="0.01" value="${cfg[f.key]}"
-                                style="width:100%;border:1px solid #d1d5db;border-radius:7px;padding:6px 10px;font-size:.8rem;outline:none;box-sizing:border-box;">
-                            <div style="font-size:.65rem;color:#9ca3af;margin-top:2px;">${f.desc}</div>
-                        </div>
-                    `).join('')}
-                </div>
-                <button id="roi-cfg-save" style="background:#1e3a5f;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:.8rem;font-weight:600;cursor:pointer;">
-                    💾 Salvar parâmetros
-                </button>
-                <span id="roi-cfg-status" style="font-size:.75rem;margin-left:10px;color:#6b7280;"></span>
-            </div>
-        </div>`;
-}
-
 // ── Main render ───────────────────────────────────────────────────────────────
 export async function renderROIDashboard(container) {
     if (!container) return;
@@ -204,7 +169,6 @@ export async function renderROIDashboard(container) {
         return;
     }
 
-    const isAdmin = window._currentUser?.username === 'admin' || window._currentUser?.is_admin;
     const d = stats;
 
     // Monthly bar chart data
@@ -254,9 +218,6 @@ export async function renderROIDashboard(container) {
                     style="font-size:.75rem;border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;color:#374151;">🔄 Atualizar</button>
             </div>
 
-            <!-- Config panel (admin only) -->
-            ${_configPanel(cfg, isAdmin)}
-
             <!-- KPI cards -->
             <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
                 ${_kpi('💰','Valor recuperado — este mês', _fmtBRL(d.mes_atual.valor_total),
@@ -297,34 +258,10 @@ export async function renderROIDashboard(container) {
             <div style="font-size:.7rem;color:#9ca3af;text-align:center;padding:8px;border-top:1px solid #e5e7eb;">
                 ⚠️ Valores <strong>estimados</strong> com base nos resultados registrados pela equipe.
                 Cobranças confirmadas têm alta confiança; mensagens e retenções são projeções estatísticas.
-                Configure os parâmetros acima para ajustar à realidade da empresa.
+                Configure os parâmetros em ⚙️ Configurações → aba 💡 ROI para ajustar à realidade da empresa.
             </div>
 
         </div>`;
 
-    // Wire up refresh
     window._roiRefresh = () => renderROIDashboard(container);
-
-    // Wire up config save (admin)
-    if (isAdmin) {
-        document.getElementById('roi-cfg-save')?.addEventListener('click', async () => {
-            const status = document.getElementById('roi-cfg-status');
-            const keys = ['custo_equipamento','multa_equipamento','ticket_medio_cobranca','mensalidade_media','taxa_confirmacao_pagou','custo_operacional_mes'];
-            const body = {};
-            keys.forEach(k => { body[k] = parseFloat(document.getElementById(`roi-cfg-${k}`)?.value || 0); });
-            status.textContent = '⏳ Salvando...';
-            try {
-                const res = await fetch('/api/roi/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-                const data = await res.json();
-                if (data.ok) {
-                    status.textContent = '✅ Salvo! Atualizando...';
-                    setTimeout(() => renderROIDashboard(container), 600);
-                } else {
-                    status.textContent = '❌ ' + (data.error || 'Erro');
-                }
-            } catch (e) {
-                status.textContent = '❌ Erro de conexão';
-            }
-        });
-    }
 }
