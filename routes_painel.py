@@ -4,13 +4,9 @@ GET /api/painel/resumo — snapshot consolidado: MRR, contratos, cancelamentos,
                           negativações, OS, atendimentos (tudo numa query passada)
 """
 import json as _json
-import sqlite3 as _sqlite3
-from pathlib import Path as _Path
 from flask import Blueprint, jsonify
 from flask_login import current_user
 from database import get_db_connection as get_db
-
-_HISTORICO_DB = _Path(r"C:\Users\User\Desktop\Arquivos e Programas Área Trabalho\Assistente\historico.db")
 
 painel_bp = Blueprint('painel_bp', __name__)
 
@@ -196,32 +192,24 @@ def api_painel_resumo():
             except Exception:
                 pass
 
-        # ── ChatMix — lê do historico.db do Assistente (somente leitura) ────────
-        chatmix = None
-        try:
-            if _HISTORICO_DB.exists():
-                _hconn = _sqlite3.connect(f"file:{_HISTORICO_DB}?mode=ro", uri=True, timeout=5)
-                _hconn.row_factory = _sqlite3.Row
-                _row = _hconn.execute(
-                    "SELECT criado_em, payload FROM execucoes ORDER BY id DESC LIMIT 1"
-                ).fetchone()
-                if _row:
-                    _pl = _json.loads(_row['payload'])
-                    _cm = _pl.get('metricas', {}).get('chatmix', {})
-                    chatmix = {
-                        'criado_em':          _row['criado_em'],
-                        'encerrados':         _cm.get('encerrados', 0),
-                        'em_atendimento':     (_cm.get('agora') or {}).get('em_atendimento', 0),
-                        'em_automacao':       (_cm.get('agora') or {}).get('em_automacao', 0),
-                        'fila_espera':        (_cm.get('agora') or {}).get('fila_espera', 0),
-                        'duracao_media_min':  _cm.get('duracao_media_min'),
-                        'por_departamento':   _cm.get('por_departamento') or {},
-                        'principais_motivos': _cm.get('principais_motivos') or {},
-                        'por_canal':          _cm.get('por_canal') or {},
-                    }
-                _hconn.close()
-        except Exception:
-            pass
+        # ── Atendimentos (Filial 2) ───────────────────────────────────────────
+        atend = {'mes': 0, 'ant': 0}
+        if _table_exists(conn, 'Atendimentos'):
+            try:
+                atend_cols = [r[1] for r in conn.execute("PRAGMA table_info(Atendimentos)").fetchall()]
+                dc = 'Data_abertura' if 'Data_abertura' in atend_cols else 'Data'
+                fa = 'Filial' if 'Filial' in atend_cols else None
+                fil_a = "AND Filial = 2" if fa else ""
+                r = dict(conn.execute(f"""
+                    SELECT
+                        COALESCE(SUM(CASE WHEN strftime('%Y-%m', {dc}) = strftime('%Y-%m','now') THEN 1 ELSE 0 END), 0) AS mes,
+                        COALESCE(SUM(CASE WHEN strftime('%Y-%m', {dc}) = strftime('%Y-%m', date('now','-1 month')) THEN 1 ELSE 0 END), 0) AS ant
+                    FROM Atendimentos
+                    WHERE 1=1 {fil_a}
+                """).fetchone())
+                atend = {'mes': r['mes'], 'ant': r['ant']}
+            except Exception:
+                pass
 
         return _json.dumps({
             'mrr':           mrr,
@@ -235,7 +223,6 @@ def api_painel_resumo():
             'cancel_ev':     cancel_ev,
             'os':            os_data,
             'os_assuntos':   os_assuntos,
-            'chatmix':       chatmix,
             'atendimentos':  atend,
         }, ensure_ascii=False), 200, {'Content-Type': 'application/json'}
     except Exception as e:
