@@ -294,8 +294,22 @@ function _painelGlobal(p, vd, roi) {
                 ${_kpi('⚠️','Negativações este mês', _fmt(p.negativacoes.mes),
                     `vs mês anterior: ${_pct(p.negativacoes.mes, p.negativacoes.ant)}`,
                     p.negativacoes.mes <= p.negativacoes.ant ? '#16a34a' : '#dc2626', '#f59e0b')}
-                ${_kpi('💸','Faturas em aberto', _fmtBRL(m.aberto_valor),
-                    `${_fmt(m.aberto_qty)} faturas pendentes`, '#dc2626', '#dc2626')}
+                <div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:18px 20px;flex:1;min-width:155px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-top:3px solid #dc2626;">
+                    <div style="font-size:1.4rem;margin-bottom:4px;">💸</div>
+                    <div style="font-size:.68rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;">Faturas em aberto</div>
+                    <div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">
+                        <div>
+                            <div style="font-size:.6rem;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Mês atual</div>
+                            <div style="font-size:1.1rem;font-weight:800;color:#1e3a5f;line-height:1.1;">${_fmtBRL(m.aberto_mes_valor)}</div>
+                            <div style="font-size:.68rem;color:#dc2626;">${_fmt(m.aberto_mes_qty)} faturas</div>
+                        </div>
+                        <div style="border-top:1px solid #f3f4f6;padding-top:4px;">
+                            <div style="font-size:.6rem;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Mês anterior</div>
+                            <div style="font-size:1.1rem;font-weight:800;color:#374151;line-height:1.1;">${_fmtBRL(m.aberto_ant_valor)}</div>
+                            <div style="font-size:.68rem;color:#9ca3af;">${_fmt(m.aberto_ant_qty)} faturas</div>
+                        </div>
+                    </div>
+                </div>
                 ${_kpi('📦','Novas vendas este mês', _fmt(nv),
                     `vs mês anterior: ${_pct(nv, nvAnt)}`,
                     nv >= nvAnt ? '#16a34a' : '#dc2626', '#10b981')}

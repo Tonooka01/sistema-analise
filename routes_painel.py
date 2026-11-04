@@ -40,11 +40,17 @@ def api_painel_resumo():
                     AND strftime('%Y-%m', Data_pagamento) = strftime('%Y-%m', date('now','-1 month'))
                     THEN Valor_recebido ELSE 0 END), 0) AS mrr_ant,
                 COALESCE(SUM(CASE WHEN Status IN ('A receber','Aberto')
-                    AND strftime('%Y-%m', Vencimento) >= strftime('%Y-%m', date('now','-1 month'))
-                    THEN Valor ELSE 0 END), 0) AS aberto_valor,
+                    AND strftime('%Y-%m', Vencimento) = strftime('%Y-%m','now')
+                    THEN Valor ELSE 0 END), 0) AS aberto_mes_valor,
                 COUNT(CASE WHEN Status IN ('A receber','Aberto')
-                    AND strftime('%Y-%m', Vencimento) >= strftime('%Y-%m', date('now','-1 month'))
-                    THEN 1 END) AS aberto_qty
+                    AND strftime('%Y-%m', Vencimento) = strftime('%Y-%m','now')
+                    THEN 1 END) AS aberto_mes_qty,
+                COALESCE(SUM(CASE WHEN Status IN ('A receber','Aberto')
+                    AND strftime('%Y-%m', Vencimento) = strftime('%Y-%m', date('now','-1 month'))
+                    THEN Valor ELSE 0 END), 0) AS aberto_ant_valor,
+                COUNT(CASE WHEN Status IN ('A receber','Aberto')
+                    AND strftime('%Y-%m', Vencimento) = strftime('%Y-%m', date('now','-1 month'))
+                    THEN 1 END) AS aberto_ant_qty
             FROM Contas_a_Receber
             WHERE Filial = 2
         """).fetchone())
