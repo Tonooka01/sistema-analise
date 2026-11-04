@@ -5727,7 +5727,7 @@ async function renderAcompanhamentoTab() {
 
     pane.innerHTML = `
     <div class="p-4">
-      <h2 class="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-100">Acompanhamento de Clientes</h2>
+      <h2 class="text-lg font-bold mb-3 text-blue-800 dark:text-blue-300">Acompanhamento de Clientes</h2>
       <div class="flex flex-wrap gap-3 mb-4 items-end">
         <div>
           <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Status Soneca</label>
@@ -5821,6 +5821,21 @@ function _renderAcompTable() {
             : `<span class="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-700">Até ${r.snooze_ate}</span>`;
     };
 
+    const resultadoBadge = (v) => {
+        const map = {
+            retido:            ['bg-green-100 text-green-700',  'retido'],
+            resolvido:         ['bg-blue-100 text-blue-700',    'resolvido'],
+            pendente:          ['bg-yellow-100 text-yellow-700','pendente'],
+            cancelou:          ['bg-red-100 text-red-700',      'cancelou'],
+            nao_atendeu:       ['bg-gray-100 text-gray-600',    'não atendeu'],
+            mensagem_enviada:  ['bg-purple-100 text-purple-700','msg enviada'],
+            pagou:             ['bg-emerald-100 text-emerald-700','pagou'],
+            sucesso:           ['bg-teal-100 text-teal-700',    'sucesso'],
+        };
+        const [cls, label] = map[v] || ['bg-gray-100 text-gray-500', v || '–'];
+        return `<span class="px-1.5 py-0.5 rounded text-xs font-medium ${cls}">${label}</span>`;
+    };
+
     const esc = s => (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
     const acoesHeader = isAdmin ? '<th class="px-3 py-2 border-b border-gray-200">Ações</th>' : '';
@@ -5854,7 +5869,7 @@ function _renderAcompTable() {
           <td class="px-3 py-2 border-b border-gray-100">${esc(r.cliente)}</td>
           <td class="px-3 py-2 border-b border-gray-100">${esc(r.cidade)}</td>
           <td class="px-3 py-2 border-b border-gray-100">${esc(r.tipo_acao)}</td>
-          <td class="px-3 py-2 border-b border-gray-100">${esc(r.resultado)}</td>
+          <td class="px-3 py-2 border-b border-gray-100">${resultadoBadge(r.resultado)}</td>
           <td class="px-3 py-2 border-b border-gray-100 max-w-xs truncate" title="${esc(r.observacao)}">${esc(r.observacao)}</td>
           <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">${esc((r.data_registro||'').slice(0,16))}</td>
           <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">${esc(r.data_retorno||'–')}</td>
@@ -5929,10 +5944,12 @@ window._acompEdit = function(id) {
             <input id="ae-obs" type="text" value="${(r.observacao||'').replace(/"/g,'&quot;')}" class="border rounded px-2 py-1 text-sm w-full">
           </div>
           <button onclick="_acompEditSave(${id})" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded">Salvar</button>
-          <button onclick="_loadAcompanhamento()" class="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded">Cancelar</button>
+          <button onclick="_acompCancel()" class="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded">Cancelar</button>
         </div>
       </td>`;
 };
+
+window._acompCancel = function() { _renderAcompTable(); };
 
 window._acompEditSave = async function(id) {
     const body = {
