@@ -23,11 +23,11 @@ def _cm_creds():
         from database import get_db_connection as _gdb
         _c = _gdb()
         rows = {r[0]: r[1] for r in _c.execute(
-            "SELECT key, value FROM Settings WHERE key IN ('chatmix_url','chatmix_token')"
+            "SELECT key, value FROM Settings WHERE key IN ('chatmix_url','chatmix_api_token')"
         ).fetchall()}
         _c.close()
         url   = (rows.get('chatmix_url') or _os.environ.get('CHATMIX_URL') or '').rstrip('/')
-        token = rows.get('chatmix_token') or _os.environ.get('CHATMIX_TOKEN') or ''
+        token = rows.get('chatmix_api_token') or _os.environ.get('CHATMIX_TOKEN') or ''
         if url and not url.endswith('/api-v2/public-api'):
             url = url.rstrip('/') + '/api-v2/public-api'
         return url, token
