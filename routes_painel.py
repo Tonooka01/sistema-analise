@@ -136,7 +136,7 @@ def api_painel_resumo():
                 os_data = dict(conn.execute(f"""
                     SELECT COUNT(*) AS total, COUNT(*) AS abertas
                     FROM OS
-                    WHERE {sc} NOT IN ('Finalizado','Cancelado','F','C','Cancelada') {fil}
+                    WHERE {sc} NOT IN ('Finalizada','Finalizado','Cancelada','Cancelado','F','C') {fil}
                 """).fetchone())
             except Exception:
                 pass
