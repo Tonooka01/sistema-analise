@@ -216,24 +216,53 @@ def api_painel_resumo():
                 pass
 
         # ── ChatMix — historico.db do Assistente (somente leitura) ───────────
+        from datetime import date as _date, timedelta as _td
         chatmix = None
         try:
             if _HISTORICO_DB.exists():
-                _hc = _sqlite3.connect(f"file:{_HISTORICO_DB}?mode=ro", uri=True, timeout=5)
+                _hc = _sqlite3.connect(str(_HISTORICO_DB), timeout=5)
                 _hc.row_factory = _sqlite3.Row
-                _hr = _hc.execute("SELECT criado_em, payload FROM execucoes ORDER BY id DESC LIMIT 1").fetchone()
-                if _hr:
-                    _cm = _json.loads(_hr['payload']).get('metricas', {}).get('chatmix', {})
-                    chatmix = {
-                        'criado_em':          _hr['criado_em'],
-                        'encerrados':         _cm.get('encerrados', 0),
-                        'em_atendimento':     (_cm.get('agora') or {}).get('em_atendimento', 0),
-                        'em_automacao':       (_cm.get('agora') or {}).get('em_automacao', 0),
-                        'fila_espera':        (_cm.get('agora') or {}).get('fila_espera', 0),
-                        'duracao_media_min':  _cm.get('duracao_media_min'),
-                        'por_departamento':   _cm.get('por_departamento') or {},
-                        'principais_motivos': _cm.get('principais_motivos') or {},
-                    }
+                _hrows = _hc.execute(
+                    "SELECT criado_em, periodo, payload FROM execucoes ORDER BY id DESC"
+                ).fetchall()
+
+                # Agrupa por data: para cada dia guarda a execução com maior encerrados
+                _daily = {}
+                for _hr in _hrows:
+                    try:
+                        _pl  = _json.loads(_hr['payload'])
+                        _cm  = _pl.get('metricas', {}).get('chatmix', {})
+                        _enc = int(_cm.get('encerrados') or 0)
+                        _d   = _hr['criado_em'][:10]
+                        if _d not in _daily or _enc > _daily[_d]['encerrados']:
+                            _daily[_d] = {'encerrados': _enc, 'criado_em': _hr['criado_em'],
+                                          'periodo': _hr['periodo'], 'cm': _cm}
+                    except Exception:
+                        pass
+
+                _hoje       = _date.today().isoformat()
+                _semana_ant = (_date.today() - _td(days=7)).isoformat()
+                _hoje_d     = _daily.get(_hoje)
+                _ant_d      = _daily.get(_semana_ant)
+
+                # Dados ao vivo vêm da execução mais recente
+                _latest_cm  = _daily[max(_daily)] ['cm'] if _daily else {}
+
+                DIAS_PT = ['segunda','terça','quarta','quinta','sexta','sábado','domingo']
+                _dia_nome = DIAS_PT[_date.today().weekday()]
+
+                chatmix = {
+                    'criado_em':          _latest_cm and _daily[max(_daily)]['criado_em'],
+                    'hoje_enc':           _hoje_d['encerrados'] if _hoje_d else None,
+                    'ant_enc':            _ant_d['encerrados']  if _ant_d  else None,
+                    'dia_nome':           _dia_nome,
+                    'em_atendimento':     (_latest_cm.get('agora') or {}).get('em_atendimento', 0),
+                    'em_automacao':       (_latest_cm.get('agora') or {}).get('em_automacao', 0),
+                    'fila_espera':        (_latest_cm.get('agora') or {}).get('fila_espera', 0),
+                    'duracao_media_min':  _latest_cm.get('duracao_media_min'),
+                    'por_departamento':   _latest_cm.get('por_departamento') or {},
+                    'principais_motivos': _latest_cm.get('principais_motivos') or {},
+                }
                 _hc.close()
         except Exception:
             pass

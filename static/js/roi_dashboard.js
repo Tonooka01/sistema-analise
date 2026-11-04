@@ -493,22 +493,72 @@ function _chatmixCard(cm) {
         ? new Date(cm.criado_em.replace(' ','T')).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
         : '';
 
+    // Comparativo hoje vs mesma semana passada
+    const hoje    = cm.hoje_enc != null ? cm.hoje_enc : null;
+    const antSem  = cm.ant_enc  != null ? cm.ant_enc  : null;
+    const diaNome = cm.dia_nome || '';
+    let comparativo = '';
+    if (hoje !== null && antSem !== null) {
+        const diff = hoje - antSem;
+        const sinal = diff > 0 ? '+' : '';
+        const cor = diff > 0 ? '#dc2626' : diff < 0 ? '#16a34a' : '#6b7280';
+        comparativo = `<div style="display:flex;align-items:center;gap:14px;background:#f8fafc;border-radius:12px;padding:10px 14px;margin-bottom:10px;">
+            <div style="text-align:center;">
+                <div style="font-size:1.5rem;font-weight:800;color:#0ea5e9;">${hoje}</div>
+                <div style="font-size:.68rem;color:#64748b;">${diaNome} atual</div>
+            </div>
+            <div style="color:#cbd5e1;font-size:1.2rem;">vs</div>
+            <div style="text-align:center;">
+                <div style="font-size:1.5rem;font-weight:800;color:#94a3b8;">${antSem}</div>
+                <div style="font-size:.68rem;color:#64748b;">${diaNome} passado</div>
+            </div>
+            <div style="margin-left:auto;text-align:center;">
+                <div style="font-size:1.1rem;font-weight:700;color:${cor};">${sinal}${diff}</div>
+                <div style="font-size:.63rem;color:#94a3b8;">variação</div>
+            </div>
+        </div>`;
+    } else if (hoje !== null) {
+        comparativo = `<div style="background:#f8fafc;border-radius:12px;padding:10px 14px;margin-bottom:10px;">
+            <div style="font-size:1.5rem;font-weight:800;color:#0ea5e9;">${hoje}</div>
+            <div style="font-size:.68rem;color:#64748b;">${diaNome} atual · sem dado da semana passada ainda</div>
+        </div>`;
+    } else {
+        comparativo = `<div style="font-size:.8rem;color:#9ca3af;margin-bottom:8px;">Sem dados de hoje ainda — última ref.: ${dtStr}</div>`;
+    }
+
+    // Badges ao vivo
+    const badges = `<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <div style="text-align:center;background:#f0fdf4;border-radius:10px;padding:5px 12px;">
+            <div style="font-size:1rem;font-weight:700;color:#15803d;">${cm.em_atendimento}</div>
+            <div style="font-size:.62rem;color:#166534;">Em atend.</div>
+        </div>
+        <div style="text-align:center;background:#fffbeb;border-radius:10px;padding:5px 12px;">
+            <div style="font-size:1rem;font-weight:700;color:#b45309;">${cm.fila_espera}</div>
+            <div style="font-size:.62rem;color:#92400e;">Fila</div>
+        </div>
+        <div style="text-align:center;background:#f1f5f9;border-radius:10px;padding:5px 12px;">
+            <div style="font-size:1rem;font-weight:700;color:#334155;">${cm.em_automacao}</div>
+            <div style="font-size:.62rem;color:#475569;">Automação</div>
+        </div>
+    </div>`;
+
+    // Departamentos
     const deptos = Object.entries(cm.por_departamento || {}).sort((a,b)=>b[1]-a[1]).slice(0,5);
     const maxDep = deptos.length ? deptos[0][1] : 1;
     const deptoRows = deptos.map(([nome,qty]) => {
         const pct = Math.round((qty/maxDep)*100);
         return `<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
             <span style="font-size:.7rem;color:#374151;min-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${nome}">${nome}</span>
-            <div style="flex:1;background:#e5e7eb;border-radius:4px;height:9px;overflow:hidden;">
+            <div style="flex:1;background:#e5e7eb;border-radius:4px;height:8px;overflow:hidden;">
                 <div style="width:${pct}%;background:#0ea5e9;height:100%;border-radius:4px;"></div>
             </div>
-            <span style="font-size:.72rem;font-weight:600;color:#111827;min-width:24px;text-align:right;">${qty}</span>
+            <span style="font-size:.7rem;font-weight:600;color:#111827;min-width:22px;text-align:right;">${qty}</span>
         </div>`;
     }).join('');
 
     const motivos = Object.entries(cm.principais_motivos || {}).slice(0,4);
     const chips = motivos.map(([nome,qty]) =>
-        `<span style="display:inline-flex;align-items:center;gap:3px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:20px;padding:2px 7px;font-size:.67rem;color:#0369a1;margin:2px;">${nome} <b>${qty}</b></span>`
+        `<span style="display:inline-flex;align-items:center;gap:3px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:20px;padding:2px 7px;font-size:.66rem;color:#0369a1;margin:2px;">${nome} <b>${qty}</b></span>`
     ).join('');
 
     const durStr = cm.duracao_media_min ? `Duração média: ${Math.round(cm.duracao_media_min)} min` : '';
@@ -517,25 +567,12 @@ function _chatmixCard(cm) {
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
             <span style="font-size:1.3rem;">🎧</span>
             <span style="font-weight:700;font-size:.95rem;color:#111827;">Atendimentos ChatMix</span>
-            <span style="margin-left:auto;font-size:1.8rem;font-weight:800;color:#0ea5e9;">${_fmt(cm.encerrados)}</span>
         </div>
-        <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-            <div style="text-align:center;background:#f0fdf4;border-radius:10px;padding:5px 12px;">
-                <div style="font-size:1.05rem;font-weight:700;color:#15803d;">${cm.em_atendimento}</div>
-                <div style="font-size:.63rem;color:#166534;">Em atend.</div>
-            </div>
-            <div style="text-align:center;background:#fffbeb;border-radius:10px;padding:5px 12px;">
-                <div style="font-size:1.05rem;font-weight:700;color:#b45309;">${cm.fila_espera}</div>
-                <div style="font-size:.63rem;color:#92400e;">Fila</div>
-            </div>
-            <div style="text-align:center;background:#f1f5f9;border-radius:10px;padding:5px 12px;">
-                <div style="font-size:1.05rem;font-weight:700;color:#334155;">${cm.em_automacao}</div>
-                <div style="font-size:.63rem;color:#475569;">Automação</div>
-            </div>
-        </div>
-        ${deptoRows ? `<div style="font-size:.68rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;">Por departamento</div>${deptoRows}` : ''}
-        ${chips ? `<div style="margin-top:7px;font-size:.68rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;">Principais motivos</div><div>${chips}</div>` : ''}
-        <div style="margin-top:7px;font-size:.67rem;color:#9ca3af;">${[durStr, dtStr ? 'Ref.: '+dtStr : ''].filter(Boolean).join(' · ')}</div>
+        ${comparativo}
+        ${badges}
+        ${deptoRows ? `<div style="font-size:.67rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;">Por departamento</div>${deptoRows}` : ''}
+        ${chips ? `<div style="margin-top:7px;font-size:.67rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;">Principais motivos</div><div>${chips}</div>` : ''}
+        <div style="margin-top:7px;font-size:.66rem;color:#9ca3af;">${[durStr, dtStr ? 'Ref.: '+dtStr : ''].filter(Boolean).join(' · ')}</div>
     </div>`;
 }
 
