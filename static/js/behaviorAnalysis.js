@@ -207,6 +207,9 @@ export function handleBehaviorTabChange(tabName) {
             case 'retorno':
                 renderRetornoTab();
                 break;
+            case 'dashboard_trabalho':
+                renderDashboardTrabalhoTab();
+                break;
             default:
                 console.warn(`Aba de comportamento desconhecida: ${tabName}`);
                 if (targetPane) targetPane.innerHTML = `<p class="text-red-500">Conteúdo para aba "${tabName}" não definido.</p>`;
@@ -5973,3 +5976,374 @@ document.addEventListener('click', e => {
     const { colab, dia, mes, tbl } = cell.dataset;
     if (colab && dia && mes) window._retColabCellModal(colab, dia, mes, tbl || 'producao');
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Dashboard de Trabalho
+// ─────────────────────────────────────────────────────────────────────────────
+async function renderDashboardTrabalhoTab() {
+    const pane = document.getElementById('tab-content-dashboard_trabalho');
+    if (!pane) return;
+    pane.innerHTML = '<div class="p-8 text-center text-gray-400" style="font-size:1rem;">⏳ Carregando dashboard...</div>';
+
+    let d;
+    try {
+        const res = await fetch('/api/behavior/dashboard');
+        if (!res.ok) throw new Error(await res.text());
+        d = await res.json();
+    } catch (e) {
+        pane.innerHTML = `<div class="p-8 text-center text-red-500">Erro ao carregar dashboard: ${e.message}</div>`;
+        return;
+    }
+
+    // Helpers
+    const fmt   = n => (n ?? 0).toLocaleString('pt-BR');
+    const delta = (a, b) => {
+        if (!b) return a > 0 ? `+${fmt(a)}` : '—';
+        const diff = a - b;
+        const pct  = b ? Math.round((diff / b) * 100) : 0;
+        const sign = diff >= 0 ? '+' : '';
+        return `${sign}${fmt(diff)} (${sign}${pct}%)`;
+    };
+    const deltaClass = (a, b) => (a >= b) ? 'color:#16a34a' : 'color:#dc2626';
+
+    const TIPO_ICON = { ligacao:'📞', whatsapp:'💬', visita:'🏠', email:'✉️' };
+    const TIPO_LABEL = { ligacao:'Ligação', whatsapp:'WhatsApp', visita:'Visita', email:'E-mail' };
+    const RES_LABEL = {
+        sucesso:'✅ Sucesso', nao_atendeu:'🔇 Não atendeu', cancelou:'❌ Cancelou',
+        agendou:'📅 Agendou', pagou:'💰 Pagou', prometeu_pagar:'🤝 Prometeu pagar',
+        mensagem_enviada:'💬 Msg enviada', sem_resultado:'— Sem resultado',
+    };
+    const TIPO_COLOR = { ligacao:'#3b82f6', whatsapp:'#22c55e', visita:'#f59e0b', email:'#8b5cf6' };
+
+    // ── KPI top cards ──
+    const kpiCards = [
+        { label:'Hoje',           val: d.hoje.total,  sub: `vs ontem: ${delta(d.hoje.total, d.ontem.total)}`,       subStyle: deltaClass(d.hoje.total, d.ontem.total),    icon:'📋', accent:'#3b82f6' },
+        { label:'Esta semana',    val: d.semana.total, sub: `vs sem. passada: ${delta(d.semana.total, d.semana_passada.total)}`, subStyle: deltaClass(d.semana.total, d.semana_passada.total), icon:'📅', accent:'#8b5cf6' },
+        { label:'Este mês',       val: d.mes.total,   sub: `vs mês passado: ${delta(d.mes.total, d.mes_passado.total)}`,  subStyle: deltaClass(d.mes.total, d.mes_passado.total),   icon:'📆', accent:'#0ea5e9' },
+        { label:'Clientes hoje',  val: d.clientes_hoje, sub: `${d.clientes_mes} no mês`, subStyle:'color:#6b7280', icon:'👥', accent:'#10b981' },
+        { label:'Em snooze',      val: d.snooze_ativos, sub:'contratos aguardando retorno', subStyle:'color:#6b7280', icon:'⏱', accent:'#f59e0b' },
+        { label:'Retorno hoje',   val: d.retorno_hoje,  sub: `${d.retorno_semana} nos próx. 7 dias`, subStyle:'color:#6b7280', icon:'📅', accent:'#ef4444' },
+    ];
+
+    const kpiHtml = kpiCards.map(k => `
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;min-width:140px;flex:1;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+            <div style="font-size:1.5rem;margin-bottom:4px;">${k.icon}</div>
+            <div style="font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;">${k.label}</div>
+            <div style="font-size:2rem;font-weight:800;color:${k.accent};line-height:1.1;">${fmt(k.val)}</div>
+            <div style="font-size:.72rem;margin-top:4px;${k.subStyle}">${k.sub}</div>
+        </div>
+    `).join('');
+
+    // ── Timeline sparkline (SVG inline) ──
+    function _sparkline(timeline, users, colors) {
+        if (!timeline.length) return '<div style="color:#9ca3af;font-size:.85rem;text-align:center;padding:20px;">Sem dados nos últimos 30 dias</div>';
+        const W = 700, H = 120, PAD_L = 32, PAD_R = 8, PAD_T = 10, PAD_B = 30;
+        const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
+        const days  = timeline.map(r => r.data);
+        const totals = timeline.map(r => r.total);
+        const maxVal = Math.max(...totals, 1);
+
+        // Build user series
+        const userSeries = (users || []).slice(0, 6).map((u, i) => ({
+            user: u,
+            vals: timeline.map(r => r.por_usuario?.[u] || 0),
+            color: colors[i % colors.length],
+        }));
+
+        // Total area path
+        function _pts(vals) {
+            return vals.map((v, i) => {
+                const x = PAD_L + (i / Math.max(days.length - 1, 1)) * plotW;
+                const y = PAD_T + plotH - (v / maxVal) * plotH;
+                return `${x.toFixed(1)},${y.toFixed(1)}`;
+            }).join(' ');
+        }
+
+        const totalPts = _pts(totals);
+        // Area fill path
+        const firstX = PAD_L, lastX = PAD_L + plotW;
+        const baseY  = PAD_T + plotH;
+        const areaPath = `M${firstX},${baseY} L${totalPts.split(' ').map((pt, i) => {
+            if (i === 0) return `${PAD_L},${PAD_T + plotH - (totals[0]/maxVal)*plotH}`;
+            return pt;
+        }).join(' L')} L${lastX},${baseY} Z`;
+
+        // Y axis labels
+        const yLabels = [0, Math.ceil(maxVal/2), maxVal].map(v => {
+            const y = PAD_T + plotH - (v / maxVal) * plotH;
+            return `<text x="${PAD_L - 4}" y="${y + 4}" font-size="9" fill="#9ca3af" text-anchor="end">${v}</text>`;
+        }).join('');
+
+        // X axis labels (every ~5 days)
+        const xLabels = days.filter((_, i) => i % 5 === 0 || i === days.length - 1).map(d => {
+            const idx = days.indexOf(d);
+            const x = PAD_L + (idx / Math.max(days.length - 1, 1)) * plotW;
+            const label = d.slice(5); // MM-DD
+            return `<text x="${x}" y="${PAD_T + plotH + 14}" font-size="9" fill="#9ca3af" text-anchor="middle">${label}</text>`;
+        }).join('');
+
+        // Grid lines
+        const gridLines = [maxVal * 0.25, maxVal * 0.5, maxVal * 0.75, maxVal].map(v => {
+            const y = PAD_T + plotH - (v / maxVal) * plotH;
+            return `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#f3f4f6" stroke-width="1"/>`;
+        }).join('');
+
+        // Per-user lines
+        const userLines = userSeries.map(s => {
+            const pts = s.vals.map((v, i) => {
+                const x = PAD_L + (i / Math.max(days.length - 1, 1)) * plotW;
+                const y = PAD_T + plotH - (v / maxVal) * plotH;
+                return `${x.toFixed(1)},${y.toFixed(1)}`;
+            }).join(' L');
+            return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="4 2" opacity="0.7"/>`;
+        }).join('');
+
+        // Total line
+        const totalLine = `<polyline points="${totalPts}" fill="none" stroke="#3b82f6" stroke-width="2.5"/>`;
+
+        // Legend
+        const legendItems = [
+            `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:.72rem;color:#374151;"><span style="display:inline-block;width:18px;height:3px;background:#3b82f6;border-radius:2px;"></span>Total</span>`,
+            ...userSeries.map(s => `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:.72rem;color:#374151;"><span style="display:inline-block;width:18px;height:2px;background:${s.color};border-radius:2px;opacity:.8;"></span>${s.user}</span>`),
+        ].join('');
+
+        return `
+            <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;overflow:visible;">
+                ${gridLines}
+                ${yLabels}
+                ${xLabels}
+                <path d="${areaPath}" fill="url(#dashGrad)" opacity="0.15"/>
+                <defs>
+                    <linearGradient id="dashGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#3b82f6"/>
+                        <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+                    </linearGradient>
+                </defs>
+                ${userLines}
+                ${totalLine}
+            </svg>
+            <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">${legendItems}</div>
+        `;
+    }
+
+    // ── Bar chart inline SVG ──
+    function _barChart(labels, values, colors, maxLabel) {
+        if (!labels.length) return '<div style="color:#9ca3af;text-align:center;padding:16px;font-size:.85rem;">Sem dados</div>';
+        const maxVal = Math.max(...values, 1);
+        const rows = labels.map((lbl, i) => {
+            const pct = (values[i] / maxVal) * 100;
+            const col = Array.isArray(colors) ? (colors[i % colors.length]) : colors;
+            return `
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+                    <div style="width:${maxLabel || 110}px;font-size:.75rem;color:#374151;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${lbl}">${lbl}</div>
+                    <div style="flex:1;background:#f3f4f6;border-radius:4px;height:18px;overflow:hidden;">
+                        <div style="width:${pct.toFixed(1)}%;background:${col};height:100%;border-radius:4px;transition:width .4s;"></div>
+                    </div>
+                    <div style="width:36px;font-size:.75rem;font-weight:600;color:#374151;text-align:right;">${fmt(values[i])}</div>
+                </div>
+            `;
+        }).join('');
+        return `<div style="padding:4px 0;">${rows}</div>`;
+    }
+
+    // ── Pie donut inline SVG ──
+    function _donut(labels, values, colors) {
+        const total = values.reduce((a, b) => a + b, 0);
+        if (!total) return '<div style="color:#9ca3af;text-align:center;padding:16px;font-size:.85rem;">Sem dados</div>';
+        const R = 48, CX = 60, CY = 60, STR = 22;
+        let angle = -Math.PI / 2;
+        const slices = labels.map((lbl, i) => {
+            const frac  = values[i] / total;
+            const sweep = frac * 2 * Math.PI;
+            const x1 = CX + R * Math.cos(angle);
+            const y1 = CY + R * Math.sin(angle);
+            angle += sweep;
+            const x2 = CX + R * Math.cos(angle);
+            const y2 = CY + R * Math.sin(angle);
+            const large = sweep > Math.PI ? 1 : 0;
+            const col   = colors[i % colors.length];
+            return `<path d="M${CX},${CY} L${x1.toFixed(2)},${y1.toFixed(2)} A${R},${R} 0 ${large},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z"
+                fill="${col}" stroke="#fff" stroke-width="2"/>`;
+        });
+        // inner hole
+        const hole = `<circle cx="${CX}" cy="${CY}" r="${R - STR}" fill="#fff"/>`;
+        const centerTxt = `<text x="${CX}" y="${CY + 4}" text-anchor="middle" font-size="13" font-weight="700" fill="#1f2937">${fmt(total)}</text>`;
+        const legend = labels.map((lbl, i) => `
+            <div style="display:flex;align-items:center;gap:5px;font-size:.72rem;color:#374151;margin-bottom:3px;">
+                <span style="width:10px;height:10px;border-radius:50%;background:${colors[i % colors.length]};display:inline-block;flex-shrink:0;"></span>
+                <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${lbl}">${lbl}</span>
+                <span style="margin-left:auto;font-weight:600;">${fmt(values[i])}</span>
+            </div>
+        `).join('');
+
+        return `
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                <svg viewBox="0 0 120 120" style="width:120px;height:120px;flex-shrink:0;">
+                    ${slices.join('')}${hole}${centerTxt}
+                </svg>
+                <div style="flex:1;min-width:120px;">${legend}</div>
+            </div>
+        `;
+    }
+
+    // ── Prepare chart data ──
+    const userColors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+    const allUsers   = [...new Set([
+        ...Object.keys(d.hoje.por_usuario || {}),
+        ...Object.keys(d.semana.por_usuario || {}),
+        ...Object.keys(d.mes.por_usuario || {}),
+    ])].sort();
+
+    // Tipo breakdown (mes)
+    const tipoLabels = Object.keys(d.mes.por_tipo || {});
+    const tipoVals   = tipoLabels.map(t => d.mes.por_tipo[t]);
+    const tipoColors = tipoLabels.map(t => TIPO_COLOR[t] || '#94a3b8');
+    const tipoDisplay = tipoLabels.map(t => `${TIPO_ICON[t] || ''}${TIPO_LABEL[t] || t}`);
+
+    // Resultado breakdown (mes)
+    const resEntries = Object.entries(d.mes.por_resultado || {}).sort((a,b) => b[1]-a[1]).slice(0, 8);
+    const resLabels  = resEntries.map(([k]) => RES_LABEL[k] || k);
+    const resVals    = resEntries.map(([,v]) => v);
+    const resColors  = ['#10b981','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16'];
+
+    // Ranking table
+    const rankHtml = d.ranking.length ? `
+        <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
+            <thead>
+                <tr style="border-bottom:2px solid #e5e7eb;">
+                    <th style="text-align:left;padding:6px 8px;color:#6b7280;font-size:.7rem;text-transform:uppercase;"># Usuário</th>
+                    <th style="text-align:right;padding:6px 8px;color:#6b7280;font-size:.7rem;">Hoje</th>
+                    <th style="text-align:right;padding:6px 8px;color:#6b7280;font-size:.7rem;">Semana</th>
+                    <th style="text-align:right;padding:6px 8px;color:#6b7280;font-size:.7rem;">Mês</th>
+                    <th style="text-align:right;padding:6px 8px;color:#6b7280;font-size:.7rem;">30 dias</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${d.ranking.map((r, i) => `
+                    <tr style="border-bottom:1px solid #f3f4f6;">
+                        <td style="padding:7px 8px;font-weight:${i<3?'700':'400'};color:${i===0?'#f59e0b':i===1?'#9ca3af':i===2?'#b45309':'#374151'};">
+                            ${i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`} ${r.usuario}
+                        </td>
+                        <td style="text-align:right;padding:7px 8px;font-weight:600;color:#1f2937;">${fmt(r.hoje)}</td>
+                        <td style="text-align:right;padding:7px 8px;color:#374151;">${fmt(r.semana)}</td>
+                        <td style="text-align:right;padding:7px 8px;color:#374151;">${fmt(r.mes)}</td>
+                        <td style="text-align:right;padding:7px 8px;color:#374151;">${fmt(r.total)}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    ` : '<div style="color:#9ca3af;text-align:center;padding:16px;font-size:.85rem;">Sem dados nos últimos 30 dias</div>';
+
+    // User activity today comparison
+    const userTodayHtml = allUsers.length ? allUsers.map((u, i) => ({
+        u, hoje: d.hoje.por_usuario?.[u]||0, ontem: d.ontem.por_usuario?.[u]||0,
+        mes: d.mes.por_usuario?.[u]||0, color: userColors[i % userColors.length],
+    })).sort((a,b) => b.hoje - a.hoje).map(x => `
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid #f3f4f6;">
+            <span style="width:8px;height:8px;border-radius:50%;background:${x.color};display:inline-block;flex-shrink:0;"></span>
+            <span style="flex:1;font-size:.8rem;font-weight:500;color:#1f2937;">${x.u}</span>
+            <span style="font-size:.8rem;font-weight:700;color:#1f2937;width:36px;text-align:right;">${fmt(x.hoje)}</span>
+            <span style="font-size:.7rem;color:#9ca3af;width:50px;text-align:right;">ontem:${fmt(x.ontem)}</span>
+            <span style="font-size:.7rem;color:#6b7280;width:48px;text-align:right;">mês:${fmt(x.mes)}</span>
+        </div>
+    `).join('') : '<div style="color:#9ca3af;text-align:center;padding:16px;font-size:.85rem;">Nenhum usuário</div>';
+
+    // ── Comparativo periodo cards ──
+    const comparCard = (title, cur, prev, label_cur, label_prev) => `
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;flex:1;min-width:200px;">
+            <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:10px;">${title}</div>
+            <div style="display:flex;align-items:flex-end;gap:16px;">
+                <div>
+                    <div style="font-size:.65rem;color:#9ca3af;">${label_cur}</div>
+                    <div style="font-size:1.6rem;font-weight:800;color:#1f2937;">${fmt(cur)}</div>
+                </div>
+                <div style="color:#9ca3af;font-size:1.2rem;">→</div>
+                <div>
+                    <div style="font-size:.65rem;color:#9ca3af;">${label_prev}</div>
+                    <div style="font-size:1.6rem;font-weight:800;color:#9ca3af;">${fmt(prev)}</div>
+                </div>
+                <div style="margin-left:auto;text-align:right;">
+                    <div style="font-size:.7rem;font-weight:700;${deltaClass(cur,prev)}">${delta(cur,prev)}</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // ── Build HTML ──
+    pane.innerHTML = `
+        <div style="padding:20px;background:#f8fafc;min-height:100%;">
+
+            <!-- Header -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px;">
+                <div>
+                    <h2 style="font-size:1.1rem;font-weight:800;color:#1e3a5f;margin:0;">📊 Dashboard de Trabalho</h2>
+                    <div style="font-size:.75rem;color:#6b7280;margin-top:2px;">Acompanhamentos registrados no sistema</div>
+                </div>
+                <button onclick="renderDashboardTrabalhoTab()" style="font-size:.75rem;border:1px solid #d1d5db;background:#fff;border-radius:7px;padding:5px 12px;cursor:pointer;color:#374151;">🔄 Atualizar</button>
+            </div>
+
+            <!-- KPI Cards -->
+            <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+                ${kpiHtml}
+            </div>
+
+            <!-- Comparativo -->
+            <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+                ${comparCard('Semana atual vs. anterior', d.semana.total, d.semana_passada.total, 'Esta semana', 'Semana passada')}
+                ${comparCard('Mês atual vs. anterior', d.mes.total, d.mes_passado.total, 'Este mês', 'Mês passado')}
+            </div>
+
+            <!-- Timeline 30 dias -->
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.05);">
+                <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">📈 Atendimentos nos últimos 30 dias</div>
+                ${_sparkline(d.timeline, allUsers, userColors)}
+            </div>
+
+            <!-- 2 columns: ranking + hoje por usuário -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+
+                <!-- Ranking 30 dias -->
+                <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.05);">
+                    <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">🏆 Ranking (30 dias)</div>
+                    ${rankHtml}
+                </div>
+
+                <!-- Hoje por usuário -->
+                <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.05);">
+                    <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">👥 Hoje por usuário</div>
+                    ${userTodayHtml}
+                </div>
+            </div>
+
+            <!-- 2 columns: por tipo + por resultado -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+
+                <!-- Por tipo de ação (donut) -->
+                <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.05);">
+                    <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">🎯 Por tipo de ação — este mês</div>
+                    ${_donut(tipoDisplay, tipoVals, tipoColors)}
+                </div>
+
+                <!-- Por resultado (barras) -->
+                <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.05);">
+                    <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">📊 Por resultado — este mês</div>
+                    ${_barChart(resLabels, resVals, resColors, 130)}
+                </div>
+            </div>
+
+            <!-- Por usuário este mês (barras) -->
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.05);">
+                <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">👥 Atendimentos por usuário — este mês</div>
+                ${_barChart(
+                    Object.entries(d.mes.por_usuario||{}).sort((a,b)=>b[1]-a[1]).map(([k])=>k),
+                    Object.entries(d.mes.por_usuario||{}).sort((a,b)=>b[1]-a[1]).map(([,v])=>v),
+                    userColors, 120
+                )}
+            </div>
+
+        </div>
+    `;
+
+    // expose for the refresh button
+    window.renderDashboardTrabalhoTab = renderDashboardTrabalhoTab;
+}

@@ -4018,6 +4018,123 @@ def api_behavior_acompanhamento_delete(record_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DASHBOARD DE TRABALHO
+# ─────────────────────────────────────────────────────────────────────────────
+
+@behavior_bp.route('/dashboard')
+def api_behavior_dashboard():
+    """Dashboard agregado de acompanhamentos: hoje, semana, mês, timeline, ranking."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    conn = get_db()
+    try:
+        _ensure_acompanhamento_table(conn)
+
+        # Contagens por período
+        def _period_stats(conn, where_date):
+            rows = conn.execute(f"""
+                SELECT
+                    usuario,
+                    tipo_acao,
+                    resultado,
+                    COUNT(*) AS cnt
+                FROM Acompanhamento_Clientes
+                WHERE {where_date}
+                GROUP BY usuario, tipo_acao, resultado
+            """).fetchall()
+            total = sum(r['cnt'] for r in rows)
+            por_usuario  = {}
+            por_tipo     = {}
+            por_resultado = {}
+            for r in rows:
+                u = r['usuario'] or 'sistema'
+                por_usuario[u]           = por_usuario.get(u, 0) + r['cnt']
+                por_tipo[r['tipo_acao']] = por_tipo.get(r['tipo_acao'], 0) + r['cnt']
+                res = r['resultado'] or 'sem_resultado'
+                por_resultado[res]       = por_resultado.get(res, 0) + r['cnt']
+            return {'total': total, 'por_usuario': por_usuario, 'por_tipo': por_tipo, 'por_resultado': por_resultado}
+
+        hoje      = _period_stats(conn, "date(data_registro) = date('now')")
+        ontem     = _period_stats(conn, "date(data_registro) = date('now','-1 day')")
+        semana    = _period_stats(conn, "date(data_registro) >= date('now','weekday 0','-7 days')")
+        sem_pass  = _period_stats(conn, "date(data_registro) >= date('now','weekday 0','-14 days') AND date(data_registro) < date('now','weekday 0','-7 days')")
+        mes       = _period_stats(conn, "strftime('%Y-%m', data_registro) = strftime('%Y-%m', 'now')")
+        mes_pass  = _period_stats(conn, "strftime('%Y-%m', data_registro) = strftime('%Y-%m', date('now','-1 month'))")
+
+        # Timeline últimos 30 dias
+        timeline_rows = conn.execute("""
+            SELECT date(data_registro) AS dia, usuario, COUNT(*) AS cnt
+            FROM Acompanhamento_Clientes
+            WHERE date(data_registro) >= date('now', '-29 days')
+            GROUP BY dia, usuario
+            ORDER BY dia
+        """).fetchall()
+        timeline_map = {}
+        for r in timeline_rows:
+            d = r['dia']
+            if d not in timeline_map:
+                timeline_map[d] = {'total': 0, 'por_usuario': {}}
+            timeline_map[d]['total'] += r['cnt']
+            timeline_map[d]['por_usuario'][r['usuario']] = timeline_map[d]['por_usuario'].get(r['usuario'], 0) + r['cnt']
+        timeline = [{'data': d, **v} for d, v in sorted(timeline_map.items())]
+
+        # Ranking geral (últimos 30 dias)
+        ranking_rows = conn.execute("""
+            SELECT usuario, COUNT(*) AS total,
+                   SUM(CASE WHEN date(data_registro) = date('now') THEN 1 ELSE 0 END) AS hoje,
+                   SUM(CASE WHEN date(data_registro) >= date('now','weekday 0','-7 days') THEN 1 ELSE 0 END) AS semana,
+                   SUM(CASE WHEN strftime('%Y-%m', data_registro) = strftime('%Y-%m', 'now') THEN 1 ELSE 0 END) AS mes
+            FROM Acompanhamento_Clientes
+            WHERE date(data_registro) >= date('now', '-29 days')
+            GROUP BY usuario
+            ORDER BY total DESC
+        """).fetchall()
+        ranking = [dict(r) for r in ranking_rows]
+
+        # Clientes em snooze (ativos)
+        snooze_ativos = conn.execute(
+            "SELECT COUNT(DISTINCT contrato_id) AS n FROM Acompanhamento_Clientes WHERE snooze_ate > date('now')"
+        ).fetchone()['n']
+
+        # Retornos pendentes
+        retorno_hoje = conn.execute(
+            "SELECT COUNT(*) AS n FROM (SELECT MAX(id) AS mid FROM Acompanhamento_Clientes WHERE data_retorno IS NOT NULL GROUP BY contrato_id) sub JOIN Acompanhamento_Clientes A ON A.id = sub.mid WHERE A.data_retorno = date('now')"
+        ).fetchone()['n']
+        retorno_semana = conn.execute(
+            "SELECT COUNT(*) AS n FROM (SELECT MAX(id) AS mid FROM Acompanhamento_Clientes WHERE data_retorno IS NOT NULL GROUP BY contrato_id) sub JOIN Acompanhamento_Clientes A ON A.id = sub.mid WHERE A.data_retorno BETWEEN date('now') AND date('now','+7 days')"
+        ).fetchone()['n']
+
+        # Contatos únicos por período (contratos distintos)
+        def _unique_clients(conn, where_date):
+            r = conn.execute(f"SELECT COUNT(DISTINCT contrato_id) AS n FROM Acompanhamento_Clientes WHERE {where_date}").fetchone()
+            return r['n'] if r else 0
+
+        clientes_hoje  = _unique_clients(conn, "date(data_registro) = date('now')")
+        clientes_mes   = _unique_clients(conn, "strftime('%Y-%m', data_registro) = strftime('%Y-%m', 'now')")
+
+        return _json.dumps({
+            'hoje':          hoje,
+            'ontem':         ontem,
+            'semana':        semana,
+            'semana_passada': sem_pass,
+            'mes':           mes,
+            'mes_passado':   mes_pass,
+            'timeline':      timeline,
+            'ranking':       ranking,
+            'snooze_ativos': snooze_ativos,
+            'retorno_hoje':  retorno_hoje,
+            'retorno_semana': retorno_semana,
+            'clientes_hoje': clientes_hoje,
+            'clientes_mes':  clientes_mes,
+        }, ensure_ascii=False), 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        logger.error(f"Erro em dashboard: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ANÁLISE DE RETIRADA
 # ─────────────────────────────────────────────────────────────────────────────
 
