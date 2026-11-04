@@ -5743,6 +5743,10 @@ async function renderAcompanhamentoTab() {
             <option value="">Todos</option>
           </select>
         </div>
+        <div>
+          <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Cliente</label>
+          <input type="text" id="acomp-filter-cliente" placeholder="Buscar nome..." class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800 dark:text-gray-100 w-44">
+        </div>
         <button id="acomp-filter-btn" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded">Filtrar</button>
       </div>
       <div id="acomp-table-wrap" class="overflow-x-auto">
@@ -5754,6 +5758,10 @@ async function renderAcompanhamentoTab() {
     document.getElementById('acomp-filter-btn').addEventListener('click', () => {
         _acompPage = 1;
         _loadAcompanhamento();
+    });
+    document.getElementById('acomp-filter-cliente')?.addEventListener('input', () => {
+        _acompPage = 1;
+        _renderAcompTable();
     });
 
     await _loadAcompanhamento();
@@ -5801,11 +5809,16 @@ function _renderAcompTable() {
 
     const isAdmin = window._currentUser?.is_admin || window._currentUser?.username === 'admin';
 
-    const total = _acompData.length;
+    const clienteQ = (document.getElementById('acomp-filter-cliente')?.value || '').toLowerCase().trim();
+    const filtered = clienteQ
+        ? _acompData.filter(r => (r.cliente || '').toLowerCase().includes(clienteQ))
+        : _acompData;
+
+    const total = filtered.length;
     const pages = Math.max(1, Math.ceil(total / _ACOMP_PAGE_SIZE));
     if (_acompPage > pages) _acompPage = pages;
 
-    const slice = _acompData.slice((_acompPage - 1) * _ACOMP_PAGE_SIZE, _acompPage * _ACOMP_PAGE_SIZE);
+    const slice = filtered.slice((_acompPage - 1) * _ACOMP_PAGE_SIZE, _acompPage * _ACOMP_PAGE_SIZE);
 
     if (!slice.length) {
         wrap.innerHTML = '<div class="text-gray-400 text-sm py-8 text-center">Nenhum registro encontrado.</div>';
