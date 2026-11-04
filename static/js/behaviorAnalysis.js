@@ -5849,6 +5849,19 @@ function _renderAcompTable() {
         return `<span class="px-1.5 py-0.5 rounded text-xs font-medium ${cls}">${label}</span>`;
     };
 
+    const sitRetiradaBadge = (v) => {
+        const map = {
+            ret_aberta:       ['bg-orange-100 text-orange-700', 'Ret. Aberta'],
+            ret_encaminhada:  ['bg-yellow-100 text-yellow-700', 'Ret. Enc.'],
+            neg_com_retirada: ['bg-red-100 text-red-700',       'Neg. c/ Ret.'],
+            ret_fin_sem_neg:  ['bg-amber-100 text-amber-700',   'Ret. s/ Neg.'],
+            neg_sem_retirada: ['bg-rose-100 text-rose-700',     'Neg. s/ Ret.'],
+        };
+        if (!v) return '<span class="text-gray-300 text-xs">–</span>';
+        const [cls, label] = map[v] || ['bg-gray-100 text-gray-500', v];
+        return `<span class="px-1.5 py-0.5 rounded text-xs font-medium ${cls}">${label}</span>`;
+    };
+
     const esc = s => (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
     const acoesHeader = isAdmin ? '<th class="px-3 py-2 border-b border-gray-200">Ações</th>' : '';
@@ -5872,6 +5885,7 @@ function _renderAcompTable() {
           <th class="px-3 py-2 border-b border-gray-200">Retorno</th>
           <th class="px-3 py-2 border-b border-gray-200">Soneca</th>
           <th class="px-3 py-2 border-b border-gray-200">Usuário</th>
+          <th class="px-3 py-2 border-b border-gray-200">Sit. Retirada</th>
           ${acoesHeader}
         </tr>
       </thead>
@@ -5888,6 +5902,7 @@ function _renderAcompTable() {
           <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">${esc(r.data_retorno||'–')}</td>
           <td class="px-3 py-2 border-b border-gray-100">${statusBadge(r)}</td>
           <td class="px-3 py-2 border-b border-gray-100">${esc(r.usuario)}</td>
+          <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">${sitRetiradaBadge(r.situacao_retirada)}</td>
           ${acoesCell(r)}
         </tr>`).join('')}
       </tbody>

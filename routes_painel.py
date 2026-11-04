@@ -30,7 +30,7 @@ def api_painel_resumo():
         return jsonify({'error': 'Não autenticado'}), 401
     conn = get_db()
     try:
-        # ── MRR + boletos em aberto ───────────────────────────────────────────
+        # ── MRR + boletos em aberto (Filial 2, mês atual e anterior) ─────────
         mrr = dict(conn.execute("""
             SELECT
                 COALESCE(SUM(CASE WHEN Status='Recebido'
@@ -40,12 +40,16 @@ def api_painel_resumo():
                     AND strftime('%Y-%m', Data_pagamento) = strftime('%Y-%m', date('now','-1 month'))
                     THEN Valor_recebido ELSE 0 END), 0) AS mrr_ant,
                 COALESCE(SUM(CASE WHEN Status IN ('A receber','Aberto')
+                    AND strftime('%Y-%m', Vencimento) >= strftime('%Y-%m', date('now','-1 month'))
                     THEN Valor ELSE 0 END), 0) AS aberto_valor,
-                COUNT(CASE WHEN Status IN ('A receber','Aberto') THEN 1 END) AS aberto_qty
+                COUNT(CASE WHEN Status IN ('A receber','Aberto')
+                    AND strftime('%Y-%m', Vencimento) >= strftime('%Y-%m', date('now','-1 month'))
+                    THEN 1 END) AS aberto_qty
             FROM Contas_a_Receber
+            WHERE Filial = 2
         """).fetchone())
 
-        # ── Contratos ─────────────────────────────────────────────────────────
+        # ── Contratos (Filial 2) ──────────────────────────────────────────────
         contratos = dict(conn.execute(f"""
             SELECT
                 COALESCE(SUM(CASE WHEN Status_contrato='Ativo' THEN 1 ELSE 0 END), 0) AS ativos,
@@ -54,88 +58,97 @@ def api_painel_resumo():
                 COALESCE(SUM(CASE WHEN Status_contrato IN {_CANCEL_IN}
                     AND strftime('%Y-%m', Data_cancelamento) = strftime('%Y-%m', date('now','-1 month')) THEN 1 ELSE 0 END), 0) AS cancel_ant
             FROM Contratos
+            WHERE Filial = 2
         """).fetchone())
 
-        # ── Negativações ──────────────────────────────────────────────────────
+        # ── Negativações Filial 2 (ficam em Contratos com Data_negativa_o) ───
         neg_mes, neg_ant = 0, 0
-        if _table_exists(conn, 'Contratos_Negativacao'):
-            # tenta coluna Data_negativa_o (IXC exporta com esse nome)
-            col = 'Data_negativa_o' if _col_exists(conn, 'Contratos_Negativacao', 'Data_negativa_o') else 'Data_negativacao'
-            try:
-                r = dict(conn.execute(f"""
-                    SELECT
-                        COALESCE(SUM(CASE WHEN strftime('%Y-%m', {col}) = strftime('%Y-%m','now') THEN 1 ELSE 0 END), 0) AS neg_mes,
-                        COALESCE(SUM(CASE WHEN strftime('%Y-%m', {col}) = strftime('%Y-%m', date('now','-1 month')) THEN 1 ELSE 0 END), 0) AS neg_ant
-                    FROM Contratos_Negativacao
-                """).fetchone())
-                neg_mes, neg_ant = r['neg_mes'], r['neg_ant']
-            except Exception:
-                pass
+        try:
+            neg_col = 'Data_negativa_o' if _col_exists(conn, 'Contratos', 'Data_negativa_o') else 'ltima_negativa_o'
+            r = dict(conn.execute(f"""
+                SELECT
+                    COALESCE(SUM(CASE WHEN strftime('%Y-%m', {neg_col}) = strftime('%Y-%m','now') THEN 1 ELSE 0 END), 0) AS neg_mes,
+                    COALESCE(SUM(CASE WHEN strftime('%Y-%m', {neg_col}) = strftime('%Y-%m', date('now','-1 month')) THEN 1 ELSE 0 END), 0) AS neg_ant
+                FROM Contratos
+                WHERE Filial = 2 AND Status_contrato = 'Negativado'
+            """).fetchone())
+            neg_mes, neg_ant = r['neg_mes'], r['neg_ant']
+        except Exception:
+            pass
 
-        # ── Top cidades por cancelamento (últimos 3 meses) ───────────────────
+        # ── Top cidades por cancelamento (últimos 3 meses, Filial 2) ─────────
         top_cidades = [dict(r) for r in conn.execute(f"""
             SELECT Cidade, COUNT(*) AS total
             FROM Contratos
             WHERE Status_contrato IN {_CANCEL_IN}
+              AND Filial = 2
               AND Cidade IS NOT NULL AND Cidade != ''
               AND date(Data_cancelamento) >= date('now', '-3 months')
             GROUP BY Cidade ORDER BY total DESC LIMIT 6
         """).fetchall()]
 
-        # ── Top bairros por cancelamento (últimos 3 meses) ───────────────────
+        # ── Top bairros por cancelamento (últimos 3 meses, Filial 2) ─────────
         top_bairros = [dict(r) for r in conn.execute(f"""
             SELECT Bairro, COUNT(*) AS total
             FROM Contratos
             WHERE Status_contrato IN {_CANCEL_IN}
+              AND Filial = 2
               AND Bairro IS NOT NULL AND Bairro != ''
               AND date(Data_cancelamento) >= date('now', '-3 months')
             GROUP BY Bairro ORDER BY total DESC LIMIT 6
         """).fetchall()]
 
-        # ── Evolução MRR 12 meses ─────────────────────────────────────────────
+        # ── Evolução MRR 12 meses (Filial 2) ─────────────────────────────────
         mrr_ev = [dict(r) for r in conn.execute("""
             SELECT strftime('%Y-%m', Data_pagamento) AS mes,
                    COALESCE(SUM(Valor_recebido), 0) AS receita
             FROM Contas_a_Receber
             WHERE Status = 'Recebido'
+              AND Filial = 2
               AND date(Data_pagamento) >= date('now', '-11 months', 'start of month')
             GROUP BY mes ORDER BY mes
         """).fetchall()]
 
-        # ── Evolução cancelamentos 12 meses ───────────────────────────────────
+        # ── Evolução cancelamentos 12 meses (Filial 2) ───────────────────────
         cancel_ev = [dict(r) for r in conn.execute(f"""
             SELECT strftime('%Y-%m', Data_cancelamento) AS mes, COUNT(*) AS total
             FROM Contratos
             WHERE Status_contrato IN {_CANCEL_IN}
+              AND Filial = 2
               AND date(Data_cancelamento) >= date('now', '-11 months', 'start of month')
             GROUP BY mes ORDER BY mes
         """).fetchall()]
 
-        # ── OS ────────────────────────────────────────────────────────────────
+        # ── OS (Filial 2, apenas não-finalizadas) ────────────────────────────
         os_data = {'total': 0, 'abertas': 0}
         if _table_exists(conn, 'OS'):
             try:
                 os_cols = [r[1] for r in conn.execute("PRAGMA table_info(OS)").fetchall()]
                 sc = 'Status_OS' if 'Status_OS' in os_cols else 'Status'
+                fc = 'Filial' if 'Filial' in os_cols else None
+                fil = "AND Filial = 2" if fc else ""
                 os_data = dict(conn.execute(f"""
-                    SELECT COUNT(*) AS total,
-                           COALESCE(SUM(CASE WHEN {sc} NOT IN ('Finalizado','Cancelado','F','C','Cancelada') THEN 1 ELSE 0 END), 0) AS abertas
+                    SELECT COUNT(*) AS total, COUNT(*) AS abertas
                     FROM OS
+                    WHERE {sc} NOT IN ('Finalizado','Cancelado','F','C','Cancelada') {fil}
                 """).fetchone())
             except Exception:
                 pass
 
-        # ── Atendimentos ──────────────────────────────────────────────────────
+        # ── Atendimentos (Filial 2) ───────────────────────────────────────────
         atend = {'mes': 0, 'ant': 0}
         if _table_exists(conn, 'Atendimentos'):
             try:
                 atend_cols = [r[1] for r in conn.execute("PRAGMA table_info(Atendimentos)").fetchall()]
                 dc = 'Data_abertura' if 'Data_abertura' in atend_cols else 'Data'
+                fa = 'Filial' if 'Filial' in atend_cols else None
+                fil_a = "AND Filial = 2" if fa else ""
                 r = dict(conn.execute(f"""
                     SELECT
                         COALESCE(SUM(CASE WHEN strftime('%Y-%m', {dc}) = strftime('%Y-%m','now') THEN 1 ELSE 0 END), 0) AS mes,
                         COALESCE(SUM(CASE WHEN strftime('%Y-%m', {dc}) = strftime('%Y-%m', date('now','-1 month')) THEN 1 ELSE 0 END), 0) AS ant
                     FROM Atendimentos
+                    WHERE 1=1 {fil_a}
                 """).fetchone())
                 atend = {'mes': r['mes'], 'ant': r['ant']}
             except Exception:

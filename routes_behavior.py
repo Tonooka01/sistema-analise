@@ -3848,12 +3848,55 @@ def api_behavior_acompanhamento_all():
         where = ("WHERE " + " AND ".join(conds)) if conds else ""
 
         rows = conn.execute(f"""
+            WITH
+            _ret AS (
+                SELECT CAST(o.Contrato AS INTEGER) AS cid,
+                       o.Status, o.Assunto, o.Abertura
+                FROM OS o
+                WHERE o.Assunto IN (
+                    'RETIRADA DE EQUIPAMENTO','INADIMPLENCIA RETIRADA',
+                    'EQUIPAMENTO NÃO RETIRADO','RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
+                    'CANCELAMENTO RETIRADA','EQUIPAMENTO RENEGOCIADO'
+                ) AND CAST(o.Contrato AS INTEGER) > 0
+            ),
+            ret_last AS (
+                SELECT a.cid, a.Status AS ultimo_status,
+                       a.Assunto AS ultimo_assunto, a.Abertura AS ultima_abertura
+                FROM _ret a
+                WHERE a.Abertura = (SELECT MAX(b.Abertura) FROM _ret b WHERE b.cid = a.cid)
+                GROUP BY a.cid
+            ),
+            pos_ret AS (
+                SELECT CAST(o.Contrato AS INTEGER) AS cid, MAX(o.Abertura) AS ultima_pos
+                FROM OS o
+                WHERE o.Assunto NOT IN (
+                    'RETIRADA DE EQUIPAMENTO','INADIMPLENCIA RETIRADA',
+                    'EQUIPAMENTO NÃO RETIRADO','RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
+                    'CANCELAMENTO RETIRADA','EQUIPAMENTO RENEGOCIADO'
+                ) AND CAST(o.Contrato AS INTEGER) > 0
+                GROUP BY CAST(o.Contrato AS INTEGER)
+            )
             SELECT A.id, A.contrato_id, A.usuario, A.data_registro,
                    A.tipo_acao, A.resultado, A.observacao, A.data_retorno, A.snooze_ate,
                    C.Cliente AS cliente, C.Cidade AS cidade,
-                   C.Status_contrato AS status_contrato, C.Status_acesso AS status_acesso
+                   C.Status_contrato AS status_contrato, C.Status_acesso AS status_acesso,
+                   CASE
+                       WHEN RL.ultimo_status = 'Aberta'      THEN 'ret_aberta'
+                       WHEN RL.ultimo_status = 'Encaminhada' THEN 'ret_encaminhada'
+                       WHEN RL.ultimo_status = 'Finalizada'
+                            AND C.Status_contrato = 'Negativado' THEN 'neg_com_retirada'
+                       WHEN RL.ultimo_status = 'Finalizada'
+                            AND C.Status_contrato NOT IN ('Negativado','Inativo','Cancelado','Desistente')
+                            AND PR.ultima_pos > RL.ultima_abertura THEN NULL
+                       WHEN RL.ultimo_status = 'Finalizada'
+                            AND C.Status_contrato NOT IN ('Negativado','Inativo','Cancelado','Desistente') THEN 'ret_fin_sem_neg'
+                       WHEN C.Status_contrato = 'Negativado' AND RL.cid IS NULL THEN 'neg_sem_retirada'
+                       ELSE NULL
+                   END AS situacao_retirada
             FROM Acompanhamento_Clientes A
             LEFT JOIN Contratos C ON C.ID = A.contrato_id
+            LEFT JOIN ret_last RL ON RL.cid = A.contrato_id
+            LEFT JOIN pos_ret PR ON PR.cid = A.contrato_id
             {where}
             ORDER BY A.data_registro DESC
             LIMIT ? OFFSET ?
