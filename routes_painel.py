@@ -264,8 +264,8 @@ def api_painel_resumo():
                     'principais_motivos': _latest_cm.get('principais_motivos') or {},
                 }
                 _hc.close()
-        except Exception:
-            pass
+        except Exception as _e:
+            chatmix = {'_debug_error': str(_e)}
 
         return _json.dumps({
             'mrr':           mrr,
