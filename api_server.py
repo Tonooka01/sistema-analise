@@ -59,6 +59,9 @@ from routes_dre2 import dre2_bp
 # --- Blueprint Crescimento Analítico ---
 from routes_crescimento import crescimento_bp
 
+# --- Blueprint ROI / Valor do Sistema ---
+from routes_roi import roi_bp
+
 # --- Blueprint Sync IXC ---
 from routes_ixc_sync import ixc_sync_bp, _tg_send
 from routes_unm import unm_bp, user_can_unm
@@ -294,6 +297,7 @@ app.register_blueprint(cashflow_bp,         url_prefix='/api/cashflow')
 app.register_blueprint(dre_bp,              url_prefix='/api/dre')
 app.register_blueprint(dre2_bp)
 app.register_blueprint(crescimento_bp,     url_prefix='/api/crescimento')
+app.register_blueprint(roi_bp,             url_prefix='/api/roi')
 app.register_blueprint(ixc_sync_bp,         url_prefix='/api/ixc')
 app.register_blueprint(unm_bp)
 # o Bot UNM consulta o estado a cada poucos segundos: fora do limite por IP (que valeria para o resto do Analise também)

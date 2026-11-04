@@ -28,6 +28,7 @@ import { renderCashflowDashboard } from '../cashflow.js';
 import { renderDreDashboard } from '../dre.js';
 import { renderDre2Dashboard } from '../dre2.js';
 import { renderCrescimento } from '../crescimento.js';
+import { renderROIDashboard } from '../roi_dashboard.js';
 
 export function initializeEventListeners() {
 
@@ -44,6 +45,20 @@ export function initializeEventListeners() {
         if (dom.dashboardContentDiv) {
             dom.dashboardContentDiv.classList.remove('hidden');
             renderCashflowDashboard(dom.dashboardContentDiv);
+        }
+    });
+
+    // --- Botão Dashboard ROI ---
+    document.getElementById('btnROI')?.addEventListener('click', e => {
+        utils.resetAllFilters();
+        utils.setActiveControl(e.target);
+        if (dom.customAnalysisSelector) dom.customAnalysisSelector.value = '';
+        utils.hideAllCustomFilters();
+        if (dom.viewTableBtn) dom.viewTableBtn.classList.add('hidden');
+        if (dom.mainChartsArea) dom.mainChartsArea.classList.add('hidden');
+        if (dom.dashboardContentDiv) {
+            dom.dashboardContentDiv.classList.remove('hidden');
+            renderROIDashboard(dom.dashboardContentDiv);
         }
     });
 
@@ -92,7 +107,7 @@ export function initializeEventListeners() {
     // --- Seletores de Coleção Principal ---
     // Delegação original (cobre botões dentro de .collection-selector)
     document.querySelector('.collection-selector')?.addEventListener('click', e => {
-        const _excluded = ['saveLayoutBtn','btnCashflow','btnDRE','btnDRE2','btnCrescimento'];
+        const _excluded = ['saveLayoutBtn','btnCashflow','btnROI','btnDRE','btnDRE2','btnCrescimento'];
         if (e.target.tagName === 'BUTTON' && e.target.id && !_excluded.includes(e.target.id)) {
             const buttonText = e.target.textContent;
             if (buttonText) {

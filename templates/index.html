@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Botões de módulo (Cashflow, DRE, Gestão, Crescimento) ---
-    const moduleMap = { cashflow: 'btnCashflow', dre: 'btnDRE', dre2: 'btnDRE2', crescimento: 'btnCrescimento' };
+    const moduleMap = { cashflow: 'btnCashflow', roi: 'btnROI', dre: 'btnDRE', dre2: 'btnDRE2', crescimento: 'btnCrescimento' };
     Object.entries(moduleMap).forEach(([mod, id]) => {
         const btn = document.getElementById(id);
         if (btn && !perms.includes(mod)) btn.style.display = 'none';
@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Botões operacionais (Clientes, OS, Logins, etc.) ---
     if (!hasDashboard) {
         document.querySelectorAll('.collection-selector button').forEach(btn => {
-            if (!['btnCashflow','btnDRE','btnDRE2','btnCrescimento'].includes(btn.id))
+            if (!['btnCashflow','btnROI','btnDRE','btnDRE2','btnCrescimento'].includes(btn.id))
                 btn.style.display = 'none';
         });
         ['btnClientes','btnContratos','btnContasAReceber','btnAtendimentos','btnOS','btnLogins'].forEach(id => {
@@ -325,6 +325,9 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
     <div class="sb-section-label">Módulos</div>
     <button id="btnCashflow" class="sb-module-btn" style="display:none !important;">
       <span class="sb-mod-icon">💰</span><span class="sb-mod-label">Cashflow</span>
+    </button>
+    <button id="btnROI" class="sb-module-btn">
+      <span class="sb-mod-icon">💡</span><span class="sb-mod-label">Dashboard</span>
     </button>
     <button id="btnDRE" class="sb-module-btn">
       <span class="sb-mod-icon">📊</span><span class="sb-mod-label">DRE</span>
