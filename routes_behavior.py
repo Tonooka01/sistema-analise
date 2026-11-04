@@ -4749,8 +4749,8 @@ def _ixc_criar_os(id_cliente_ixc, id_contrato, id_assunto, mensagem, token, titu
         'id_ticket_origem':  'I',
         'prioridade':        'M',
         'menssagem':         mensagem or titulo or '',
-        'status':            'A',
-        'su_status':         'N',
+        'status':            'F' if fechar else 'A',
+        'su_status':         'S' if fechar else 'N',
         'atualizar_cliente': 'N',
         'atualizar_login':   'N',
     }
