@@ -18,6 +18,30 @@ const _monthLabel = m => {
     return `${months[parseInt(mo) - 1]}/${y.slice(2)}`;
 };
 
+// ── Tooltip global para gráficos empilhados ───────────────────────────────────
+window._ctrTipShow = function(el, label, month, val, color) {
+    let t = document.getElementById('_ctr_tooltip');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = '_ctr_tooltip';
+        t.style.cssText = 'position:fixed;background:#1e293b;color:#fff;padding:8px 14px;border-radius:10px;font-size:.82rem;pointer-events:none;z-index:10000;display:none;box-shadow:0 4px 16px rgba(0,0,0,.25);line-height:1.6;white-space:nowrap;';
+        document.body.appendChild(t);
+    }
+    t.innerHTML = `<div style="font-size:.7rem;color:#94a3b8;margin-bottom:1px;">${month}</div>`
+        + `<div style="display:flex;align-items:center;gap:6px;font-weight:700;">`
+        + `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};"></span>${label}</div>`
+        + `<div style="font-size:1.05rem;font-weight:800;margin-top:2px;">${val}</div>`;
+    const r = el.getBoundingClientRect();
+    t.style.display = 'block';
+    t.style.left = (r.left + r.width / 2) + 'px';
+    t.style.top  = (r.top - 8) + 'px';
+    t.style.transform = 'translate(-50%,-100%)';
+};
+window._ctrTipHide = function() {
+    const t = document.getElementById('_ctr_tooltip');
+    if (t) t.style.display = 'none';
+};
+
 // ── Bar chart SVG inline ──────────────────────────────────────────────────────
 function _barSVG(labels, datasets, opts = {}) {
     const W = 680, H = opts.h || 200, PAD_L = 48, PAD_R = 12, PAD_T = 14, PAD_B = 36;
@@ -391,7 +415,7 @@ function _stackedBarSVG(labels, datasets, opts = {}) {
         const x = PAD_L + i * gap + gap / 2;
         return `<text x="${x}" y="${PAD_T+plotH+16}" font-size="10" fill="#6b7280" text-anchor="middle">${lbl}</text>`;
     }).join('');
-    const bars = labels.map((_, i) => {
+    const bars = labels.map((lbl_month, i) => {
         const cx = PAD_L + i * gap + gap / 2;
         const x  = cx - barW / 2;
         let yBase = PAD_T + plotH;
@@ -401,9 +425,11 @@ function _stackedBarSVG(labels, datasets, opts = {}) {
             const h = (v / maxVal) * plotH;
             const y = yBase - h;
             yBase = y;
-            const lbl = fmtV(v);
-            return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${ds.color}" rx="2" opacity="0.92"/>
-                    ${h > 22 ? `<text x="${cx.toFixed(1)}" y="${(y+h/2+4).toFixed(1)}" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">${lbl}</text>` : ''}`;
+            const shortLbl  = fmtV(v);
+            const fullVal   = v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+            const tipAttrs  = `onmouseenter="_ctrTipShow(this,'${ds.label}','${lbl_month}','${fullVal}','${ds.color}')" onmouseleave="_ctrTipHide()" style="cursor:pointer;"`;
+            return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${ds.color}" rx="2" opacity="0.92" ${tipAttrs}/>
+                    ${h > 22 ? `<text x="${cx.toFixed(1)}" y="${(y+h/2+4).toFixed(1)}" font-size="9" fill="#fff" text-anchor="middle" font-weight="700" style="pointer-events:none;">${shortLbl}</text>` : ''}`;
         }).join('');
     }).join('');
     const legend = datasets.map(ds =>
