@@ -931,10 +931,10 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
 <div id="client-detail-panel"
      class="fixed z-50 bg-white shadow-2xl flex flex-col rounded-2xl overflow-hidden"
      style="top:50%;left:50%;transform:translate(-50%,-50%) scale(0.94);opacity:0;pointer-events:none;
-            width:min(98vw,1300px);max-height:92vh;transition:opacity .18s ease,transform .18s ease;">
+            width:min(98vw,1300px);height:88vh;transition:opacity .18s ease,transform .18s ease;">
 
   <!-- Header -->
-  <div id="cdp-header" class="flex items-center justify-between px-6 py-4 bg-blue-700 text-white flex-shrink-0">
+  <div id="cdp-header" class="flex items-center justify-between px-6 py-4 text-white flex-shrink-0" style="background:#1e3a5f;">
     <div class="flex items-center gap-4 min-w-0">
       <div class="min-w-0">
         <p class="text-xs font-medium opacity-75 uppercase tracking-widest">Contrato #<span id="cdp-id">—</span></p>
@@ -1330,7 +1330,6 @@ async function _cdpRenderMensagens(c, s, cl) {
        <div class="flex flex-col gap-2" id="cdp-cm-cards">${cmTemplates.map(_cmCardHtml).join('')}</div>`
     : '';
 
-  const _waTemplates     = templates.filter(t => t.icon === '💬');
   const _scriptTemplates = templates.filter(t => t.icon === '📞');
   const _tplCard = t => `
     <div class="border border-gray-200 rounded-lg p-3 bg-white hover:border-blue-300 cursor-pointer transition group"
@@ -1345,12 +1344,8 @@ async function _cdpRenderMensagens(c, s, cl) {
 
   pane.innerHTML = `
     ${situacaoHtml}
-    ${_waTemplates.length ? `
-      <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-1 mb-1.5">📱 Mensagens WhatsApp</div>
-      ${_waTemplates.map(_tplCard).join('')}
-    ` : ''}
     ${_scriptTemplates.length ? `
-      <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-3 mb-1.5">📞 Scripts de Ligação</div>
+      <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-1 mb-1.5">📞 Scripts de Ligação</div>
       ${_scriptTemplates.map(_tplCard).join('')}
     ` : ''}
     ${cmSection}
@@ -1488,7 +1483,7 @@ function showClientDetail(contratoId) {
   document.getElementById('cdp-cidade').textContent = '';
   document.getElementById('cdp-loading').classList.remove('hidden');
   document.getElementById('cdp-content').classList.add('hidden');
-  document.getElementById('cdp-header').style.background = '#1d4ed8';
+  document.getElementById('cdp-header').style.background = '#1e3a5f';
   switchCdpTab('mensagens');
   openClientDetail();
 
@@ -1514,7 +1509,7 @@ function _renderClientDetail(d) {
   document.getElementById('cdp-cidade').textContent = [c.Cidade, c.Bairro].filter(Boolean).join(' · ');
 
   const isCanc = c.Data_cancelamento && c.Data_cancelamento !== '';
-  document.getElementById('cdp-header').style.background = isCanc ? '#991b1b' : '#1d4ed8';
+  document.getElementById('cdp-header').style.background = isCanc ? '#1f2937' : '#1e3a5f';
 
   // --- ABA MENSAGENS ---
   _cdpRenderMensagens(c, s, cl);
