@@ -115,6 +115,44 @@ def api_painel_resumo():
             GROUP BY mes ORDER BY mes
         """).fetchall()]
 
+        # ── Contas a Receber por Pagamento (Recebido→Data_pagamento; outros→Vencimento)
+        ctr_pag_ev = [dict(r) for r in conn.execute("""
+            SELECT strftime('%Y-%m', Data_pagamento) AS mes,
+                   'Recebido' AS status_norm,
+                   COALESCE(SUM(Valor_recebido), 0) AS total
+            FROM Contas_a_Receber
+            WHERE Filial = 2 AND Status = 'Recebido'
+              AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
+              AND date(Data_pagamento) >= date('now', '-11 months', 'start of month')
+            GROUP BY mes
+            UNION ALL
+            SELECT strftime('%Y-%m', Vencimento) AS mes,
+                   CASE WHEN Status IN ('A receber','Aberto') THEN 'A receber' ELSE 'Cancelado' END AS status_norm,
+                   COALESCE(SUM(Valor), 0) AS total
+            FROM Contas_a_Receber
+            WHERE Filial = 2 AND Status IN ('A receber','Aberto','Cancelado','Cancelada')
+              AND date(Vencimento) >= date('now', '-11 months', 'start of month')
+            GROUP BY mes, status_norm
+            ORDER BY mes, status_norm
+        """).fetchall()]
+
+        # ── Contas a Receber por Data Crédito (Vencimento para todos os status)
+        ctr_cred_ev = [dict(r) for r in conn.execute("""
+            SELECT strftime('%Y-%m', Vencimento) AS mes,
+                   CASE
+                       WHEN Status = 'Recebido'              THEN 'Recebido'
+                       WHEN Status IN ('A receber','Aberto') THEN 'A receber'
+                       ELSE 'Cancelado'
+                   END AS status_norm,
+                   COALESCE(SUM(CASE WHEN Status='Recebido' THEN Valor_recebido ELSE Valor END), 0) AS total
+            FROM Contas_a_Receber
+            WHERE Filial = 2
+              AND Status IN ('Recebido','A receber','Aberto','Cancelado','Cancelada')
+              AND date(Vencimento) >= date('now', '-11 months', 'start of month')
+            GROUP BY mes, status_norm
+            ORDER BY mes, status_norm
+        """).fetchall()]
+
         # ── Evolução cancelamentos 12 meses (Filial 2) ───────────────────────
         cancel_ev = [dict(r) for r in conn.execute(f"""
             SELECT strftime('%Y-%m', Data_cancelamento) AS mes, COUNT(*) AS total
@@ -167,6 +205,8 @@ def api_painel_resumo():
             'top_cidades':   top_cidades,
             'top_bairros':   top_bairros,
             'mrr_ev':        mrr_ev,
+            'ctr_pag_ev':    ctr_pag_ev,
+            'ctr_cred_ev':   ctr_cred_ev,
             'cancel_ev':     cancel_ev,
             'os':            os_data,
             'atendimentos':  atend,

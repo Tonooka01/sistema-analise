@@ -370,22 +370,90 @@ function _painelCancelamentos(p) {
         </div>`;
 }
 
-// ── MRR + crescimento financeiro ──────────────────────────────────────────────
+// ── Stacked bar SVG ───────────────────────────────────────────────────────────
+function _stackedBarSVG(labels, datasets, opts = {}) {
+    const W = 680, H = opts.h || 240, PAD_L = 70, PAD_R = 12, PAD_T = 14, PAD_B = 36;
+    const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
+    const n = labels.length;
+    if (!n) return '<div style="color:#9ca3af;text-align:center;padding:24px;">Sem dados</div>';
+    const totals = labels.map((_, i) => datasets.reduce((s, d) => s + (d.data[i] || 0), 0));
+    const maxVal = Math.max(...totals, 1);
+    const barW = Math.max(20, (plotW / n) * 0.55);
+    const gap  = plotW / n;
+    const gridLines = [0.25, 0.5, 0.75, 1].map(f => {
+        const y = PAD_T + plotH - f * plotH;
+        const v = maxVal * f;
+        const lbl = v >= 1000 ? `R$${(v/1000).toFixed(0)}k` : `R$${Math.round(v)}`;
+        return `<line x1="${PAD_L}" y1="${y}" x2="${W-PAD_R}" y2="${y}" stroke="#f3f4f6" stroke-width="1"/>
+                <text x="${PAD_L-4}" y="${y+4}" font-size="9" fill="#9ca3af" text-anchor="end">${lbl}</text>`;
+    }).join('');
+    const xLabels = labels.map((lbl, i) => {
+        const x = PAD_L + i * gap + gap / 2;
+        return `<text x="${x}" y="${PAD_T+plotH+14}" font-size="9" fill="#9ca3af" text-anchor="middle">${lbl}</text>`;
+    }).join('');
+    const bars = labels.map((_, i) => {
+        const x = PAD_L + i * gap + gap / 2 - barW / 2;
+        let yBase = PAD_T + plotH;
+        return datasets.map(ds => {
+            const v = ds.data[i] || 0;
+            if (!v) return '';
+            const h = (v / maxVal) * plotH;
+            const y = yBase - h;
+            yBase = y;
+            const lbl = v >= 1000 ? `R$${(v/1000).toFixed(1)}k` : `R$${Math.round(v)}`;
+            return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${ds.color}" opacity="0.9"/>
+                    ${h > 18 ? `<text x="${(x+barW/2).toFixed(1)}" y="${(y+h/2+4).toFixed(1)}" font-size="9" fill="#fff" text-anchor="middle" font-weight="600">${lbl}</text>` : ''}`;
+        }).join('');
+    }).join('');
+    const legend = datasets.map(ds =>
+        `<span style="display:inline-flex;align-items:center;gap:5px;font-size:.72rem;color:#374151;margin-right:14px;">
+            <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${ds.color};"></span>${ds.label}
+        </span>`
+    ).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;overflow:visible;">${gridLines}${xLabels}${bars}</svg>
+            <div style="margin-top:6px;display:flex;flex-wrap:wrap;">${legend}</div>`;
+}
+
+function _buildCtrDatasets(rows, sortedMes) {
+    const STATUS = [
+        { key: 'Recebido',  color: '#16a34a', label: 'Recebido' },
+        { key: 'A receber', color: '#f59e0b', label: 'A receber' },
+        { key: 'Cancelado', color: '#6b7280', label: 'Cancelado' },
+    ];
+    const byMesSt = {};
+    (rows || []).forEach(r => {
+        const k = `${r.mes}|${r.status_norm}`;
+        byMesSt[k] = (byMesSt[k] || 0) + (r.total || 0);
+    });
+    return STATUS.map(s => ({
+        label: s.label, color: s.color,
+        data: sortedMes.map(m => byMesSt[`${m}|${s.key}`] || 0),
+    }));
+}
+
+// ── Contas a Receber charts ───────────────────────────────────────────────────
 function _painelFinanceiro(p) {
     if (!p || p.error) return '';
-    const allMes = new Set((p.mrr_ev || []).map(r => r.mes));
-    const sortedMes = [...allMes].sort();
-    const mrrByMes = Object.fromEntries((p.mrr_ev || []).map(r => [r.mes, r.receita]));
-    const labels = sortedMes.map(m => _monthLabel(m));
-    const mrrDs  = [{ label: 'MRR (Recebido)', color: '#1d4ed8', data: sortedMes.map(m => mrrByMes[m] || 0) }];
+    const allMes = new Set([
+        ...(p.ctr_pag_ev  || []).map(r => r.mes),
+        ...(p.ctr_cred_ev || []).map(r => r.mes),
+    ]);
+    const sortedMes = [...allMes].filter(Boolean).sort();
+    if (!sortedMes.length) return '';
+    const labels    = sortedMes.map(m => _monthLabel(m));
+    const dsPag     = _buildCtrDatasets(p.ctr_pag_ev,  sortedMes);
+    const dsCred    = _buildCtrDatasets(p.ctr_cred_ev, sortedMes);
 
-    return `
+    const _chartCard = (title, datasets) => `
         <div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:18px 22px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);">
             <div style="font-size:.7rem;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;border-bottom:2px solid #dbeafe;padding-bottom:8px;">
-                💰 Receita Mensal — MRR (12 meses)
+                💸 ${title}
             </div>
-            ${_barSVG(labels, mrrDs, { h: 200 })}
+            ${_stackedBarSVG(labels, datasets, { h: 240 })}
         </div>`;
+
+    return _chartCard('Contas a Receber — Pagamento', dsPag)
+         + _chartCard('Contas a Receber — Data Crédito', dsCred);
 }
 
 // ── Operacional: OS + Atendimentos ────────────────────────────────────────────
