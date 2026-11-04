@@ -488,13 +488,38 @@ function _painelFinanceiro(p) {
 // ── Operacional: OS + Atendimentos ────────────────────────────────────────────
 function _painelOperacional(p) {
     if (!p || p.error) return '';
-    const os    = p.os    || { total: 0, abertas: 0 };
-    const atend = p.atendimentos || { mes: 0, ant: 0 };
+    const os         = p.os         || { total: 0, abertas: 0 };
+    const assuntos   = p.os_assuntos || [];
+    const atend      = p.atendimentos || { mes: 0, ant: 0 };
+    const alertColor = os.abertas > 50 ? '#dc2626' : '#16a34a';
+
+    const maxVal = assuntos.length ? assuntos[0].total : 1;
+    const assuntoRows = assuntos.map(a => {
+        const pct = Math.round((a.total / maxVal) * 100);
+        const barColor = a.assunto.includes('INADIM') ? '#f59e0b'
+                       : a.assunto.includes('RETIRADA') ? '#ef4444'
+                       : a.assunto.includes('INSTALA') ? '#3b82f6'
+                       : a.assunto.includes('MANUTEN') ? '#8b5cf6'
+                       : '#64748b';
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+            <span style="font-size:.72rem;color:#374151;min-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${a.assunto}">${a.assunto}</span>
+            <div style="flex:1;background:#e5e7eb;border-radius:4px;height:10px;overflow:hidden;">
+                <div style="width:${pct}%;background:${barColor};height:100%;border-radius:4px;"></div>
+            </div>
+            <span style="font-size:.75rem;font-weight:600;color:#111827;min-width:28px;text-align:right;">${a.total}</span>
+        </div>`;
+    }).join('');
+
     return `
-        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
-            ${_kpi('🔧','OS abertas', _fmt(os.abertas),
-                `Total no banco: ${_fmt(os.total)}`,
-                os.abertas > 50 ? '#dc2626' : '#6b7280', '#8b5cf6')}
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:flex-start;">
+            <div style="background:#fff;border-radius:16px;padding:18px 20px;flex:1;min-width:300px;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid #e5e7eb;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+                    <span style="font-size:1.3rem;">🔧</span>
+                    <span style="font-weight:700;font-size:.95rem;color:#111827;">OS Abertas</span>
+                    <span style="margin-left:auto;font-size:1.8rem;font-weight:800;color:${alertColor};">${_fmt(os.abertas)}</span>
+                </div>
+                ${assuntoRows || '<span style="font-size:.8rem;color:#9ca3af;">Sem dados</span>'}
+            </div>
             ${_kpi('🎧','Atendimentos este mês', _fmt(atend.mes),
                 `vs mês anterior: ${_pct(atend.mes, atend.ant)}`,
                 '#6b7280', '#0ea5e9')}

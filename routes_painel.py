@@ -168,6 +168,7 @@ def api_painel_resumo():
 
         # ── OS (Filial 2, apenas não-finalizadas) ────────────────────────────
         os_data = {'total': 0, 'abertas': 0}
+        os_assuntos = []
         if _table_exists(conn, 'OS'):
             try:
                 os_cols = [r[1] for r in conn.execute("PRAGMA table_info(OS)").fetchall()]
@@ -179,6 +180,15 @@ def api_painel_resumo():
                     FROM OS
                     WHERE {sc} NOT IN ('Finalizada','Finalizado','Cancelada','Cancelado','F','C') {fil}
                 """).fetchone())
+                os_assuntos = [dict(r) for r in conn.execute(f"""
+                    SELECT COALESCE(Assunto,'Sem assunto') AS assunto,
+                           COUNT(*) AS total
+                    FROM OS
+                    WHERE {sc} NOT IN ('Finalizada','Finalizado','Cancelada','Cancelado','F','C') {fil}
+                    GROUP BY assunto
+                    ORDER BY total DESC
+                    LIMIT 10
+                """).fetchall()]
             except Exception:
                 pass
 
@@ -212,6 +222,7 @@ def api_painel_resumo():
             'ctr_cred_ev':   ctr_cred_ev,
             'cancel_ev':     cancel_ev,
             'os':            os_data,
+            'os_assuntos':   os_assuntos,
             'atendimentos':  atend,
         }, ensure_ascii=False), 200, {'Content-Type': 'application/json'}
     except Exception as e:
