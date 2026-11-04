@@ -1,13 +1,22 @@
 """
 routes_roi.py — Dashboard ROI / Valor do Sistema
-GET  /api/roi/config   — retorna parâmetros configuráveis
-POST /api/roi/config   — salva parâmetros (admin only)
-GET  /api/roi/stats    — retorna estatísticas agregadas de valor
+GET  /api/roi/config       — retorna parâmetros configuráveis
+POST /api/roi/config       — salva parâmetros (admin only)
+GET  /api/roi/stats        — retorna estatísticas agregadas de valor
+GET  /api/roi/vendas/stats — retorna métricas do app de vendas (app_vendas.db)
 """
+import os
+import sqlite3
 from flask import Blueprint, jsonify, request
 from flask_login import current_user
 from database import get_db_connection as get_db
 import json as _json
+
+# Caminho para o banco de dados do app de vendas (mesmo servidor)
+_VENDAS_DB = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'app_vendas_netvale', 'app_vendas.db'
+)
 
 roi_bp = Blueprint('roi_bp', __name__)
 
@@ -191,3 +200,88 @@ def api_roi_stats():
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
+
+
+@roi_bp.route('/vendas/stats')
+def api_roi_vendas_stats():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    if not os.path.exists(_VENDAS_DB):
+        return jsonify({'error': 'Banco de dados de vendas não encontrado', 'path': _VENDAS_DB}), 404
+    try:
+        vdb = sqlite3.connect(_VENDAS_DB)
+        vdb.row_factory = sqlite3.Row
+
+        # ── Mês atual ────────────────────────────────────────────────────────
+        ma = dict(vdb.execute("""
+            SELECT
+                COUNT(*) AS total_vendas,
+                COALESCE(SUM(CASE WHEN status='sucesso' AND contrato_removido_ixc=0 THEN 1 ELSE 0 END),0) AS vendas_ok,
+                COALESCE(SUM(CASE WHEN status='erro'    THEN 1 ELSE 0 END),0)  AS vendas_erro,
+                COALESCE(SUM(CASE WHEN status='sucesso' AND contrato_removido_ixc=0 THEN p.valor ELSE 0 END),0) AS receita_mrr
+            FROM vendas_log vl
+            LEFT JOIN planos_app p ON p.id = vl.plano_id_app
+            WHERE strftime('%Y-%m', vl.criado_em) = strftime('%Y-%m','now','localtime')
+        """).fetchone())
+
+        # ── Mês passado ───────────────────────────────────────────────────────
+        mp = dict(vdb.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN status='sucesso' AND contrato_removido_ixc=0 THEN 1 ELSE 0 END),0) AS vendas_ok,
+                COALESCE(SUM(CASE WHEN status='sucesso' AND contrato_removido_ixc=0 THEN p.valor ELSE 0 END),0) AS receita_mrr
+            FROM vendas_log vl
+            LEFT JOIN planos_app p ON p.id = vl.plano_id_app
+            WHERE strftime('%Y-%m', vl.criado_em) = strftime('%Y-%m', date('now','localtime','-1 month'))
+        """).fetchone())
+
+        # ── Acumulado (base ativa) ────────────────────────────────────────────
+        tot = dict(vdb.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN status='sucesso' AND contrato_removido_ixc=0 THEN 1 ELSE 0 END),0) AS contratos_ativos,
+                COALESCE(SUM(CASE WHEN status='sucesso' AND contrato_removido_ixc=0 THEN p.valor ELSE 0 END),0) AS mrr_total
+            FROM vendas_log vl
+            LEFT JOIN planos_app p ON p.id = vl.plano_id_app
+        """).fetchone())
+
+        # ── Taxa de conversão — mês atual ─────────────────────────────────────
+        taxa_conv = 0.0
+        if ma['total_vendas'] > 0:
+            taxa_conv = round(ma['vendas_ok'] / ma['total_vendas'] * 100, 1)
+
+        # ── Ranking por vendedor — mês atual ─────────────────────────────────
+        por_vendedor = [dict(r) for r in vdb.execute("""
+            SELECT v.nome AS vendedor,
+                   COUNT(*) AS total_tentativas,
+                   SUM(CASE WHEN vl.status='sucesso' AND vl.contrato_removido_ixc=0 THEN 1 ELSE 0 END) AS vendas_ok,
+                   COALESCE(SUM(CASE WHEN vl.status='sucesso' AND vl.contrato_removido_ixc=0 THEN p.valor ELSE 0 END),0) AS receita
+            FROM vendas_log vl
+            JOIN vendedores_app v ON v.id = vl.id_vendedor_app
+            LEFT JOIN planos_app p ON p.id = vl.plano_id_app
+            WHERE strftime('%Y-%m', vl.criado_em) = strftime('%Y-%m','now','localtime')
+            GROUP BY vl.id_vendedor_app, v.nome
+            ORDER BY vendas_ok DESC
+        """).fetchall()]
+
+        # ── Evolução mensal (12 meses) ────────────────────────────────────────
+        monthly = [dict(r) for r in vdb.execute("""
+            SELECT strftime('%Y-%m', vl.criado_em) AS mes,
+                   COUNT(*) AS total_tentativas,
+                   SUM(CASE WHEN vl.status='sucesso' AND vl.contrato_removido_ixc=0 THEN 1 ELSE 0 END) AS vendas_ok,
+                   COALESCE(SUM(CASE WHEN vl.status='sucesso' AND vl.contrato_removido_ixc=0 THEN p.valor ELSE 0 END),0) AS receita_mrr
+            FROM vendas_log vl
+            LEFT JOIN planos_app p ON p.id = vl.plano_id_app
+            WHERE date(vl.criado_em) >= date('now','localtime','-11 months','start of month')
+            GROUP BY mes
+            ORDER BY mes
+        """).fetchall()]
+
+        vdb.close()
+        return _json.dumps({
+            'mes_atual':    {**ma, 'taxa_conversao': taxa_conv},
+            'mes_passado':  mp,
+            'totais':       tot,
+            'por_vendedor': por_vendedor,
+            'monthly':      monthly,
+        }, ensure_ascii=False), 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

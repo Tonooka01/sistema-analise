@@ -148,6 +148,128 @@ function _breakdown(d, cfg) {
         </table>`;
 }
 
+// ── Vendas section helpers ────────────────────────────────────────────────────
+function _vendasSection(vd) {
+    if (!vd || vd.error) {
+        const msg = vd?.error || 'Dados de vendas indisponíveis';
+        return `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:18px 22px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+            <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">📦 Vendas — App de Vendas</div>
+            <div style="color:#9ca3af;font-size:.85rem;text-align:center;padding:16px;">⚠️ ${msg}</div>
+        </div>`;
+    }
+
+    const ma = vd.mes_atual;
+    const mp = vd.mes_passado;
+    const tot = vd.totais;
+
+    // KPI bar
+    const kpis = `
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+            ${_kpi('📦','Novas vendas — mês', _fmt(ma.vendas_ok),
+                `vs mês anterior: ${_pct(ma.vendas_ok, mp.vendas_ok)}`,
+                _deltaClass(ma.vendas_ok, mp.vendas_ok), '#10b981')}
+            ${_kpi('💵','Receita MRR gerada', _fmtBRL(ma.receita_mrr),
+                `vs mês anterior: ${_pct(ma.receita_mrr, mp.receita_mrr)}`,
+                _deltaClass(ma.receita_mrr, mp.receita_mrr), '#059669')}
+            ${_kpi('🎯','Taxa de conversão', `${ma.taxa_conversao}%`,
+                `${_fmt(ma.vendas_ok)} ok de ${_fmt(ma.total_vendas)} tentativas`, '#6b7280', '#f59e0b')}
+            ${_kpi('🌱','Base ativa (total)', _fmt(tot.contratos_ativos),
+                `MRR total: ${_fmtBRL(tot.mrr_total)}`, '#6b7280', '#3b82f6')}
+        </div>`;
+
+    // Monthly chart — count of new sales
+    const mLabels = vd.monthly.map(r => _monthLabel(r.mes));
+    const mDs = [
+        { label: 'Novas vendas', color: '#10b981', data: vd.monthly.map(r => r.vendas_ok) },
+    ];
+    const monthlyChart = `
+        <div style="margin-bottom:16px;">
+            <div style="font-size:.68rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">📊 Evolução mensal — novas vendas</div>
+            ${_barSVGCount(mLabels, mDs, { h: 180 })}
+        </div>`;
+
+    // Ranking por vendedor
+    const rankHtml = vd.por_vendedor.length ? `
+        <div>
+            <div style="font-size:.68rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">🏆 Ranking por vendedor — este mês</div>
+            <table style="width:100%;border-collapse:collapse;font-size:.8rem;">
+                <thead><tr style="border-bottom:2px solid #e5e7eb;">
+                    <th style="text-align:left;padding:7px 8px;color:#6b7280;font-size:.68rem;text-transform:uppercase;">Vendedor</th>
+                    <th style="text-align:right;padding:7px 8px;color:#6b7280;font-size:.68rem;">Vendas</th>
+                    <th style="text-align:right;padding:7px 8px;color:#6b7280;font-size:.68rem;">Tentativas</th>
+                    <th style="text-align:right;padding:7px 8px;color:#6b7280;font-size:.68rem;">Conv.</th>
+                    <th style="text-align:right;padding:7px 8px;color:#6b7280;font-size:.68rem;">Receita</th>
+                </tr></thead>
+                <tbody>
+                    ${vd.por_vendedor.map((v, i) => {
+                        const conv = v.total_tentativas > 0
+                            ? Math.round(v.vendas_ok / v.total_tentativas * 100) + '%' : '—';
+                        return `<tr style="border-bottom:1px solid #f3f4f6;">
+                            <td style="padding:7px 8px;font-weight:${i<3?'700':'400'};color:#1f2937;">
+                                ${i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`} ${v.vendedor}
+                            </td>
+                            <td style="text-align:right;padding:7px 8px;font-weight:700;color:#059669;">${_fmt(v.vendas_ok)}</td>
+                            <td style="text-align:right;padding:7px 8px;color:#6b7280;">${_fmt(v.total_tentativas)}</td>
+                            <td style="text-align:right;padding:7px 8px;color:#6b7280;">${conv}</td>
+                            <td style="text-align:right;padding:7px 8px;font-weight:700;color:#059669;">${_fmtBRL(v.receita)}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>` : '<div style="color:#9ca3af;text-align:center;padding:16px;font-size:.85rem;">Nenhuma venda neste mês</div>';
+
+    return `
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:18px 22px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+            <div style="font-size:.7rem;font-weight:700;color:#059669;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;border-bottom:2px solid #d1fae5;padding-bottom:8px;">
+                📦 Vendas — Novas Conexões
+            </div>
+            ${kpis}
+            <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;">
+                ${monthlyChart}
+                ${rankHtml}
+            </div>
+        </div>`;
+}
+
+// Count-based bar chart (numbers, not BRL)
+function _barSVGCount(labels, datasets, opts = {}) {
+    const W = 500, H = opts.h || 180, PAD_L = 36, PAD_R = 12, PAD_T = 14, PAD_B = 30;
+    const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
+    const n = labels.length;
+    if (!n) return '<div style="color:#9ca3af;text-align:center;padding:24px;">Sem dados</div>';
+
+    const maxVal = Math.max(...datasets.flatMap(d => d.data), 1);
+    const barW   = Math.max(8, (plotW / n) * 0.6);
+    const gap    = plotW / n;
+
+    const gridLines = [0.25, 0.5, 0.75, 1].map(f => {
+        const y = PAD_T + plotH - f * plotH;
+        const v = Math.round(maxVal * f);
+        return `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#f3f4f6" stroke-width="1"/>
+                <text x="${PAD_L - 4}" y="${y + 4}" font-size="9" fill="#9ca3af" text-anchor="end">${v}</text>`;
+    }).join('');
+
+    const xLabels = labels.map((lbl, i) => {
+        const x = PAD_L + i * gap + gap / 2;
+        return `<text x="${x}" y="${PAD_T + plotH + 14}" font-size="9" fill="#9ca3af" text-anchor="middle">${lbl}</text>`;
+    }).join('');
+
+    const bars = datasets.flatMap(ds =>
+        ds.data.map((v, i) => {
+            const h = (v / maxVal) * plotH;
+            const x = PAD_L + i * gap + gap / 2 - barW / 2;
+            const y = PAD_T + plotH - h;
+            return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}"
+                fill="${ds.color}" rx="3" opacity="0.9"/>
+                ${h > 16 ? `<text x="${(x+barW/2).toFixed(1)}" y="${(y-3).toFixed(1)}" font-size="8" fill="#374151" text-anchor="middle">${v}</text>` : ''}`;
+        })
+    ).join('');
+
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;overflow:visible;">
+        ${gridLines}${xLabels}${bars}
+    </svg>`;
+}
+
 // ── Main render ───────────────────────────────────────────────────────────────
 export async function renderROIDashboard(container) {
     if (!container) return;
@@ -156,14 +278,16 @@ export async function renderROIDashboard(container) {
             <div style="text-align:center;color:#9ca3af;padding:40px;font-size:.95rem;">⏳ Carregando Dashboard ROI...</div>
         </div>`;
 
-    let cfg, stats;
+    let cfg, stats, vendasStats;
     try {
-        const [rc, rs] = await Promise.all([
+        const [rc, rs, rv] = await Promise.all([
             fetch('/api/roi/config'),
             fetch('/api/roi/stats'),
+            fetch('/api/roi/vendas/stats'),
         ]);
-        cfg   = await rc.json();
-        stats = await rs.json();
+        cfg         = await rc.json();
+        stats       = await rs.json();
+        vendasStats = rv.ok ? await rv.json() : { error: 'Falha ao carregar dados de vendas' };
     } catch (e) {
         container.innerHTML = `<div style="padding:40px;text-align:center;color:#ef4444;">Erro ao carregar dados: ${e.message}</div>`;
         return;
@@ -253,6 +377,9 @@ export async function renderROIDashboard(container) {
                     ${userRankHtml}
                 </div>
             </div>
+
+            <!-- Seção Vendas -->
+            ${_vendasSection(vendasStats)}
 
             <!-- Disclaimer -->
             <div style="font-size:.7rem;color:#9ca3af;text-align:center;padding:8px;border-top:1px solid #e5e7eb;">
