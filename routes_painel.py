@@ -71,15 +71,33 @@ def _chatmix_data() -> dict | None:
     count_data = _cm_req('/attendances/count', ttl=60) or {}
     ats = count_data.get('attendances') or {}
 
-    # Encerrados hoje  (2 req/min — cache 5 min)
+    # Encerrados hoje com dados completos para breakdowns (cache 5 min)
     hoje_start = _datetime.combine(hoje, _datetime.min.time()).strftime(fmt)
     hoje_end   = _datetime.now().strftime(fmt)
     r_hoje = _cm_req('/attendances/closed',
-                     {'date_start': hoje_start, 'date_end': hoje_end, 'per_page': 1},
+                     {'date_start': hoje_start, 'date_end': hoje_end, 'per_page': 50},
                      ttl=300)
     hoje_enc = int((r_hoje or {}).get('meta', {}).get('total') or 0) if r_hoje else None
 
-    # Encerrados mesma semana passada (cache 1h — dado fixo)
+    # Agrega breakdowns a partir dos itens retornados
+    por_canal     = {}
+    por_setor     = {}
+    por_atendente = {}
+    for item in (r_hoje or {}).get('data') or []:
+        # canal
+        ch = item.get('channel') or {}
+        ch_nome = ch.get('name') or ch.get('title') or ch.get('nome') or 'Desconhecido'
+        por_canal[ch_nome] = por_canal.get(ch_nome, 0) + 1
+        # setor / departamento
+        dep = item.get('department') or {}
+        dep_nome = dep.get('name') or dep.get('title') or dep.get('nome') or 'Sem setor'
+        por_setor[dep_nome] = por_setor.get(dep_nome, 0) + 1
+        # atendente / usuário
+        usr = item.get('user') or {}
+        usr_nome = usr.get('name') or usr.get('full_name') or usr.get('nome') or usr.get('username') or 'Sem atendente'
+        por_atendente[usr_nome] = por_atendente.get(usr_nome, 0) + 1
+
+    # Encerrados mesma semana passada — só total (cache 1h)
     ant_start = _datetime.combine(sem_ant, _datetime.min.time()).strftime(fmt)
     ant_end   = _datetime.combine(sem_ant, _datetime.max.time()).strftime(fmt)
     r_ant = _cm_req('/attendances/closed',
@@ -94,6 +112,9 @@ def _chatmix_data() -> dict | None:
         'em_atendimento': int(ats.get('progress') or 0),
         'fila_espera':    int(ats.get('waiting')  or 0),
         'em_automacao':   int(ats.get('automation') or 0),
+        'por_canal':      dict(sorted(por_canal.items(),     key=lambda x: -x[1])),
+        'por_setor':      dict(sorted(por_setor.items(),     key=lambda x: -x[1])),
+        'por_atendente':  dict(sorted(por_atendente.items(), key=lambda x: -x[1])),
     }
 
 painel_bp = Blueprint('painel_bp', __name__)

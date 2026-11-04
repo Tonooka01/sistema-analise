@@ -571,10 +571,43 @@ function _chatmixCard(cm) {
         </div>`;
     }
 
-    // badgesHtml não é mais usado separadamente (integrado no innerHtml)
-    const badgesHtml = '';
+    // Helper: gera mini tabela de breakdown com barra
+    function _breakdown(entries, maxN, barColor) {
+        if (!entries.length) return '<span style="font-size:.72rem;color:#9ca3af;">Sem dados</span>';
+        const mx = entries[0][1];
+        return entries.slice(0, maxN).map(([nome, qty]) => {
+            const pct = Math.round((qty / mx) * 100);
+            return `<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
+                <span style="font-size:.7rem;color:#374151;min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${nome}">${nome}</span>
+                <div style="width:60px;background:#e5e7eb;border-radius:3px;height:6px;overflow:hidden;flex-shrink:0;">
+                    <div style="width:${pct}%;background:${barColor};height:100%;border-radius:3px;"></div>
+                </div>
+                <span style="font-size:.7rem;font-weight:700;color:#111827;min-width:20px;text-align:right;">${qty}</span>
+            </div>`;
+        }).join('');
+    }
 
-    // Departamentos (se existir)
+    const canal_entries     = Object.entries(cm.por_canal      || {});
+    const setor_entries     = Object.entries(cm.por_setor      || {});
+    const atend_entries     = Object.entries(cm.por_atendente  || {});
+
+    const breakdownsHtml = (canal_entries.length || setor_entries.length || atend_entries.length) ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;border-top:1px solid #f1f5f9;padding-top:12px;">
+        <div>
+            <div style="font-size:.62rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Por canal</div>
+            ${_breakdown(canal_entries, 5, '#6366f1')}
+        </div>
+        <div>
+            <div style="font-size:.62rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Por setor</div>
+            ${_breakdown(setor_entries, 5, '#0ea5e9')}
+        </div>
+        <div>
+            <div style="font-size:.62rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Por atendente</div>
+            ${_breakdown(atend_entries, 6, '#10b981')}
+        </div>
+    </div>` : '';
+
+    // campos legados (por_departamento / principais_motivos) — mantidos por compatibilidade
     const deptos = Object.entries(cm.por_departamento || {}).sort((a,b)=>b[1]-a[1]).slice(0,5);
     const maxDep = deptos.length ? deptos[0][1] : 1;
     const deptoRows = deptos.map(([nome,qty]) => {
@@ -609,6 +642,7 @@ function _chatmixCard(cm) {
         </div>
         <div style="padding:14px 16px;flex:1;display:flex;flex-direction:column;gap:10px;">
             ${innerHtml}
+            ${breakdownsHtml}
             ${deptoRows ? `<div><div style="font-size:.62rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Por departamento</div>${deptoRows}</div>` : ''}
             ${chips ? `<div><div style="font-size:.62rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Principais motivos</div><div>${chips}</div></div>` : ''}
         </div>
