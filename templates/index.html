@@ -1245,17 +1245,17 @@ async function _cdpRenderMensagens(c, s, cl) {
     return out;
   }
 
-  // Collect all phone numbers from contract + client, deduplicated
+  // Collect all phone number columns from contract + client
   function _toE164(raw) { const d=(raw||'').replace(/\D/g,''); return d?(d.startsWith('55')?d:'55'+d):''; }
   const allPhones = [
-    { label: 'Celular (contrato)', raw: c.Telefone_celular },
-    { label: 'Residencial (contrato)', raw: c.Telefone_residencial },
-    { label: 'Celular (cliente)', raw: cl?.cel },
-    { label: 'Telefone (cliente)', raw: cl?.Telefone },
-    { label: 'WhatsApp (cliente)', raw: cl?.WhatsApp },
-    { label: 'Comercial (cliente)', raw: cl?.comercial },
+    { label: 'Celular (contrato)',      raw: c.Telefone_celular },
+    { label: 'Residencial (contrato)',  raw: c.Telefone_residencial },
+    { label: 'Celular (cliente)',       raw: cl?.cel },
+    { label: 'Telefone (cliente)',      raw: cl?.Telefone },
+    { label: 'WhatsApp (cliente)',      raw: cl?.WhatsApp },
+    { label: 'Comercial (cliente)',     raw: cl?.comercial },
   ].map(p => ({ ...p, e164: _toE164(p.raw) }))
-   .filter((p, idx, arr) => p.e164 && arr.findIndex(x => x.e164 === p.e164) === idx);
+   .filter(p => p.e164);
 
   const _isAdmin = window._currentUser?.username === 'admin';
   const _manualNumHtml = _isAdmin ? `
