@@ -248,7 +248,7 @@ def _sync_clientes(conn, token, log, since=None):
                 r.get('email'), r.get('ativo'), r.get('data_cadastro'),
                 r.get('filial_id'), r.get('tipo_pessoa'), r.get('whatsapp'),
                 r.get('latitude'), r.get('longitude'),
-                r.get('celular'), r.get('fone_comercial')
+                r.get('telefone_celular'), r.get('telefone_comercial')
             ))
             if table == 'Clientes':
                 total_c += 1
