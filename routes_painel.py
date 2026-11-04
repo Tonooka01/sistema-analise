@@ -123,7 +123,8 @@ def api_painel_resumo():
             FROM Contas_a_Receber
             WHERE Filial = 2 AND Status = 'Recebido'
               AND Data_pagamento IS NOT NULL AND Data_pagamento != ''
-              AND date(Data_pagamento) >= date('now', '-11 months', 'start of month')
+              AND date(Data_pagamento) >= date('now', '-5 months', 'start of month')
+              AND date(Data_pagamento) <= date('now', '+1 month', 'start of month', '+1 month', '-1 day')
             GROUP BY mes
             UNION ALL
             SELECT strftime('%Y-%m', Vencimento) AS mes,
@@ -131,7 +132,8 @@ def api_painel_resumo():
                    COALESCE(SUM(Valor), 0) AS total
             FROM Contas_a_Receber
             WHERE Filial = 2 AND Status IN ('A receber','Aberto','Cancelado','Cancelada')
-              AND date(Vencimento) >= date('now', '-11 months', 'start of month')
+              AND date(Vencimento) >= date('now', '-5 months', 'start of month')
+              AND date(Vencimento) <= date('now', '+1 month', 'start of month', '+1 month', '-1 day')
             GROUP BY mes, status_norm
             ORDER BY mes, status_norm
         """).fetchall()]
@@ -148,7 +150,8 @@ def api_painel_resumo():
             FROM Contas_a_Receber
             WHERE Filial = 2
               AND Status IN ('Recebido','A receber','Aberto','Cancelado','Cancelada')
-              AND date(Vencimento) >= date('now', '-11 months', 'start of month')
+              AND date(Vencimento) >= date('now', '-5 months', 'start of month')
+              AND date(Vencimento) <= date('now', '+1 month', 'start of month', '+1 month', '-1 day')
             GROUP BY mes, status_norm
             ORDER BY mes, status_norm
         """).fetchall()]

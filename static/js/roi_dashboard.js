@@ -372,27 +372,28 @@ function _painelCancelamentos(p) {
 
 // ── Stacked bar SVG ───────────────────────────────────────────────────────────
 function _stackedBarSVG(labels, datasets, opts = {}) {
-    const W = 680, H = opts.h || 240, PAD_L = 70, PAD_R = 12, PAD_T = 14, PAD_B = 36;
-    const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
     const n = labels.length;
     if (!n) return '<div style="color:#9ca3af;text-align:center;padding:24px;">Sem dados</div>';
+    const W = Math.max(680, n * 90), H = opts.h || 240;
+    const PAD_L = 70, PAD_R = 16, PAD_T = 20, PAD_B = 36;
+    const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
     const totals = labels.map((_, i) => datasets.reduce((s, d) => s + (d.data[i] || 0), 0));
     const maxVal = Math.max(...totals, 1);
-    const barW = Math.max(20, (plotW / n) * 0.55);
+    const barW = Math.min(80, (plotW / n) * 0.6);
     const gap  = plotW / n;
+    const fmtV = v => v >= 1e6 ? `R$${(v/1e6).toFixed(2)}M` : v >= 1000 ? `R$${(v/1000).toFixed(1)}k` : `R$${Math.round(v)}`;
     const gridLines = [0.25, 0.5, 0.75, 1].map(f => {
         const y = PAD_T + plotH - f * plotH;
-        const v = maxVal * f;
-        const lbl = v >= 1000 ? `R$${(v/1000).toFixed(0)}k` : `R$${Math.round(v)}`;
         return `<line x1="${PAD_L}" y1="${y}" x2="${W-PAD_R}" y2="${y}" stroke="#f3f4f6" stroke-width="1"/>
-                <text x="${PAD_L-4}" y="${y+4}" font-size="9" fill="#9ca3af" text-anchor="end">${lbl}</text>`;
+                <text x="${PAD_L-4}" y="${y+4}" font-size="10" fill="#9ca3af" text-anchor="end">${fmtV(maxVal*f)}</text>`;
     }).join('');
     const xLabels = labels.map((lbl, i) => {
         const x = PAD_L + i * gap + gap / 2;
-        return `<text x="${x}" y="${PAD_T+plotH+14}" font-size="9" fill="#9ca3af" text-anchor="middle">${lbl}</text>`;
+        return `<text x="${x}" y="${PAD_T+plotH+16}" font-size="10" fill="#6b7280" text-anchor="middle">${lbl}</text>`;
     }).join('');
     const bars = labels.map((_, i) => {
-        const x = PAD_L + i * gap + gap / 2 - barW / 2;
+        const cx = PAD_L + i * gap + gap / 2;
+        const x  = cx - barW / 2;
         let yBase = PAD_T + plotH;
         return datasets.map(ds => {
             const v = ds.data[i] || 0;
@@ -400,18 +401,20 @@ function _stackedBarSVG(labels, datasets, opts = {}) {
             const h = (v / maxVal) * plotH;
             const y = yBase - h;
             yBase = y;
-            const lbl = v >= 1000 ? `R$${(v/1000).toFixed(1)}k` : `R$${Math.round(v)}`;
-            return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${ds.color}" opacity="0.9"/>
-                    ${h > 18 ? `<text x="${(x+barW/2).toFixed(1)}" y="${(y+h/2+4).toFixed(1)}" font-size="9" fill="#fff" text-anchor="middle" font-weight="600">${lbl}</text>` : ''}`;
+            const lbl = fmtV(v);
+            return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${ds.color}" rx="2" opacity="0.92"/>
+                    ${h > 22 ? `<text x="${cx.toFixed(1)}" y="${(y+h/2+4).toFixed(1)}" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">${lbl}</text>` : ''}`;
         }).join('');
     }).join('');
     const legend = datasets.map(ds =>
-        `<span style="display:inline-flex;align-items:center;gap:5px;font-size:.72rem;color:#374151;margin-right:14px;">
-            <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${ds.color};"></span>${ds.label}
+        `<span style="display:inline-flex;align-items:center;gap:5px;font-size:.74rem;color:#374151;margin-right:14px;">
+            <span style="display:inline-block;width:13px;height:13px;border-radius:3px;background:${ds.color};"></span>${ds.label}
         </span>`
     ).join('');
-    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;overflow:visible;">${gridLines}${xLabels}${bars}</svg>
-            <div style="margin-top:6px;display:flex;flex-wrap:wrap;">${legend}</div>`;
+    return `<div style="overflow-x:auto;">
+        <svg viewBox="0 0 ${W} ${H}" style="min-width:${Math.min(W,680)}px;width:100%;height:auto;overflow:visible;">${gridLines}${xLabels}${bars}</svg>
+    </div>
+    <div style="margin-top:8px;display:flex;flex-wrap:wrap;">${legend}</div>`;
 }
 
 function _buildCtrDatasets(rows, sortedMes) {
