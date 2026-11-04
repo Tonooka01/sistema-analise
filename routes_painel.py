@@ -4,17 +4,102 @@ GET /api/painel/resumo — snapshot consolidado: MRR, contratos, cancelamentos,
                           negativações, OS, atendimentos (tudo numa query passada)
 """
 import json as _json
-import sqlite3 as _sqlite3
-from pathlib import Path as _Path
+import os as _os
+import time as _time
+import urllib.request as _urlreq
+import urllib.parse as _urlparse
+from datetime import date as _date, datetime as _datetime, timedelta as _td
+
 from flask import Blueprint, jsonify
 from flask_login import current_user
 from database import get_db_connection as get_db
 
-_HISTORICO_DB = _Path(r"C:\Users\User\Desktop\Arquivos e Programas Área Trabalho\Assistente\historico.db")
+# ── ChatMix API ───────────────────────────────────────────────────────────────
+_CM_CACHE: dict = {}   # url -> (ts, data)
+
+def _cm_creds():
+    """Lê URL e token do banco Settings (atualiza em tempo real sem restart)."""
+    try:
+        from database import get_db_connection as _gdb
+        _c = _gdb()
+        rows = {r[0]: r[1] for r in _c.execute(
+            "SELECT key, value FROM Settings WHERE key IN ('chatmix_url','chatmix_token')"
+        ).fetchall()}
+        _c.close()
+        url   = (rows.get('chatmix_url') or _os.environ.get('CHATMIX_URL') or '').rstrip('/')
+        token = rows.get('chatmix_token') or _os.environ.get('CHATMIX_TOKEN') or ''
+        if url and not url.endswith('/api-v2/public-api'):
+            url = url.rstrip('/') + '/api-v2/public-api'
+        return url, token
+    except Exception:
+        return '', ''
+
+def _cm_req(path, params: dict | None = None, ttl: int = 300):
+    """GET na API ChatMix com cache simples por TTL (segundos)."""
+    base, token = _cm_creds()
+    if not base or not token:
+        return None
+    qs  = ('?' + _urlparse.urlencode(params)) if params else ''
+    url = f"{base}{path}{qs}"
+    cached = _CM_CACHE.get(url)
+    if cached and _time.time() - cached[0] < ttl:
+        return cached[1]
+    try:
+        req = _urlreq.Request(url, headers={'X-Auth': token, 'Accept': 'application/json'})
+        with _urlreq.urlopen(req, timeout=8) as r:
+            data = _json.loads(r.read())
+        _CM_CACHE[url] = (_time.time(), data)
+        return data
+    except Exception:
+        return None
+
+
+def _chatmix_data() -> dict | None:
+    """Monta o snapshot ChatMix: contagens ao vivo + comparativo dia/semana."""
+    base, token = _cm_creds()
+    if not base or not token:
+        return None
+
+    hoje       = _date.today()
+    sem_ant    = hoje - _td(days=7)
+    DIAS_PT    = ['segunda','terça','quarta','quinta','sexta','sábado','domingo']
+    dia_nome   = DIAS_PT[hoje.weekday()]
+
+    fmt = '%Y-%m-%d %H:%M:%S'
+
+    # Contagens ao vivo (25 req/min — sem problema)
+    count_data = _cm_req('/attendances/count', ttl=60) or {}
+    ats = count_data.get('attendances') or {}
+
+    # Encerrados hoje  (2 req/min — cache 5 min)
+    hoje_start = _datetime.combine(hoje, _datetime.min.time()).strftime(fmt)
+    hoje_end   = _datetime.now().strftime(fmt)
+    r_hoje = _cm_req('/attendances/closed',
+                     {'date_start': hoje_start, 'date_end': hoje_end, 'per_page': 1},
+                     ttl=300)
+    hoje_enc = int((r_hoje or {}).get('meta', {}).get('total') or 0) if r_hoje else None
+
+    # Encerrados mesma semana passada (cache 1h — dado fixo)
+    ant_start = _datetime.combine(sem_ant, _datetime.min.time()).strftime(fmt)
+    ant_end   = _datetime.combine(sem_ant, _datetime.max.replace(microsecond=0)).strftime(fmt)
+    r_ant = _cm_req('/attendances/closed',
+                    {'date_start': ant_start, 'date_end': ant_end, 'per_page': 1},
+                    ttl=3600)
+    ant_enc = int((r_ant or {}).get('meta', {}).get('total') or 0) if r_ant else None
+
+    return {
+        'dia_nome':       dia_nome,
+        'hoje_enc':       hoje_enc,
+        'ant_enc':        ant_enc,
+        'em_atendimento': int(ats.get('progress') or 0),
+        'fila_espera':    int(ats.get('waiting')  or 0),
+        'em_automacao':   int(ats.get('automation') or 0),
+    }
 
 painel_bp = Blueprint('painel_bp', __name__)
 
 _CANCEL_IN = "('Cancelado','Inativo','Desistente')"
+
 
 
 def _table_exists(conn, name):
@@ -215,57 +300,8 @@ def api_painel_resumo():
             except Exception:
                 pass
 
-        # ── ChatMix — historico.db do Assistente (somente leitura) ───────────
-        from datetime import date as _date, timedelta as _td
-        chatmix = None
-        try:
-            if _HISTORICO_DB.exists():
-                _hc = _sqlite3.connect(str(_HISTORICO_DB), timeout=5)
-                _hc.row_factory = _sqlite3.Row
-                _hrows = _hc.execute(
-                    "SELECT criado_em, periodo, payload FROM execucoes ORDER BY id DESC"
-                ).fetchall()
-
-                # Agrupa por data: para cada dia guarda a execução com maior encerrados
-                _daily = {}
-                for _hr in _hrows:
-                    try:
-                        _pl  = _json.loads(_hr['payload'])
-                        _cm  = _pl.get('metricas', {}).get('chatmix', {})
-                        _enc = int(_cm.get('encerrados') or 0)
-                        _d   = _hr['criado_em'][:10]
-                        if _d not in _daily or _enc > _daily[_d]['encerrados']:
-                            _daily[_d] = {'encerrados': _enc, 'criado_em': _hr['criado_em'],
-                                          'periodo': _hr['periodo'], 'cm': _cm}
-                    except Exception:
-                        pass
-
-                _hoje       = _date.today().isoformat()
-                _semana_ant = (_date.today() - _td(days=7)).isoformat()
-                _hoje_d     = _daily.get(_hoje)
-                _ant_d      = _daily.get(_semana_ant)
-
-                # Dados ao vivo vêm da execução mais recente
-                _latest_cm  = _daily[max(_daily)] ['cm'] if _daily else {}
-
-                DIAS_PT = ['segunda','terça','quarta','quinta','sexta','sábado','domingo']
-                _dia_nome = DIAS_PT[_date.today().weekday()]
-
-                chatmix = {
-                    'criado_em':          _latest_cm and _daily[max(_daily)]['criado_em'],
-                    'hoje_enc':           _hoje_d['encerrados'] if _hoje_d else None,
-                    'ant_enc':            _ant_d['encerrados']  if _ant_d  else None,
-                    'dia_nome':           _dia_nome,
-                    'em_atendimento':     (_latest_cm.get('agora') or {}).get('em_atendimento', 0),
-                    'em_automacao':       (_latest_cm.get('agora') or {}).get('em_automacao', 0),
-                    'fila_espera':        (_latest_cm.get('agora') or {}).get('fila_espera', 0),
-                    'duracao_media_min':  _latest_cm.get('duracao_media_min'),
-                    'por_departamento':   _latest_cm.get('por_departamento') or {},
-                    'principais_motivos': _latest_cm.get('principais_motivos') or {},
-                }
-                _hc.close()
-        except Exception as _e:
-            chatmix = {'_debug_error': str(_e)}
+        # ── ChatMix — API pública ─────────────────────────────────────────────
+        chatmix = _chatmix_data()
 
         return _json.dumps({
             'mrr':           mrr,

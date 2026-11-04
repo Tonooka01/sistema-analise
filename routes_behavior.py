@@ -5914,10 +5914,10 @@ def api_chatmix_settings_get():
     conn = get_db()
     try:
         rows = conn.execute(
-            "SELECT key, value FROM Settings WHERE key IN ('chatmix_token', 'chatmix_key')"
+            "SELECT key, value FROM Settings WHERE key IN ('chatmix_url','chatmix_token','chatmix_key')"
         ).fetchall()
         cfg = {r['key']: r['value'] or '' for r in rows}
-        return jsonify({'chatmix_token': cfg.get('chatmix_token', ''), 'chatmix_key': cfg.get('chatmix_key', '')})
+        return jsonify({'chatmix_url': cfg.get('chatmix_url',''), 'chatmix_token': cfg.get('chatmix_token', ''), 'chatmix_key': cfg.get('chatmix_key', '')})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -5929,7 +5929,7 @@ def api_chatmix_settings_put():
     conn = get_db()
     try:
         data = request.get_json(force=True) or {}
-        for key in ('chatmix_token', 'chatmix_key'):
+        for key in ('chatmix_url', 'chatmix_token', 'chatmix_key'):
             val = str(data.get(key, '')).strip()
             conn.execute("INSERT OR REPLACE INTO Settings (key, value) VALUES (?, ?)", (key, val))
         conn.commit()

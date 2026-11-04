@@ -553,8 +553,13 @@
                     <div class="mb-4 space-y-2">
                         <p class="text-xs font-semibold text-gray-600">Credenciais</p>
                         <div class="flex gap-2 items-center">
+                            <label class="text-xs text-gray-500 w-12 shrink-0">URL:</label>
+                            <input type="text" id="cmUrlInput" placeholder="https://srv2.chatmix.com.br"
+                                   class="flex-1 border rounded px-2 py-1 text-sm">
+                        </div>
+                        <div class="flex gap-2 items-center">
                             <label class="text-xs text-gray-500 w-12 shrink-0">Token:</label>
-                            <input type="text" id="cmTokenInput" placeholder="Token ChatMix"
+                            <input type="text" id="cmTokenInput" placeholder="Token / X-Auth"
                                    class="flex-1 border rounded px-2 py-1 text-sm">
                         </div>
                         <div class="flex gap-2 items-center">
@@ -929,8 +934,10 @@ async function cmLoadSettings() {
         const r = await fetch('/api/behavior/chatmix/settings');
         if (!r.ok) return;
         const d = await r.json();
+        const u = document.getElementById('cmUrlInput');
         const t = document.getElementById('cmTokenInput');
         const k = document.getElementById('cmKeyInput');
+        if (u) u.value = d.chatmix_url   || '';
         if (t) t.value = d.chatmix_token || '';
         if (k) k.value = d.chatmix_key   || '';
     } catch {}
@@ -970,6 +977,7 @@ async function cmLoadTemplates() {
 }
 
 async function cmSaveCredentials() {
+    const url   = (document.getElementById('cmUrlInput')?.value   || '').trim();
     const token = (document.getElementById('cmTokenInput')?.value || '').trim();
     const key   = (document.getElementById('cmKeyInput')?.value   || '').trim();
     const msg   = document.getElementById('cmCredMsg');
@@ -977,7 +985,7 @@ async function cmSaveCredentials() {
         const r = await fetch('/api/behavior/chatmix/settings', {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ chatmix_token: token, chatmix_key: key }),
+            body: JSON.stringify({ chatmix_url: url, chatmix_token: token, chatmix_key: key }),
         });
         if (r.ok && msg) { msg.textContent = '✅ Salvo!'; msg.classList.remove('hidden'); setTimeout(() => msg.classList.add('hidden'), 2000); }
     } catch {}
