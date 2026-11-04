@@ -1298,8 +1298,8 @@ async function _cdpRenderMensagens(c, s, cl) {
       ? `<span class="cm-cooldown-badge" style="font-size:.68rem;color:#ea580c;font-weight:600;white-space:nowrap;">⏱ ${faltam}d</span>`
       : (diasPassados !== null ? `<span class="cm-cooldown-badge" style="font-size:.68rem;color:#9ca3af;white-space:nowrap;">↩ ${diasPassados}d</span>` : '');
 
-    const previewLines = (resolvedBody || '').split('\n').filter(l => l.trim()).slice(0, 2);
-    const preview = previewLines.join(' ').slice(0, 100) + (resolvedBody.length > 100 ? '…' : '');
+    const previewLines = (resolvedBody || '').split('\n').filter(l => l.trim()).slice(0, 4);
+    const preview = previewLines.join(' ').slice(0, 220) + (resolvedBody.length > 220 ? '…' : '');
 
     const sendBtnCss = canSend
       ? 'background:#16a34a;color:#fff;border:none;cursor:pointer;'
@@ -1314,7 +1314,7 @@ async function _cdpRenderMensagens(c, s, cl) {
         <span style="font-size:.85rem;font-weight:700;color:#1e3a5f;line-height:1.3;">${t.nome}</span>
         ${badgeHtml}
       </div>
-      <p style="font-size:.75rem;color:#3b82f6;line-height:1.5;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${preview || '<em style="color:#94a3b8">Sem texto</em>'}</p>
+      <p style="font-size:.78rem;color:#3b82f6;line-height:1.6;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;">${preview || '<em style="color:#94a3b8">Sem texto</em>'}</p>
       <div style="display:flex;gap:8px;">
         <button class="cm-copy-btn"
                 style="flex:1;padding:7px 0;border-radius:9px;font-size:.76rem;font-weight:600;
@@ -1333,7 +1333,7 @@ async function _cdpRenderMensagens(c, s, cl) {
     ? `<div>
          <div style="font-size:.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">📤 ChatMix — Envio Direto</div>
          ${phoneSelectHtml}
-         <div id="cdp-cm-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:10px;">${cmTemplates.map(_cmCardHtml).join('')}</div>
+         <div id="cdp-cm-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;margin-top:10px;">${cmTemplates.map(_cmCardHtml).join('')}</div>
        </div>`
     : '';
 
