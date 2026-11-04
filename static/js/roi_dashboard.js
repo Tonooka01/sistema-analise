@@ -487,69 +487,69 @@ function _painelFinanceiro(p) {
 
 // ── ChatMix card (usado dentro de _painelOperacional) ─────────────────────────
 function _chatmixCard(cm) {
-    if (!cm) return _kpi('🎧','Atendimentos ChatMix','—','Sem dados do Assistente','#9ca3af','#0ea5e9');
+    if (!cm) return _kpi('🎧','Atendimentos ChatMix','—','Token API não configurado','#9ca3af','#0ea5e9');
 
-    const dtStr = cm.criado_em
-        ? new Date(cm.criado_em.replace(' ','T')).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
-        : '';
-
-    // Comparativo hoje vs mesma semana passada
     const hoje    = cm.hoje_enc != null ? cm.hoje_enc : null;
     const antSem  = cm.ant_enc  != null ? cm.ant_enc  : null;
     const diaNome = cm.dia_nome || '';
-    let comparativo = '';
+
+    // Bloco comparativo
+    let cmpHtml = '';
     if (hoje !== null && antSem !== null) {
-        const diff = hoje - antSem;
+        const diff  = hoje - antSem;
         const sinal = diff > 0 ? '+' : '';
-        const cor = diff > 0 ? '#dc2626' : diff < 0 ? '#16a34a' : '#6b7280';
-        comparativo = `<div style="display:flex;align-items:center;gap:14px;background:#f8fafc;border-radius:12px;padding:10px 14px;margin-bottom:10px;">
-            <div style="text-align:center;">
-                <div style="font-size:1.5rem;font-weight:800;color:#0ea5e9;">${hoje}</div>
-                <div style="font-size:.68rem;color:#64748b;">${diaNome} atual</div>
+        const cor   = diff > 0 ? '#dc2626' : diff < 0 ? '#16a34a' : '#6b7280';
+        const bg    = diff > 0 ? '#fef2f2' : diff < 0 ? '#f0fdf4' : '#f8fafc';
+        cmpHtml = `
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:0;margin-bottom:14px;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb;">
+            <div style="text-align:center;padding:14px 10px;background:#eff6ff;">
+                <div style="font-size:2rem;font-weight:800;color:#1d4ed8;line-height:1;">${hoje}</div>
+                <div style="font-size:.62rem;color:#3b82f6;font-weight:600;margin-top:4px;text-transform:uppercase;letter-spacing:.04em;">${diaNome} atual</div>
             </div>
-            <div style="color:#cbd5e1;font-size:1.2rem;">vs</div>
-            <div style="text-align:center;">
-                <div style="font-size:1.5rem;font-weight:800;color:#94a3b8;">${antSem}</div>
-                <div style="font-size:.68rem;color:#64748b;">${diaNome} passado</div>
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 12px;background:#f8fafc;gap:5px;">
+                <div style="font-size:.65rem;color:#94a3b8;font-weight:500;">vs</div>
+                <div style="background:${cor};color:#fff;font-size:.78rem;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;">${sinal}${diff}</div>
             </div>
-            <div style="margin-left:auto;text-align:center;">
-                <div style="font-size:1.1rem;font-weight:700;color:${cor};">${sinal}${diff}</div>
-                <div style="font-size:.63rem;color:#94a3b8;">variação</div>
+            <div style="text-align:center;padding:14px 10px;background:#f8fafc;">
+                <div style="font-size:2rem;font-weight:800;color:#94a3b8;line-height:1;">${antSem}</div>
+                <div style="font-size:.62rem;color:#94a3b8;font-weight:500;margin-top:4px;text-transform:uppercase;letter-spacing:.04em;">${diaNome} passado</div>
             </div>
         </div>`;
     } else if (hoje !== null) {
-        comparativo = `<div style="background:#f8fafc;border-radius:12px;padding:10px 14px;margin-bottom:10px;">
-            <div style="font-size:1.5rem;font-weight:800;color:#0ea5e9;">${hoje}</div>
-            <div style="font-size:.68rem;color:#64748b;">${diaNome} atual · sem dado da semana passada ainda</div>
+        cmpHtml = `
+        <div style="text-align:center;padding:14px 10px;background:#eff6ff;border-radius:14px;margin-bottom:14px;">
+            <div style="font-size:2.2rem;font-weight:800;color:#1d4ed8;line-height:1;">${hoje}</div>
+            <div style="font-size:.65rem;color:#3b82f6;margin-top:5px;">${diaNome} atual · aguardando dado da semana passada</div>
         </div>`;
     } else {
-        comparativo = `<div style="font-size:.8rem;color:#9ca3af;margin-bottom:8px;">Sem dados de hoje ainda — última ref.: ${dtStr}</div>`;
+        cmpHtml = `<div style="text-align:center;padding:14px;color:#9ca3af;font-size:.8rem;margin-bottom:14px;">Sem registros de hoje ainda</div>`;
     }
 
-    // Badges ao vivo
-    const badges = `<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-        <div style="text-align:center;background:#f0fdf4;border-radius:10px;padding:5px 12px;">
-            <div style="font-size:1rem;font-weight:700;color:#15803d;">${cm.em_atendimento}</div>
-            <div style="font-size:.62rem;color:#166534;">Em atend.</div>
+    // Badges ao vivo em grid 3 colunas
+    const badgesHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
+        <div style="text-align:center;background:#f0fdf4;border-radius:10px;padding:9px 4px;border:1px solid #bbf7d0;">
+            <div style="font-size:1.4rem;font-weight:800;color:#15803d;line-height:1;">${cm.em_atendimento}</div>
+            <div style="font-size:.59rem;color:#166534;margin-top:3px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Em atend.</div>
         </div>
-        <div style="text-align:center;background:#fffbeb;border-radius:10px;padding:5px 12px;">
-            <div style="font-size:1rem;font-weight:700;color:#b45309;">${cm.fila_espera}</div>
-            <div style="font-size:.62rem;color:#92400e;">Fila</div>
+        <div style="text-align:center;background:#fffbeb;border-radius:10px;padding:9px 4px;border:1px solid #fde68a;">
+            <div style="font-size:1.4rem;font-weight:800;color:#b45309;line-height:1;">${cm.fila_espera}</div>
+            <div style="font-size:.59rem;color:#92400e;margin-top:3px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Na fila</div>
         </div>
-        <div style="text-align:center;background:#f1f5f9;border-radius:10px;padding:5px 12px;">
-            <div style="font-size:1rem;font-weight:700;color:#334155;">${cm.em_automacao}</div>
-            <div style="font-size:.62rem;color:#475569;">Automação</div>
+        <div style="text-align:center;background:#f1f5f9;border-radius:10px;padding:9px 4px;border:1px solid #e2e8f0;">
+            <div style="font-size:1.4rem;font-weight:800;color:#334155;line-height:1;">${cm.em_automacao}</div>
+            <div style="font-size:.59rem;color:#475569;margin-top:3px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Automação</div>
         </div>
     </div>`;
 
-    // Departamentos
+    // Departamentos (se existir)
     const deptos = Object.entries(cm.por_departamento || {}).sort((a,b)=>b[1]-a[1]).slice(0,5);
     const maxDep = deptos.length ? deptos[0][1] : 1;
     const deptoRows = deptos.map(([nome,qty]) => {
         const pct = Math.round((qty/maxDep)*100);
-        return `<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
+        return `<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
             <span style="font-size:.7rem;color:#374151;min-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${nome}">${nome}</span>
-            <div style="flex:1;background:#e5e7eb;border-radius:4px;height:8px;overflow:hidden;">
+            <div style="flex:1;background:#e5e7eb;border-radius:4px;height:7px;overflow:hidden;">
                 <div style="width:${pct}%;background:#0ea5e9;height:100%;border-radius:4px;"></div>
             </div>
             <span style="font-size:.7rem;font-weight:600;color:#111827;min-width:22px;text-align:right;">${qty}</span>
@@ -558,21 +558,23 @@ function _chatmixCard(cm) {
 
     const motivos = Object.entries(cm.principais_motivos || {}).slice(0,4);
     const chips = motivos.map(([nome,qty]) =>
-        `<span style="display:inline-flex;align-items:center;gap:3px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:20px;padding:2px 7px;font-size:.66rem;color:#0369a1;margin:2px;">${nome} <b>${qty}</b></span>`
+        `<span style="display:inline-flex;align-items:center;gap:3px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:20px;padding:2px 8px;font-size:.64rem;color:#0369a1;margin:2px;">${nome} <b>${qty}</b></span>`
     ).join('');
 
-    const durStr = cm.duracao_media_min ? `Duração média: ${Math.round(cm.duracao_media_min)} min` : '';
-
-    return `<div style="background:#fff;border-radius:16px;padding:18px 20px;flex:1;min-width:280px;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid #e5e7eb;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-            <span style="font-size:1.3rem;">🎧</span>
-            <span style="font-weight:700;font-size:.95rem;color:#111827;">Atendimentos ChatMix</span>
+    return `<div style="background:#fff;border-radius:16px;overflow:hidden;flex:1;min-width:280px;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid #e5e7eb;">
+        <div style="padding:12px 16px 10px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:7px;">
+            <span style="font-size:1.1rem;">🎧</span>
+            <span style="font-weight:700;font-size:.88rem;color:#111827;">Atendimentos ChatMix</span>
+            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:.62rem;color:#16a34a;font-weight:600;">
+                <span style="width:6px;height:6px;background:#22c55e;border-radius:50%;display:inline-block;"></span>ao vivo
+            </span>
         </div>
-        ${comparativo}
-        ${badges}
-        ${deptoRows ? `<div style="font-size:.67rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;">Por departamento</div>${deptoRows}` : ''}
-        ${chips ? `<div style="margin-top:7px;font-size:.67rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;">Principais motivos</div><div>${chips}</div>` : ''}
-        <div style="margin-top:7px;font-size:.66rem;color:#9ca3af;">${[durStr, dtStr ? 'Ref.: '+dtStr : ''].filter(Boolean).join(' · ')}</div>
+        <div style="padding:14px 16px;">
+            ${cmpHtml}
+            ${badgesHtml}
+            ${deptoRows ? `<div style="font-size:.62rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Por departamento</div>${deptoRows}` : ''}
+            ${chips ? `<div style="margin-top:8px;font-size:.62rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Principais motivos</div><div>${chips}</div>` : ''}
+        </div>
     </div>`;
 }
 
