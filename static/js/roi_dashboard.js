@@ -485,6 +485,60 @@ function _painelFinanceiro(p) {
          + _chartCard('Contas a Receber — Data Crédito', dsCred);
 }
 
+// ── ChatMix card (usado dentro de _painelOperacional) ─────────────────────────
+function _chatmixCard(cm) {
+    if (!cm) return _kpi('🎧','Atendimentos ChatMix','—','Sem dados do Assistente','#9ca3af','#0ea5e9');
+
+    const dtStr = cm.criado_em
+        ? new Date(cm.criado_em.replace(' ','T')).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+        : '';
+
+    const deptos = Object.entries(cm.por_departamento || {}).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const maxDep = deptos.length ? deptos[0][1] : 1;
+    const deptoRows = deptos.map(([nome,qty]) => {
+        const pct = Math.round((qty/maxDep)*100);
+        return `<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
+            <span style="font-size:.7rem;color:#374151;min-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${nome}">${nome}</span>
+            <div style="flex:1;background:#e5e7eb;border-radius:4px;height:9px;overflow:hidden;">
+                <div style="width:${pct}%;background:#0ea5e9;height:100%;border-radius:4px;"></div>
+            </div>
+            <span style="font-size:.72rem;font-weight:600;color:#111827;min-width:24px;text-align:right;">${qty}</span>
+        </div>`;
+    }).join('');
+
+    const motivos = Object.entries(cm.principais_motivos || {}).slice(0,4);
+    const chips = motivos.map(([nome,qty]) =>
+        `<span style="display:inline-flex;align-items:center;gap:3px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:20px;padding:2px 7px;font-size:.67rem;color:#0369a1;margin:2px;">${nome} <b>${qty}</b></span>`
+    ).join('');
+
+    const durStr = cm.duracao_media_min ? `Duração média: ${Math.round(cm.duracao_media_min)} min` : '';
+
+    return `<div style="background:#fff;border-radius:16px;padding:18px 20px;flex:1;min-width:280px;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid #e5e7eb;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+            <span style="font-size:1.3rem;">🎧</span>
+            <span style="font-weight:700;font-size:.95rem;color:#111827;">Atendimentos ChatMix</span>
+            <span style="margin-left:auto;font-size:1.8rem;font-weight:800;color:#0ea5e9;">${_fmt(cm.encerrados)}</span>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+            <div style="text-align:center;background:#f0fdf4;border-radius:10px;padding:5px 12px;">
+                <div style="font-size:1.05rem;font-weight:700;color:#15803d;">${cm.em_atendimento}</div>
+                <div style="font-size:.63rem;color:#166534;">Em atend.</div>
+            </div>
+            <div style="text-align:center;background:#fffbeb;border-radius:10px;padding:5px 12px;">
+                <div style="font-size:1.05rem;font-weight:700;color:#b45309;">${cm.fila_espera}</div>
+                <div style="font-size:.63rem;color:#92400e;">Fila</div>
+            </div>
+            <div style="text-align:center;background:#f1f5f9;border-radius:10px;padding:5px 12px;">
+                <div style="font-size:1.05rem;font-weight:700;color:#334155;">${cm.em_automacao}</div>
+                <div style="font-size:.63rem;color:#475569;">Automação</div>
+            </div>
+        </div>
+        ${deptoRows ? `<div style="font-size:.68rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;">Por departamento</div>${deptoRows}` : ''}
+        ${chips ? `<div style="margin-top:7px;font-size:.68rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;">Principais motivos</div><div>${chips}</div>` : ''}
+        <div style="margin-top:7px;font-size:.67rem;color:#9ca3af;">${[durStr, dtStr ? 'Ref.: '+dtStr : ''].filter(Boolean).join(' · ')}</div>
+    </div>`;
+}
+
 // ── Operacional: OS + Atendimentos ────────────────────────────────────────────
 function _painelOperacional(p) {
     if (!p || p.error) return '';
@@ -520,9 +574,7 @@ function _painelOperacional(p) {
                 </div>
                 ${assuntoRows || '<span style="font-size:.8rem;color:#9ca3af;">Sem dados</span>'}
             </div>
-            ${_kpi('🎧','Atendimentos este mês', _fmt(atend.mes),
-                `vs mês anterior: ${_pct(atend.mes, atend.ant)}`,
-                '#6b7280', '#0ea5e9')}
+            ${_chatmixCard(p.chatmix)}
         </div>`;
 }
 

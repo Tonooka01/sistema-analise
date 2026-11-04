@@ -4,9 +4,13 @@ GET /api/painel/resumo — snapshot consolidado: MRR, contratos, cancelamentos,
                           negativações, OS, atendimentos (tudo numa query passada)
 """
 import json as _json
+import sqlite3 as _sqlite3
+from pathlib import Path as _Path
 from flask import Blueprint, jsonify
 from flask_login import current_user
 from database import get_db_connection as get_db
+
+_HISTORICO_DB = _Path(r"C:\Users\User\Desktop\Arquivos e Programas Área Trabalho\Assistente\historico.db")
 
 painel_bp = Blueprint('painel_bp', __name__)
 
@@ -211,6 +215,29 @@ def api_painel_resumo():
             except Exception:
                 pass
 
+        # ── ChatMix — historico.db do Assistente (somente leitura) ───────────
+        chatmix = None
+        try:
+            if _HISTORICO_DB.exists():
+                _hc = _sqlite3.connect(f"file:{_HISTORICO_DB}?mode=ro", uri=True, timeout=5)
+                _hc.row_factory = _sqlite3.Row
+                _hr = _hc.execute("SELECT criado_em, payload FROM execucoes ORDER BY id DESC LIMIT 1").fetchone()
+                if _hr:
+                    _cm = _json.loads(_hr['payload']).get('metricas', {}).get('chatmix', {})
+                    chatmix = {
+                        'criado_em':          _hr['criado_em'],
+                        'encerrados':         _cm.get('encerrados', 0),
+                        'em_atendimento':     (_cm.get('agora') or {}).get('em_atendimento', 0),
+                        'em_automacao':       (_cm.get('agora') or {}).get('em_automacao', 0),
+                        'fila_espera':        (_cm.get('agora') or {}).get('fila_espera', 0),
+                        'duracao_media_min':  _cm.get('duracao_media_min'),
+                        'por_departamento':   _cm.get('por_departamento') or {},
+                        'principais_motivos': _cm.get('principais_motivos') or {},
+                    }
+                _hc.close()
+        except Exception:
+            pass
+
         return _json.dumps({
             'mrr':           mrr,
             'contratos':     contratos,
@@ -224,6 +251,7 @@ def api_painel_resumo():
             'os':            os_data,
             'os_assuntos':   os_assuntos,
             'atendimentos':  atend,
+            'chatmix':       chatmix,
         }, ensure_ascii=False), 200, {'Content-Type': 'application/json'}
     except Exception as e:
         return jsonify({'error': str(e)}), 500
