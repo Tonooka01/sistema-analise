@@ -194,6 +194,15 @@ def _sync_clientes(conn, token, log, since=None):
     total_c = 0
     total_n = 0
 
+    # Garante colunas de telefone extra nas duas tabelas
+    for _tbl in ('Clientes', 'Clientes_Negativacao'):
+        for _col in ('Telefone_celular TEXT', 'Telefone_comercial TEXT'):
+            try:
+                conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col}")
+                conn.commit()
+            except Exception:
+                pass
+
     # Filial 1: clientes das nossas cidades que estão cadastrados na filial principal
     # Filial 2: clientes ativos → Clientes
     # Filial 4: clientes negativados → Clientes_Negativacao
@@ -229,15 +238,17 @@ def _sync_clientes(conn, token, log, since=None):
                 INSERT OR REPLACE INTO {table}
                 (ID, Raz_o_social, Nome_Fantasia_Social, CNPJ_CPF, Cidade, Bairro,
                  Endere_o, N_mero, CEP, UF, Telefone, E_mail, Ativo, Data_cadastro,
-                 Filial, Tipo_pessoa, WhatsApp, Latitude, Longitude)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 Filial, Tipo_pessoa, WhatsApp, Latitude, Longitude,
+                 Telefone_celular, Telefone_comercial)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 r.get('id'), r.get('razao'), r.get('fantasia'), r.get('cnpj_cpf'),
                 cidade_nome, r.get('bairro'), r.get('endereco'),
                 r.get('numero'), r.get('cep'), r.get('uf'), r.get('fone'),
                 r.get('email'), r.get('ativo'), r.get('data_cadastro'),
                 r.get('filial_id'), r.get('tipo_pessoa'), r.get('whatsapp'),
-                r.get('latitude'), r.get('longitude')
+                r.get('latitude'), r.get('longitude'),
+                r.get('celular'), r.get('fone_comercial')
             ))
             if table == 'Clientes':
                 total_c += 1
