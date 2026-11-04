@@ -493,54 +493,86 @@ function _chatmixCard(cm) {
     const antSem  = cm.ant_enc  != null ? cm.ant_enc  : null;
     const diaNome = cm.dia_nome || '';
 
-    // Bloco comparativo
-    let cmpHtml = '';
+    // Bloco comparativo (compacto, à esquerda) + badges (à direita)
+    let innerHtml = '';
     if (hoje !== null && antSem !== null) {
         const diff  = hoje - antSem;
         const sinal = diff > 0 ? '+' : '';
         const cor   = diff > 0 ? '#dc2626' : diff < 0 ? '#16a34a' : '#6b7280';
-        const bg    = diff > 0 ? '#fef2f2' : diff < 0 ? '#f0fdf4' : '#f8fafc';
-        cmpHtml = `
-        <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:0;margin-bottom:14px;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb;">
-            <div style="text-align:center;padding:14px 10px;background:#eff6ff;">
-                <div style="font-size:2rem;font-weight:800;color:#1d4ed8;line-height:1;">${hoje}</div>
-                <div style="font-size:.62rem;color:#3b82f6;font-weight:600;margin-top:4px;text-transform:uppercase;letter-spacing:.04em;">${diaNome} atual</div>
+        innerHtml = `
+        <div style="display:flex;gap:12px;align-items:stretch;flex:1;">
+            <div style="background:#f8fafc;border-radius:12px;padding:12px 16px;min-width:160px;">
+                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:2px;">
+                    <span style="font-size:1.9rem;font-weight:800;color:#0ea5e9;line-height:1;">${hoje}</span>
+                    <span style="font-size:.8rem;color:#cbd5e1;font-weight:500;">vs</span>
+                    <span style="font-size:1.9rem;font-weight:800;color:#94a3b8;line-height:1;">${antSem}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+                    <span style="font-size:.64rem;color:#0ea5e9;font-weight:600;">${diaNome} atual</span>
+                    <span style="font-size:.64rem;color:#94a3b8;">${diaNome} passado</span>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:1.2rem;font-weight:800;color:${cor};">${sinal}${diff}</div>
+                    <div style="font-size:.62rem;color:#94a3b8;margin-top:1px;">variação</div>
+                </div>
             </div>
-            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 12px;background:#f8fafc;gap:5px;">
-                <div style="font-size:.65rem;color:#94a3b8;font-weight:500;">vs</div>
-                <div style="background:${cor};color:#fff;font-size:.78rem;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;">${sinal}${diff}</div>
-            </div>
-            <div style="text-align:center;padding:14px 10px;background:#f8fafc;">
-                <div style="font-size:2rem;font-weight:800;color:#94a3b8;line-height:1;">${antSem}</div>
-                <div style="font-size:.62rem;color:#94a3b8;font-weight:500;margin-top:4px;text-transform:uppercase;letter-spacing:.04em;">${diaNome} passado</div>
+            <div style="display:flex;flex-direction:column;gap:6px;flex:1;justify-content:center;">
+                <div style="display:flex;align-items:center;gap:8px;background:#f0fdf4;border-radius:10px;padding:8px 12px;border:1px solid #bbf7d0;">
+                    <span style="font-size:1.3rem;font-weight:800;color:#15803d;line-height:1;">${cm.em_atendimento}</span>
+                    <span style="font-size:.65rem;color:#166534;font-weight:600;">Em atend.</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;background:#fffbeb;border-radius:10px;padding:8px 12px;border:1px solid #fde68a;">
+                    <span style="font-size:1.3rem;font-weight:800;color:#b45309;line-height:1;">${cm.fila_espera}</span>
+                    <span style="font-size:.65rem;color:#92400e;font-weight:600;">Na fila</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;background:#f1f5f9;border-radius:10px;padding:8px 12px;border:1px solid #e2e8f0;">
+                    <span style="font-size:1.3rem;font-weight:800;color:#334155;line-height:1;">${cm.em_automacao}</span>
+                    <span style="font-size:.65rem;color:#475569;font-weight:600;">Automação</span>
+                </div>
             </div>
         </div>`;
     } else if (hoje !== null) {
-        cmpHtml = `
-        <div style="text-align:center;padding:14px 10px;background:#eff6ff;border-radius:14px;margin-bottom:14px;">
-            <div style="font-size:2.2rem;font-weight:800;color:#1d4ed8;line-height:1;">${hoje}</div>
-            <div style="font-size:.65rem;color:#3b82f6;margin-top:5px;">${diaNome} atual · aguardando dado da semana passada</div>
+        innerHtml = `
+        <div style="display:flex;gap:12px;align-items:stretch;flex:1;">
+            <div style="background:#f8fafc;border-radius:12px;padding:12px 16px;min-width:160px;">
+                <div style="font-size:2.2rem;font-weight:800;color:#0ea5e9;line-height:1;margin-bottom:4px;">${hoje}</div>
+                <div style="font-size:.64rem;color:#0ea5e9;font-weight:600;">${diaNome} atual</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;flex:1;justify-content:center;">
+                <div style="display:flex;align-items:center;gap:8px;background:#f0fdf4;border-radius:10px;padding:8px 12px;border:1px solid #bbf7d0;">
+                    <span style="font-size:1.3rem;font-weight:800;color:#15803d;">${cm.em_atendimento}</span>
+                    <span style="font-size:.65rem;color:#166534;font-weight:600;">Em atend.</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;background:#fffbeb;border-radius:10px;padding:8px 12px;border:1px solid #fde68a;">
+                    <span style="font-size:1.3rem;font-weight:800;color:#b45309;">${cm.fila_espera}</span>
+                    <span style="font-size:.65rem;color:#92400e;font-weight:600;">Na fila</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;background:#f1f5f9;border-radius:10px;padding:8px 12px;border:1px solid #e2e8f0;">
+                    <span style="font-size:1.3rem;font-weight:800;color:#334155;">${cm.em_automacao}</span>
+                    <span style="font-size:.65rem;color:#475569;font-weight:600;">Automação</span>
+                </div>
+            </div>
         </div>`;
     } else {
-        cmpHtml = `<div style="text-align:center;padding:14px;color:#9ca3af;font-size:.8rem;margin-bottom:14px;">Sem registros de hoje ainda</div>`;
+        innerHtml = `
+        <div style="display:flex;gap:6px;flex:1;justify-content:center;">
+            <div style="display:flex;align-items:center;gap:8px;background:#f0fdf4;border-radius:10px;padding:12px 16px;border:1px solid #bbf7d0;flex:1;">
+                <span style="font-size:1.6rem;font-weight:800;color:#15803d;">${cm.em_atendimento}</span>
+                <span style="font-size:.65rem;color:#166534;font-weight:600;">Em atend.</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;background:#fffbeb;border-radius:10px;padding:12px 16px;border:1px solid #fde68a;flex:1;">
+                <span style="font-size:1.6rem;font-weight:800;color:#b45309;">${cm.fila_espera}</span>
+                <span style="font-size:.65rem;color:#92400e;font-weight:600;">Na fila</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;background:#f1f5f9;border-radius:10px;padding:12px 16px;border:1px solid #e2e8f0;flex:1;">
+                <span style="font-size:1.6rem;font-weight:800;color:#334155;">${cm.em_automacao}</span>
+                <span style="font-size:.65rem;color:#475569;font-weight:600;">Automação</span>
+            </div>
+        </div>`;
     }
 
-    // Badges ao vivo em grid 3 colunas
-    const badgesHtml = `
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
-        <div style="text-align:center;background:#f0fdf4;border-radius:10px;padding:9px 4px;border:1px solid #bbf7d0;">
-            <div style="font-size:1.4rem;font-weight:800;color:#15803d;line-height:1;">${cm.em_atendimento}</div>
-            <div style="font-size:.59rem;color:#166534;margin-top:3px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Em atend.</div>
-        </div>
-        <div style="text-align:center;background:#fffbeb;border-radius:10px;padding:9px 4px;border:1px solid #fde68a;">
-            <div style="font-size:1.4rem;font-weight:800;color:#b45309;line-height:1;">${cm.fila_espera}</div>
-            <div style="font-size:.59rem;color:#92400e;margin-top:3px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Na fila</div>
-        </div>
-        <div style="text-align:center;background:#f1f5f9;border-radius:10px;padding:9px 4px;border:1px solid #e2e8f0;">
-            <div style="font-size:1.4rem;font-weight:800;color:#334155;line-height:1;">${cm.em_automacao}</div>
-            <div style="font-size:.59rem;color:#475569;margin-top:3px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Automação</div>
-        </div>
-    </div>`;
+    // badgesHtml não é mais usado separadamente (integrado no innerHtml)
+    const badgesHtml = '';
 
     // Departamentos (se existir)
     const deptos = Object.entries(cm.por_departamento || {}).sort((a,b)=>b[1]-a[1]).slice(0,5);
@@ -561,19 +593,24 @@ function _chatmixCard(cm) {
         `<span style="display:inline-flex;align-items:center;gap:3px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:20px;padding:2px 8px;font-size:.64rem;color:#0369a1;margin:2px;">${nome} <b>${qty}</b></span>`
     ).join('');
 
-    return `<div style="background:#fff;border-radius:16px;overflow:hidden;flex:1;min-width:280px;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid #e5e7eb;">
+    const semDadosLabel = hoje === null
+        ? `<div style="font-size:.62rem;color:#9ca3af;margin-top:2px;">sem registros de hoje ainda</div>` : '';
+
+    return `<div style="background:#fff;border-radius:16px;overflow:hidden;flex:1;min-width:280px;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid #e5e7eb;display:flex;flex-direction:column;">
         <div style="padding:12px 16px 10px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:7px;">
             <span style="font-size:1.1rem;">🎧</span>
-            <span style="font-weight:700;font-size:.88rem;color:#111827;">Atendimentos ChatMix</span>
+            <div>
+                <div style="font-weight:700;font-size:.88rem;color:#111827;">Atendimentos ChatMix</div>
+                ${semDadosLabel}
+            </div>
             <span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:.62rem;color:#16a34a;font-weight:600;">
                 <span style="width:6px;height:6px;background:#22c55e;border-radius:50%;display:inline-block;"></span>ao vivo
             </span>
         </div>
-        <div style="padding:14px 16px;">
-            ${cmpHtml}
-            ${badgesHtml}
-            ${deptoRows ? `<div style="font-size:.62rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Por departamento</div>${deptoRows}` : ''}
-            ${chips ? `<div style="margin-top:8px;font-size:.62rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Principais motivos</div><div>${chips}</div>` : ''}
+        <div style="padding:14px 16px;flex:1;display:flex;flex-direction:column;gap:10px;">
+            ${innerHtml}
+            ${deptoRows ? `<div><div style="font-size:.62rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Por departamento</div>${deptoRows}</div>` : ''}
+            ${chips ? `<div><div style="font-size:.62rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Principais motivos</div><div>${chips}</div></div>` : ''}
         </div>
     </div>`;
 }
@@ -604,7 +641,7 @@ function _painelOperacional(p) {
     }).join('');
 
     return `
-        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:flex-start;">
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:stretch;">
             <div style="background:#fff;border-radius:16px;padding:18px 20px;flex:1;min-width:300px;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid #e5e7eb;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
                     <span style="font-size:1.3rem;">🔧</span>
