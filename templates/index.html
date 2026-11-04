@@ -260,6 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <style>
 #analysis-layout{display:flex;gap:.75rem;align-items:flex-start;margin-top:.5rem;}
 #analysisSidebar{width:240px;min-width:240px;background:#fff;border:1px solid #e5e7eb;border-radius:.6rem;flex-shrink:0;position:sticky;top:1rem;max-height:calc(100vh - 5rem);overflow-y:auto;overflow-x:hidden;transition:width .2s ease,min-width .2s ease;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+#sb-sticky-top{position:sticky;top:0;z-index:10;background:#fff;border-radius:.6rem .6rem 0 0;border-bottom:1px solid #e5e7eb;}
 #analysisSidebar.collapsed{width:48px;min-width:48px;}
 #analysisSidebar.collapsed .sb-glabel,
 #analysisSidebar.collapsed .sb-chev,
@@ -315,6 +316,7 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
 
 <!-- ── SIDEBAR ── -->
 <nav id="analysisSidebar">
+  <div id="sb-sticky-top">
   <div class="sb-sidebar-hdr">
     <span id="sbLabel">Dashboard</span>
     <button id="sbCollapseBtn" title="Recolher">◀</button>
@@ -339,6 +341,7 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
       <span class="sb-mod-icon">📈</span><span class="sb-mod-label">Crescimento</span>
     </button>
   </div>
+  </div><!-- /sb-sticky-top -->
 
   <!-- ANÁLISES -->
   <div class="sb-section-label" style="border-top:1px solid #e5e7eb;padding-top:.6rem;">Análises</div>
