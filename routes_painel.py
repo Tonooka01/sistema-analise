@@ -81,7 +81,7 @@ def _chatmix_data() -> dict | None:
 
     # Encerrados mesma semana passada (cache 1h — dado fixo)
     ant_start = _datetime.combine(sem_ant, _datetime.min.time()).strftime(fmt)
-    ant_end   = _datetime.combine(sem_ant, _datetime.max.replace(microsecond=0)).strftime(fmt)
+    ant_end   = _datetime.combine(sem_ant, _datetime.max.time()).strftime(fmt)
     r_ant = _cm_req('/attendances/closed',
                     {'date_start': ant_start, 'date_end': ant_end, 'per_page': 1},
                     ttl=3600)
