@@ -9,7 +9,7 @@ body {
 .custom-container {
     max-width: 98% !important; /* Força a largura para ocupar quase toda a tela */
     width: 98%;
-    margin: 2rem auto;         /* Centraliza na tela */
+    margin: 1rem auto;         /* Centraliza na tela (topbar fixo já garante o espaço no topo) */
     padding: 1.5rem;           /* Espaçamento interno */
     background-color: #ffffff; /* Fundo Branco (Isso devolve o visual de cartão) */
     border-radius: 12px;       /* Bordas Arredondadas */

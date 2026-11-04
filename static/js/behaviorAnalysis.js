@@ -2951,10 +2951,11 @@ async function renderAlertasAcaoTab() {
         btn.disabled = true;
         try {
             const p = new URLSearchParams({
-                city:    _alertaFilters.city,
-                cliente: _alertaFilters.cliente,
-                limit:   9999,
-                offset:  0
+                city:            _alertaFilters.city,
+                cliente:         _alertaFilters.cliente,
+                limit:           9999,
+                offset:          0,
+                include_soneca:  '1',
             });
             _alertaFilters.tier.forEach(v => p.append('tier', v));
             _alertaFilters.equipamento.forEach(v => p.append('equipamento', v));
@@ -2992,13 +2993,14 @@ async function renderAlertasAcaoTab() {
                 'Tel. Comercial':   r.telefone_comercial || '',
                 'Cel. Cliente':     r.telefone_cel_cliente || '',
                 'WhatsApp':         r.whatsapp_cliente || '',
+                'Em Soneca até':    r.snooze_ate || '',
             }));
 
             const ws = XLSX.utils.json_to_sheet(rows);
             ws['!cols'] = [
                 {wch:4},{wch:10},{wch:30},{wch:18},{wch:10},{wch:60},
                 {wch:12},{wch:12},{wch:14},{wch:30},{wch:30},{wch:30},
-                {wch:14},{wch:16},{wch:16},{wch:16},{wch:14},{wch:14}
+                {wch:14},{wch:16},{wch:16},{wch:16},{wch:14},{wch:14},{wch:14}
             ];
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Alertas de Ação');

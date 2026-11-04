@@ -2256,6 +2256,7 @@ def api_behavior_action_alerts():
         equipamento_vals = request.args.getlist('equipamento')
         limit   = request.args.get('limit',  50,  type=int)
         offset  = request.args.get('offset', 0,   type=int)
+        include_soneca = request.args.get('include_soneca', '0') == '1'
 
         city_cond    = "AND Cidade = ?" if city else ""
         city_p       = [city] if city else []
@@ -2320,6 +2321,12 @@ def api_behavior_action_alerts():
         )
         _ph_ret    = ','.join('?' * len(_ret_assuntos))
         ret_params = list(_ret_assuntos)
+
+        _snooze_excl = (
+            "" if include_soneca else
+            "AND NOT EXISTS (SELECT 1 FROM Acompanhamento_Clientes "
+            "WHERE contrato_id = C.ID AND snooze_ate IS NOT NULL AND snooze_ate > date('now'))"
+        )
 
         base_cte = f"""
             WITH ret_all AS (
@@ -2408,12 +2415,7 @@ def api_behavior_action_alerts():
                   )
                   {city_cond}
                   AND Cidade IS NOT NULL AND TRIM(Cidade) != '' AND NOT (Cidade GLOB '[0-9]*')
-                  AND NOT EXISTS (
-                      SELECT 1 FROM Acompanhamento_Clientes
-                      WHERE contrato_id = C.ID
-                        AND snooze_ate IS NOT NULL
-                        AND snooze_ate > date('now')
-                  )
+                  {_snooze_excl}
             ),
             PaymentProfile AS (
                 SELECT
@@ -2539,10 +2541,17 @@ def api_behavior_action_alerts():
                    COALESCE(CLI.Telefone_comercial, '') AS telefone_comercial,
                    COALESCE(CLI.Telefone_celular, '') AS telefone_cel_cliente,
                    COALESCE(CLI.WhatsApp, '') AS whatsapp_cliente,
-                   COALESCE(EQ.equipamentos, '') AS equipamentos
+                   COALESCE(EQ.equipamentos, '') AS equipamentos,
+                   COALESCE(SNC.snooze_ate, '') AS snooze_ate
             FROM Alerted A
             LEFT JOIN (SELECT Raz_o_social, WhatsApp, Telefone, Telefone_celular, Telefone_comercial FROM Clientes GROUP BY Raz_o_social) CLI ON CLI.Raz_o_social = A.cliente
             LEFT JOIN Contratos CTR ON CTR.ID = A.contrato
+            LEFT JOIN (
+                SELECT contrato_id, MAX(snooze_ate) AS snooze_ate
+                FROM Acompanhamento_Clientes
+                WHERE snooze_ate IS NOT NULL AND snooze_ate > date('now')
+                GROUP BY contrato_id
+            ) SNC ON SNC.contrato_id = A.contrato
             LEFT JOIN (
                 SELECT CAST(ID_contrato AS TEXT) AS id_c,
                        GROUP_CONCAT(DISTINCT Descricao_produto) AS equipamentos
