@@ -4017,10 +4017,12 @@ def api_behavior_retorno():
             WHERE A.id IN (
                 SELECT MAX(id) FROM Acompanhamento_Clientes
                 WHERE data_retorno IS NOT NULL AND TRIM(data_retorno) != ''
+                  AND COALESCE(resultado, '') != 'mensagem_enviada'
                 {usr_cond}
                 GROUP BY contrato_id
             )
             AND A.data_retorno IS NOT NULL AND TRIM(A.data_retorno) != ''
+            AND COALESCE(A.resultado, '') != 'mensagem_enviada'
             ORDER BY A.data_retorno ASC, A.data_registro ASC
             LIMIT ? OFFSET ?
         """, params + [limit, offset]).fetchall()
@@ -4029,11 +4031,13 @@ def api_behavior_retorno():
             SELECT COUNT(*) FROM (
                 SELECT MAX(id) AS mid FROM Acompanhamento_Clientes
                 WHERE data_retorno IS NOT NULL AND TRIM(data_retorno) != ''
+                  AND COALESCE(resultado, '') != 'mensagem_enviada'
                 {usr_cond}
                 GROUP BY contrato_id
             ) sub
             JOIN Acompanhamento_Clientes A ON A.id = sub.mid
             WHERE A.data_retorno IS NOT NULL AND TRIM(A.data_retorno) != ''
+              AND COALESCE(A.resultado, '') != 'mensagem_enviada'
         """, params).fetchone()[0]
 
         usuarios = [r[0] for r in conn.execute(
