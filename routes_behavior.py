@@ -2316,7 +2316,7 @@ def api_behavior_action_alerts():
 
         _ret_assuntos = (
             'RETIRADA DE EQUIPAMENTO', 'INADIMPLENCIA RETIRADA',
-            'EQUIPAMENTO NÃO RETIRADO', 'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
+            'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
             'CANCELAMENTO RETIRADA', 'EQUIPAMENTO RENEGOCIADO',
         )
         _ph_ret    = ','.join('?' * len(_ret_assuntos))
@@ -3869,7 +3869,7 @@ def api_behavior_acompanhamento_all():
                 FROM OS o
                 WHERE o.Assunto IN (
                     'RETIRADA DE EQUIPAMENTO','INADIMPLENCIA RETIRADA',
-                    'EQUIPAMENTO NÃO RETIRADO','RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
+                    'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
                     'CANCELAMENTO RETIRADA','EQUIPAMENTO RENEGOCIADO'
                 ) AND CAST(o.Contrato AS INTEGER) > 0
             ),
@@ -3885,7 +3885,7 @@ def api_behavior_acompanhamento_all():
                 FROM OS o
                 WHERE o.Assunto NOT IN (
                     'RETIRADA DE EQUIPAMENTO','INADIMPLENCIA RETIRADA',
-                    'EQUIPAMENTO NÃO RETIRADO','RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
+                    'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
                     'CANCELAMENTO RETIRADA','EQUIPAMENTO RENEGOCIADO'
                 ) AND CAST(o.Contrato AS INTEGER) > 0
                 GROUP BY CAST(o.Contrato AS INTEGER)
@@ -4246,7 +4246,6 @@ def api_behavior_dashboard():
 RETIRADA_ASSUNTOS = (
     'RETIRADA DE EQUIPAMENTO',
     'INADIMPLENCIA RETIRADA',
-    'EQUIPAMENTO NÃO RETIRADO',
     'RETIRADA DE EQUIPAMENTO PONTO ADICIONAL',
     'CANCELAMENTO RETIRADA',
     'EQUIPAMENTO RENEGOCIADO',
