@@ -5906,10 +5906,31 @@ async function _loadAcompanhamento() {
     }
 }
 
+const _ACOMP_COL_KEY = 'acomp_col_widths_v1';
+
+function _acompSaveColWidths(cols) {
+    try {
+        const widths = Array.from(cols).map(c => c.style.width || '');
+        localStorage.setItem(_ACOMP_COL_KEY, JSON.stringify(widths));
+    } catch(e) {}
+}
+
+function _acompLoadColWidths(cols) {
+    try {
+        const saved = JSON.parse(localStorage.getItem(_ACOMP_COL_KEY) || 'null');
+        if (!saved || saved.length !== cols.length) return;
+        saved.forEach((w, i) => { if (w) cols[i].style.width = w; });
+    } catch(e) {}
+}
+
 function _acompInitResizable(table) {
     if (!table) return;
     const cols = table.querySelectorAll('col');
     const ths  = table.querySelectorAll('thead th');
+
+    // Restaura larguras salvas
+    _acompLoadColWidths(cols);
+
     ths.forEach((th, i) => {
         if (i >= cols.length - 1) return;
         th.style.position = 'relative';
@@ -5941,6 +5962,7 @@ function _acompInitResizable(table) {
                 handle.firstChild.style.background = '#cbd5e1';
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
+                _acompSaveColWidths(cols);
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
             };
