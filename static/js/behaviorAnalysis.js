@@ -5906,6 +5906,51 @@ async function _loadAcompanhamento() {
     }
 }
 
+function _acompInitResizable(table) {
+    if (!table) return;
+    const cols = table.querySelectorAll('col');
+    const ths  = table.querySelectorAll('thead th');
+    ths.forEach((th, i) => {
+        if (i >= cols.length - 1) return;
+        th.style.position = 'relative';
+        const handle = document.createElement('div');
+        handle.style.cssText = [
+            'position:absolute', 'right:-2px', 'top:0', 'width:7px', 'height:100%',
+            'cursor:col-resize', 'z-index:2', 'user-select:none',
+            'display:flex', 'align-items:center', 'justify-content:center',
+        ].join(';');
+        handle.innerHTML = '<div style="width:2px;height:60%;background:#cbd5e1;border-radius:2px;"></div>';
+        handle.addEventListener('mouseenter', () => handle.firstChild.style.background = '#3b82f6');
+        handle.addEventListener('mouseleave', () => { if (!handle._dragging) handle.firstChild.style.background = '#cbd5e1'; });
+        th.appendChild(handle);
+
+        let startX, startW;
+        handle.addEventListener('mousedown', e => {
+            startX = e.clientX;
+            startW = th.offsetWidth;
+            handle._dragging = true;
+            handle.firstChild.style.background = '#2563eb';
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            const onMove = e2 => {
+                const newW = Math.max(32, startW + e2.clientX - startX);
+                cols[i].style.width = newW + 'px';
+            };
+            const onUp = () => {
+                handle._dragging = false;
+                handle.firstChild.style.background = '#cbd5e1';
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            e.preventDefault();
+        });
+    });
+}
+
 function _renderAcompTable() {
     const wrap  = document.getElementById('acomp-table-wrap');
     const pgDiv = document.getElementById('acomp-pagination');
@@ -6027,6 +6072,9 @@ function _renderAcompTable() {
       </tbody>
     </table>
     <div class="text-xs text-gray-400 mt-2 px-1">${total} registro${total !== 1 ? 's' : ''}</div>`;
+
+    // Resize handles nas colunas
+    _acompInitResizable(wrap.querySelector('table'));
 
     // Pagination
     if (pgDiv) {
