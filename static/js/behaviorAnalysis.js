@@ -6150,7 +6150,7 @@ async function renderDashboardTrabalhoTab() {
                 const x = PAD_L + (i / Math.max(days.length - 1, 1)) * plotW;
                 const y = PAD_T + plotH - (v / maxVal) * plotH;
                 return `${x.toFixed(1)},${y.toFixed(1)}`;
-            }).join(' L');
+            }).join(' ');
             return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="4 2" opacity="0.7"/>`;
         }).join('');
 
