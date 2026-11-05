@@ -5968,46 +5968,60 @@ function _renderAcompTable() {
 
     const esc = s => (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-    const acoesHeader = '<th class="px-3 py-2 border-b border-gray-200">Ações</th>';
+    const acoesHeader = `<th style="width:${isAdmin?'110px':'44px'}" class="px-2 py-1.5 border-b border-gray-200">Ações</th>`;
     const acoesCell = (r) => `
-        <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">
-          ${isAdmin ? `<button onclick="_acompEdit(${r.id})" class="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 mr-1">Editar</button>
-          <button onclick="_acompDelete(${r.id})" class="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 mr-1">Excluir</button>` : ''}
-          <button onclick="event.stopPropagation();if(window._openHistoricoModal)window._openHistoricoModal('${r.contrato_id}')" class="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200" title="Histórico de movimentação">🕐</button>
+        <td class="px-2 py-1.5 border-b border-gray-100 whitespace-nowrap">
+          ${isAdmin ? `<button onclick="_acompEdit(${r.id})" class="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 mr-0.5">Ed.</button>
+          <button onclick="_acompDelete(${r.id})" class="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 mr-0.5">Ex.</button>` : ''}
+          <button onclick="event.stopPropagation();if(window._openHistoricoModal)window._openHistoricoModal('${r.contrato_id}')" class="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200" title="Histórico de movimentação">🕐</button>
         </td>`;
 
     wrap.innerHTML = `
-    <table class="w-full text-sm border-collapse">
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:.72rem;">
+      <colgroup>
+        <col style="width:62px">
+        <col style="width:13%">
+        <col style="width:9%">
+        <col style="width:7%">
+        <col style="width:85px">
+        <col style="width:auto">
+        <col style="width:82px">
+        <col style="width:78px">
+        <col style="width:98px">
+        <col style="width:60px">
+        <col style="width:90px">
+        <col style="width:${isAdmin?'110px':'44px'}">
+      </colgroup>
       <thead>
-        <tr class="bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wide">
-          <th class="px-3 py-2 border-b border-gray-200">Contrato</th>
-          <th class="px-3 py-2 border-b border-gray-200">Cliente</th>
-          <th class="px-3 py-2 border-b border-gray-200">Cidade</th>
-          <th class="px-3 py-2 border-b border-gray-200">Tipo Ação</th>
-          <th class="px-3 py-2 border-b border-gray-200">Resultado</th>
-          <th class="px-3 py-2 border-b border-gray-200 max-w-xs">Observação</th>
-          <th class="px-3 py-2 border-b border-gray-200">Registrado em</th>
-          <th class="px-3 py-2 border-b border-gray-200">Retorno</th>
-          <th class="px-3 py-2 border-b border-gray-200">Soneca</th>
-          <th class="px-3 py-2 border-b border-gray-200">Usuário</th>
-          <th class="px-3 py-2 border-b border-gray-200">Sit. Retirada</th>
+        <tr style="background:#f8fafc;text-align:left;color:#6b7280;font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;">
+          <th class="px-2 py-1.5 border-b border-gray-200">Contrato</th>
+          <th class="px-2 py-1.5 border-b border-gray-200">Cliente</th>
+          <th class="px-2 py-1.5 border-b border-gray-200">Cidade</th>
+          <th class="px-2 py-1.5 border-b border-gray-200">Tipo</th>
+          <th class="px-2 py-1.5 border-b border-gray-200">Resultado</th>
+          <th class="px-2 py-1.5 border-b border-gray-200">Observação</th>
+          <th class="px-2 py-1.5 border-b border-gray-200">Registrado</th>
+          <th class="px-2 py-1.5 border-b border-gray-200">Retorno</th>
+          <th class="px-2 py-1.5 border-b border-gray-200">Soneca</th>
+          <th class="px-2 py-1.5 border-b border-gray-200">Usuário</th>
+          <th class="px-2 py-1.5 border-b border-gray-200">Sit. Ret.</th>
           ${acoesHeader}
         </tr>
       </thead>
       <tbody id="acomp-tbody">
         ${slice.map((r, i) => `
         <tr id="acomp-row-${r.id}" class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50">
-          <td class="px-3 py-2 border-b border-gray-100 font-mono text-blue-700">${esc(r.contrato_id)}</td>
-          <td class="px-3 py-2 border-b border-gray-100">${esc(r.cliente)}</td>
-          <td class="px-3 py-2 border-b border-gray-100">${esc(r.cidade)}</td>
-          <td class="px-3 py-2 border-b border-gray-100">${esc(r.tipo_acao)}</td>
-          <td class="px-3 py-2 border-b border-gray-100">${resultadoBadge(r.resultado)}</td>
-          <td class="px-3 py-2 border-b border-gray-100 max-w-xs truncate" title="${esc(r.observacao)}">${esc(r.observacao)}</td>
-          <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">${esc((r.data_registro||'').slice(0,16))}</td>
-          <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">${esc(r.data_retorno||'–')}</td>
-          <td class="px-3 py-2 border-b border-gray-100">${statusBadge(r)}</td>
-          <td class="px-3 py-2 border-b border-gray-100">${esc(r.usuario)}</td>
-          <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">${sitRetiradaBadge(r.situacao_retirada)}</td>
+          <td class="px-2 py-1.5 border-b border-gray-100 font-mono text-blue-700">${esc(r.contrato_id)}</td>
+          <td class="px-2 py-1.5 border-b border-gray-100" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.cliente)}">${esc(r.cliente)}</td>
+          <td class="px-2 py-1.5 border-b border-gray-100" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.cidade)}">${esc(r.cidade)}</td>
+          <td class="px-2 py-1.5 border-b border-gray-100" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.tipo_acao)}</td>
+          <td class="px-2 py-1.5 border-b border-gray-100">${resultadoBadge(r.resultado)}</td>
+          <td class="px-2 py-1.5 border-b border-gray-100" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.observacao)}">${esc(r.observacao)}</td>
+          <td class="px-2 py-1.5 border-b border-gray-100 whitespace-nowrap">${esc((r.data_registro||'').slice(0,10))}</td>
+          <td class="px-2 py-1.5 border-b border-gray-100 whitespace-nowrap">${esc(r.data_retorno||'–')}</td>
+          <td class="px-2 py-1.5 border-b border-gray-100">${statusBadge(r)}</td>
+          <td class="px-2 py-1.5 border-b border-gray-100" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.usuario)}</td>
+          <td class="px-2 py-1.5 border-b border-gray-100">${sitRetiradaBadge(r.situacao_retirada)}</td>
           ${acoesCell(r)}
         </tr>`).join('')}
       </tbody>
