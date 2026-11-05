@@ -3024,8 +3024,46 @@ async function renderAlertasAcaoTab() {
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB: Retorno
 // ─────────────────────────────────────────────────────────────────────────────
-let _retornoSelected = null;
+let _retornoSelected  = null;
 let _retornoRegistros = [];
+let _retornoFiltro    = null; // null | 'atrasado' | 'hoje' | 'futuro'
+
+function _retornoComputeGroups() {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const g = { atrasado: [], hoje: [], futuro: [] };
+    _retornoRegistros.forEach(reg => {
+        const d = reg.data_retorno || '';
+        const dias = d ? Math.floor((new Date(hoje) - new Date(d)) / 86400000) : 0;
+        const item = { ...reg, _dias: dias };
+        if (d === hoje)  g.hoje.push(item);
+        else if (dias > 0) g.atrasado.push(item);
+        else             g.futuro.push(item);
+    });
+    g.atrasado.sort((a, b) => b._dias - a._dias);
+    g.hoje.sort((a, b) => (a.usuario || '').localeCompare(b.usuario || ''));
+    g.futuro.sort((a, b) => a._dias - b._dias);
+    return g;
+}
+
+function _retornoUpdateSummary() {
+    const g = _retornoComputeGroups();
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    set('ret-cnt-atrasado', g.atrasado.length);
+    set('ret-cnt-hoje',     g.hoje.length);
+    set('ret-cnt-futuro',   g.futuro.length);
+    set('ret-cnt-total',    _retornoRegistros.length);
+}
+
+window._retornoSetFiltro = function(f) {
+    _retornoFiltro = (_retornoFiltro === f) ? null : f;
+    ['atrasado','hoje','futuro'].forEach(k => {
+        const el = document.getElementById(`ret-fil-${k}`);
+        if (!el) return;
+        el.style.opacity   = (!_retornoFiltro || _retornoFiltro === k) ? '1' : '0.45';
+        el.style.transform = _retornoFiltro === k ? 'scale(1.04)' : 'scale(1)';
+    });
+    _retornoRenderList();
+};
 
 function _retornoMensagens(reg) {
     const nome     = (reg.cliente || '').split(' ')[0] || 'Cliente';
@@ -3206,10 +3244,8 @@ function _retornoRenderRight(reg) {
             _retornoRegistros = _retornoRegistros.filter(x => x.id !== reg.id);
             _retornoSelected = null;
             panel.innerHTML = '<div class="p-8 text-center text-gray-400">Registro excluído.</div>';
+            _retornoUpdateSummary();
             _retornoRenderList();
-            // Atualiza contador
-            const badge = document.querySelector('#tab-content-retorno .bg-orange-100');
-            if (badge) badge.textContent = _retornoRegistros.length;
         } catch(e) {
             btn.disabled = false; btn.textContent = '🗑 Excluir';
             alert('Erro: ' + e.message);
@@ -3258,9 +3294,8 @@ function _retornoRenderRight(reg) {
             _retornoRegistros = _retornoRegistros.filter(x => x.id !== reg.id);
             _retornoSelected = null;
             panel.innerHTML = '<div class="p-8 text-center text-green-600 font-semibold">✅ Retorno registrado!</div>';
+            _retornoUpdateSummary();
             _retornoRenderList();
-            const badge = document.querySelector('#tab-content-retorno .bg-orange-100');
-            if (badge) badge.textContent = _retornoRegistros.length;
         } catch(e) {
             btn.disabled = false; btn.textContent = 'Salvar e fechar';
             msg.textContent = 'Erro: ' + e.message; msg.style.color = '#dc2626';
@@ -3272,35 +3307,73 @@ function _retornoRenderList() {
     const container = document.getElementById('retorno-cards');
     if (!container) return;
     if (!_retornoRegistros.length) {
-        container.innerHTML = '<div class="p-6 text-center text-gray-400 text-sm">Nenhum retorno pendente. 🎉</div>';
+        container.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:.85rem;">Nenhum retorno pendente. 🎉</div>';
         return;
     }
-    const RESULTADO_CLS = { sem_resposta:'bg-red-100 text-red-700', reagendou:'bg-yellow-100 text-yellow-700', negociacao:'bg-blue-100 text-blue-700', retido:'bg-green-100 text-green-700', cancelou:'bg-gray-100 text-gray-600' };
-    const RESULTADO_LBL = { sem_resposta:'Sem resposta', reagendou:'Reagendou', negociacao:'Em negociação', retido:'Retido', cancelou:'Cancelou' };
 
-    const hoje = new Date().toISOString().slice(0, 10);
-    container.innerHTML = _retornoRegistros.map(reg => {
-        const retDate = reg.data_retorno || '';
-        const diasAtra = retDate ? Math.floor((new Date(hoje) - new Date(retDate)) / 86400000) : 0;
-        const resCls = RESULTADO_CLS[reg.resultado] || 'bg-gray-100 text-gray-600';
-        const resLbl = RESULTADO_LBL[reg.resultado] || reg.resultado || '—';
-        const ativo  = _retornoSelected === reg.id;
-        const retLabel = retDate === hoje ? '<span class="text-xs text-green-600 flex-shrink-0">hoje</span>'
-                       : diasAtra > 0     ? `<span class="text-xs text-red-600 font-semibold flex-shrink-0">${diasAtra}d atrasado</span>`
-                       :                    `<span class="text-xs text-blue-600 flex-shrink-0">${retDate}</span>`;
-        return `<div class="border-b border-gray-100 p-3 cursor-pointer hover:bg-blue-50 transition ${ativo ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}"
-                     data-retorno-contrato="${reg.contrato_id}"
-                     onclick="window._retornoSelect(${reg.id})">
-          <div class="flex items-center justify-between mb-0.5">
-            <span class="font-medium text-sm text-gray-900 truncate max-w-[60%]">${reg.cliente || '—'}</span>
-            ${retLabel}
-          </div>
-          <div class="flex items-center gap-2 mt-1">
-            <span class="text-xs text-gray-400">${reg.cidade || '—'} · #${reg.contrato_id}</span>
-            <span class="text-xs px-1.5 py-0.5 rounded-full font-medium ${resCls}">${resLbl}</span>
-          </div>
-          <div class="text-xs text-gray-400 mt-0.5">Retorno: ${retDate} · por ${reg.usuario || '—'}</div>
+    const RES_CSS = {
+        sem_resposta: 'background:#fee2e2;color:#b91c1c;',
+        reagendou:    'background:#fef3c7;color:#92400e;',
+        negociacao:   'background:#dbeafe;color:#1e40af;',
+        retido:       'background:#dcfce7;color:#15803d;',
+        cancelou:     'background:#f3f4f6;color:#6b7280;',
+        pagou:        'background:#dcfce7;color:#15803d;',
+    };
+    const RES_LBL = { sem_resposta:'Sem resposta', reagendou:'Reagendou', negociacao:'Em negociação',
+                      retido:'Retido', cancelou:'Cancelou', pagou:'Pagou' };
+
+    const GRP = {
+        atrasado: { label:'Atrasados', cor:'#dc2626', bg:'#fef2f2', borda:'#fca5a5', icon:'🔴' },
+        hoje:     { label:'Hoje',      cor:'#d97706', bg:'#fffbeb', borda:'#fde68a', icon:'🟡' },
+        futuro:   { label:'Próximos',  cor:'#2563eb', bg:'#eff6ff', borda:'#bfdbfe', icon:'🔵' },
+    };
+
+    const grupos = _retornoComputeGroups();
+
+    let visivel;
+    if (_retornoFiltro) visivel = [{ key: _retornoFiltro, regs: grupos[_retornoFiltro] }];
+    else visivel = ['atrasado','hoje','futuro']
+            .map(k => ({ key: k, regs: grupos[k] }))
+            .filter(g => g.regs.length);
+
+    container.innerHTML = visivel.map(({ key, regs }) => {
+        const cfg = GRP[key];
+        const header = `<div style="padding:5px 12px;background:${cfg.bg};border-bottom:1px solid ${cfg.borda};border-top:1px solid ${cfg.borda};display:flex;align-items:center;gap:6px;position:sticky;top:0;z-index:1;">
+            <span style="font-size:.7rem;">${cfg.icon}</span>
+            <span style="font-size:.68rem;font-weight:700;color:${cfg.cor};text-transform:uppercase;letter-spacing:.06em;">${cfg.label}</span>
+            <span style="margin-left:auto;font-size:.68rem;background:${cfg.borda};color:${cfg.cor};padding:1px 7px;border-radius:999px;font-weight:700;">${regs.length}</span>
         </div>`;
+
+        const items = regs.map(reg => {
+            const ativo = _retornoSelected === reg.id;
+            const resCss = RES_CSS[reg.resultado] || 'background:#f3f4f6;color:#6b7280;';
+            const resLbl = RES_LBL[reg.resultado]  || reg.resultado || '—';
+
+            let badge;
+            if (key === 'atrasado')
+                badge = `<span style="font-size:.68rem;font-weight:700;color:#dc2626;background:#fee2e2;padding:2px 7px;border-radius:999px;flex-shrink:0;">⚠️ ${reg._dias}d</span>`;
+            else if (key === 'hoje')
+                badge = `<span style="font-size:.68rem;font-weight:700;color:#d97706;background:#fef3c7;padding:2px 7px;border-radius:999px;flex-shrink:0;">📅 Hoje</span>`;
+            else
+                badge = `<span style="font-size:.68rem;color:#2563eb;background:#dbeafe;padding:2px 7px;border-radius:999px;flex-shrink:0;">${reg.data_retorno || '—'}</span>`;
+
+            return `<div style="border-bottom:1px solid #f1f5f9;padding:9px 12px;cursor:pointer;border-left:3px solid ${ativo ? cfg.cor : 'transparent'};background:${ativo ? cfg.bg : 'transparent'};transition:background .1s;"
+                        onmouseover="if(this.style.background!='${cfg.bg}')this.style.background='#f8fafc'"
+                        onmouseout="this.style.background='${ativo ? cfg.bg : 'transparent'}'"
+                        onclick="window._retornoSelect(${reg.id})">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;gap:6px;">
+                    <span style="font-size:.82rem;font-weight:600;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${reg.cliente || '—'}</span>
+                    ${badge}
+                </div>
+                <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;flex-wrap:wrap;">
+                    <span style="font-size:.7rem;color:#94a3b8;">${reg.cidade || '—'} · #${reg.contrato_id}</span>
+                    <span style="font-size:.68rem;padding:1px 6px;border-radius:999px;${resCss}">${resLbl}</span>
+                </div>
+                <div style="font-size:.68rem;color:#cbd5e1;">por ${reg.usuario || '—'}</div>
+            </div>`;
+        }).join('');
+
+        return header + items;
     }).join('');
 }
 
@@ -3324,10 +3397,29 @@ async function renderRetornoTab() {
         pane.innerHTML = `
         <div class="flex" style="height:calc(100vh - 200px); min-height:520px;">
           <!-- Lista esquerda -->
-          <div class="flex flex-col border-r border-gray-200" style="width:340px;flex-shrink:0;">
-            <div class="px-3 py-2 border-b bg-gray-50 flex items-center justify-between flex-shrink-0">
-              <span class="font-semibold text-sm text-gray-700">📅 Retornos Pendentes</span>
-              <span class="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">${d.total}</span>
+          <div class="flex flex-col border-r border-gray-200" style="width:320px;flex-shrink:0;">
+            <!-- Cabeçalho -->
+            <div style="padding:8px 12px 6px;border-bottom:1px solid #e5e7eb;background:#f8fafc;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">
+              <span style="font-size:.82rem;font-weight:700;color:#374151;">📅 Retornos Pendentes</span>
+              <span id="ret-cnt-total" style="font-size:.72rem;background:#fed7aa;color:#9a3412;padding:1px 8px;border-radius:999px;font-weight:700;">${d.total}</span>
+            </div>
+            <!-- Faixa de resumo -->
+            <div style="display:flex;gap:6px;padding:8px 10px;background:#f8fafc;border-bottom:1px solid #e5e7eb;flex-shrink:0;">
+              <div id="ret-fil-atrasado" onclick="window._retornoSetFiltro('atrasado')"
+                   style="flex:1;display:flex;flex-direction:column;align-items:center;padding:7px 4px;border-radius:8px;cursor:pointer;border:1.5px solid #fca5a5;background:#fef2f2;transition:transform .15s,opacity .15s;">
+                <span id="ret-cnt-atrasado" style="font-size:1.15rem;font-weight:800;color:#dc2626;line-height:1.1;">0</span>
+                <span style="font-size:.6rem;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Atrasados</span>
+              </div>
+              <div id="ret-fil-hoje" onclick="window._retornoSetFiltro('hoje')"
+                   style="flex:1;display:flex;flex-direction:column;align-items:center;padding:7px 4px;border-radius:8px;cursor:pointer;border:1.5px solid #fde68a;background:#fffbeb;transition:transform .15s,opacity .15s;">
+                <span id="ret-cnt-hoje" style="font-size:1.15rem;font-weight:800;color:#d97706;line-height:1.1;">0</span>
+                <span style="font-size:.6rem;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Hoje</span>
+              </div>
+              <div id="ret-fil-futuro" onclick="window._retornoSetFiltro('futuro')"
+                   style="flex:1;display:flex;flex-direction:column;align-items:center;padding:7px 4px;border-radius:8px;cursor:pointer;border:1.5px solid #bfdbfe;background:#eff6ff;transition:transform .15s,opacity .15s;">
+                <span id="ret-cnt-futuro" style="font-size:1.15rem;font-weight:800;color:#2563eb;line-height:1.1;">0</span>
+                <span style="font-size:.6rem;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Próximos</span>
+              </div>
             </div>
             <div id="retorno-cards" class="overflow-y-auto flex-1"></div>
           </div>
@@ -3340,6 +3432,8 @@ async function renderRetornoTab() {
           </div>
         </div>`;
 
+        _retornoFiltro = null;
+        _retornoUpdateSummary();
         _retornoRenderList();
         // seleciona o primeiro automaticamente
         if (_retornoRegistros.length) window._retornoSelect(_retornoRegistros[0].id);
