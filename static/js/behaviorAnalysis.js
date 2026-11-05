@@ -2777,7 +2777,10 @@ async function renderAlertasAcaoTab() {
                             return _SIT_BADGE[r.situacao_retirada] || _b('#f3f4f6','#6b7280','#e5e7eb','','Sem retirada','contrato ativo sem processo');
                         })()}</td>
                         <td data-col="equipamento" style="padding:6px 10px;font-size:.75rem;max-width:160px;" title="${r.equipamentos || ''}">${r.equipamentos ? `<span style="color:#1d4ed8;">${r.equipamentos}</span>` : '<span style="color:#9ca3af;">—</span>'}</td>
-                        <td data-col="msg" style="padding:6px 10px;text-align:center;" onclick="event.stopPropagation()"><button onclick="window._cmMsg(this,${i})" style="background:none;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;font-size:.85rem;padding:2px 6px;" title="Enviar mensagem pronta">💬</button></td>
+                        <td data-col="msg" style="padding:6px 10px;text-align:center;white-space:nowrap;" onclick="event.stopPropagation()">
+                          <button onclick="window._cmMsg(this,${i})" style="background:none;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;font-size:.85rem;padding:2px 6px;" title="Enviar mensagem pronta">💬</button>
+                          <button onclick="if(window._openHistoricoModal)window._openHistoricoModal('${r.contrato}')" style="background:none;border:1px solid #c7d2fe;border-radius:5px;cursor:pointer;font-size:.85rem;padding:2px 6px;margin-left:3px;" title="Ver histórico de movimentação">🕐</button>
+                        </td>
                     </tr>`;
                 }).join('');
 
@@ -3082,6 +3085,11 @@ function _retornoRenderRight(reg) {
           <button id="ret-btn-resolver"
             style="font-size:0.75rem;background:#059669;color:#fff;padding:6px 12px;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
             ✅ Resolver retorno
+          </button>
+          <button onclick="if(window._openHistoricoModal)window._openHistoricoModal('${reg.contrato_id}')"
+            style="font-size:0.75rem;background:#ede9fe;color:#6d28d9;padding:6px 10px;border:1px solid #c4b5fd;border-radius:6px;cursor:pointer;font-weight:600;"
+            title="Histórico de movimentação">
+            🕐 Histórico
           </button>
           <button id="ret-btn-excluir"
             style="font-size:0.75rem;background:#fff;color:#dc2626;padding:6px 10px;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-weight:600;">
@@ -5866,12 +5874,13 @@ function _renderAcompTable() {
 
     const esc = s => (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-    const acoesHeader = isAdmin ? '<th class="px-3 py-2 border-b border-gray-200">Ações</th>' : '';
-    const acoesCell = (r) => isAdmin ? `
+    const acoesHeader = '<th class="px-3 py-2 border-b border-gray-200">Ações</th>';
+    const acoesCell = (r) => `
         <td class="px-3 py-2 border-b border-gray-100 whitespace-nowrap">
-          <button onclick="_acompEdit(${r.id})" class="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 mr-1">Editar</button>
-          <button onclick="_acompDelete(${r.id})" class="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 border border-red-200">Excluir</button>
-        </td>` : '';
+          ${isAdmin ? `<button onclick="_acompEdit(${r.id})" class="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 mr-1">Editar</button>
+          <button onclick="_acompDelete(${r.id})" class="text-xs px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 mr-1">Excluir</button>` : ''}
+          <button onclick="event.stopPropagation();if(window._openHistoricoModal)window._openHistoricoModal('${r.contrato_id}')" class="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200" title="Histórico de movimentação">🕐</button>
+        </td>`;
 
     wrap.innerHTML = `
     <table class="w-full text-sm border-collapse">

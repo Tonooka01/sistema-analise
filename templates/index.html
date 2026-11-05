@@ -930,6 +930,30 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
 </script>
 
 <!-- =====================================================================
+     MODAL: Histórico de Movimentação do Cliente
+     ===================================================================== -->
+<div id="hist-backdrop"
+     class="fixed inset-0 z-50 bg-black bg-opacity-60 hidden flex items-center justify-center"
+     onclick="if(event.target===this) _closeHistoricoModal()">
+  <div id="hist-panel"
+       style="background:#fff;border-radius:12px;width:min(680px,96vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35);">
+    <!-- Header -->
+    <div style="padding:16px 20px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:10px;flex-shrink:0;">
+      <span style="font-size:1.3rem;">🕐</span>
+      <div style="flex:1;min-width:0;">
+        <div id="hist-title" style="font-weight:700;font-size:.95rem;color:#1e293b;">Histórico de Movimentação</div>
+        <div id="hist-subtitle" style="font-size:.78rem;color:#64748b;margin-top:1px;"></div>
+      </div>
+      <button onclick="_closeHistoricoModal()" style="background:none;border:none;cursor:pointer;font-size:1.3rem;color:#9ca3af;line-height:1;padding:2px 6px;" title="Fechar">×</button>
+    </div>
+    <!-- Body -->
+    <div id="hist-body" style="overflow-y:auto;padding:16px 20px;flex:1;">
+      <div class="text-gray-400 text-sm text-center py-8">Carregando…</div>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================================
      MODAL: Detalhes do Cliente (global — usado por todas as abas de comportamento)
      ===================================================================== -->
 <div id="client-detail-backdrop"
@@ -1131,6 +1155,91 @@ function closeClientDetail() {
   panel.style.pointerEvents = 'none';
   setTimeout(() => bd.classList.add('hidden'), 180);
 }
+// ── Histórico de Movimentação ──────────────────────────────────────────────
+window._openHistoricoModal = async function(contratoId) {
+  const bd    = document.getElementById('hist-backdrop');
+  const title = document.getElementById('hist-title');
+  const sub   = document.getElementById('hist-subtitle');
+  const body  = document.getElementById('hist-body');
+  if (!bd) return;
+
+  title.textContent = 'Histórico de Movimentação';
+  sub.textContent   = `Contrato #${contratoId}`;
+  body.innerHTML    = '<div style="text-align:center;color:#9ca3af;padding:32px;">Carregando…</div>';
+  bd.classList.remove('hidden');
+
+  try {
+    const res = await fetch(`/api/behavior/historico/${contratoId}`);
+    const d   = await res.json();
+    if (d.error) throw new Error(d.error);
+
+    title.textContent = `Histórico — ${d.cliente || '#' + contratoId}`;
+    sub.textContent   = `Contrato #${contratoId} · ${d.registros.length} registro${d.registros.length !== 1 ? 's' : ''}`;
+
+    if (!d.registros.length) {
+      body.innerHTML = '<div style="text-align:center;color:#9ca3af;padding:32px;">Nenhuma movimentação registrada.</div>';
+      return;
+    }
+
+    const _TIER_COR = { 'Altíssimo':'#7c3aed','Alto':'#dc2626','Moderado':'#d97706','Baixo':'#059669' };
+    const _RES_LBL  = { retido:'✅ Retido', resolvido:'✅ Resolvido', pendente:'⏳ Pendente', cancelou:'❌ Cancelou',
+                        nao_atendeu:'📵 Não atendeu', mensagem_enviada:'💬 Msg enviada', pagou:'💰 Pagou',
+                        sucesso:'✅ Sucesso', negociacao:'🤝 Em negociação', sem_resposta:'📵 Sem resposta',
+                        reagendou:'📅 Reagendou' };
+    const _TIPO_LBL = { ligacao:'📞 Ligação', whatsapp:'💬 WhatsApp', visita:'🏠 Visita', email:'📧 E-mail',
+                        cobranca:'💰 Cobrança', negociacao:'🤝 Negociação', retencao:'🛡 Retenção' };
+    const _SIT_LBL  = { ret_aberta:'🔴 OS Aberta', ret_encaminhada:'🟡 OS Enc.', ret_fin_sem_neg:'⚠️ Fin. s/ neg.',
+                        neg_com_retirada:'✅ Neg. c/ ret.', neg_sem_retirada:'🔴 Neg. s/ ret.' };
+
+    body.innerHTML = d.registros.map((r, i) => {
+      const snap = r.snapshot || {};
+      const isFirst = i === d.registros.length - 1;
+      const tierCor = snap.tier ? (_TIER_COR[snap.tier] || '#6b7280') : null;
+
+      const snapHtml = snap && Object.keys(snap).length ? `
+        <div style="margin-top:8px;padding:8px 10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.72rem;color:#475569;">
+          ${snap.tier ? `<span style="font-weight:700;color:${tierCor};">⚡ ${snap.tier}</span>` : ''}
+          ${snap.fat_vencidas != null ? `<span>🧾 ${snap.fat_vencidas} fat. venc.</span>` : ''}
+          ${snap.dias_vencido ? `<span>📅 ${snap.dias_vencido}d vencido</span>` : ''}
+          ${snap.situacao_retirada ? `<span>${_SIT_LBL[snap.situacao_retirada] || snap.situacao_retirada}</span>` : ''}
+          ${snap.equipamentos ? `<span>📦 ${snap.equipamentos}</span>` : ''}
+          ${snap.score != null ? `<span>Score: ${snap.score}</span>` : ''}
+        </div>` : '';
+
+      return `
+      <div style="display:flex;gap:12px;margin-bottom:${i < d.registros.length - 1 ? '0' : '0'};">
+        <!-- linha do tempo -->
+        <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:28px;">
+          <div style="width:12px;height:12px;border-radius:50%;background:${i === 0 ? '#2563eb' : '#94a3b8'};border:2px solid ${i === 0 ? '#bfdbfe' : '#e2e8f0'};flex-shrink:0;margin-top:4px;"></div>
+          ${i < d.registros.length - 1 ? '<div style="width:2px;flex:1;background:#e2e8f0;min-height:20px;margin-top:4px;"></div>' : ''}
+        </div>
+        <!-- conteúdo -->
+        <div style="flex:1;padding-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+            <span style="font-weight:600;font-size:.82rem;color:#1e293b;">${_TIPO_LBL[r.tipo_acao] || r.tipo_acao}</span>
+            ${r.resultado ? `<span style="font-size:.72rem;padding:1px 7px;border-radius:999px;background:#f1f5f9;color:#475569;">${_RES_LBL[r.resultado] || r.resultado}</span>` : ''}
+            ${r.ixc_os_id ? `<span style="font-size:.72rem;padding:1px 7px;border-radius:999px;background:#fef9c3;color:#854d0e;font-weight:600;">🎫 OS #${r.ixc_os_id}</span>` : ''}
+          </div>
+          ${r.observacao ? `<p style="font-size:.78rem;color:#475569;margin:0 0 4px;">${r.observacao}</p>` : ''}
+          <div style="display:flex;gap:12px;font-size:.7rem;color:#94a3b8;flex-wrap:wrap;">
+            <span>${(r.data_registro||'').slice(0,16).replace('T',' ')}</span>
+            <span>por <strong style="color:#64748b;">${r.usuario}</strong></span>
+            ${r.data_retorno ? `<span>Retorno: ${r.data_retorno}</span>` : ''}
+          </div>
+          ${snapHtml}
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    body.innerHTML = `<div style="color:#dc2626;padding:16px;text-align:center;">Erro: ${e.message}</div>`;
+  }
+};
+
+window._closeHistoricoModal = function() {
+  const bd = document.getElementById('hist-backdrop');
+  if (bd) bd.classList.add('hidden');
+};
+
 function switchCdpTab(name) {
   document.querySelectorAll('.cdp-tab').forEach(b => {
     const on = b.dataset.tab === name;
@@ -1899,6 +2008,17 @@ function cdpAcompSalvar() {
   if (btn) { btn.disabled = true; btn.textContent = 'Salvando…'; }
 
   const _userInfo = window._currentUserInfo || {};
+  // Captura contexto do alerta atual para o snapshot
+  const _alertaRow = (window._cmCurrentAlertasData || []).find(r => String(r.contrato) === String(_cdpCurrentContrato));
+  const _snapshot = _alertaRow ? {
+    tier:              _alertaRow.tier             || null,
+    fat_vencidas:      _alertaRow.fat_vencidas     ?? null,
+    dias_vencido:      _alertaRow.dias_vencido     ?? null,
+    situacao_retirada: _alertaRow.situacao_retirada|| null,
+    equipamentos:      _alertaRow.equipamentos     || null,
+    score:             _alertaRow.score            ?? null,
+  } : null;
+
   fetch('/api/behavior/acompanhamento', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
@@ -1913,6 +2033,7 @@ function cdpAcompSalvar() {
       id_cliente_ixc:     _cdpCurrentClienteIxcId,
       colaborador_ixc_id: _userInfo.ixc_colaborador_id || null,
       usuario_ixc_id:     _userInfo.ixc_usuario_id || null,
+      snapshot_json:      _snapshot,
     })
   })
   .then(r => r.json())

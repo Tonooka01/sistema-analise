@@ -3685,10 +3685,11 @@ def _ensure_acompanhamento_table(conn):
             data_retorno       TEXT,
             snooze_ate         TEXT,
             ixc_os_id          TEXT,
-            colaborador_ixc_id TEXT
+            colaborador_ixc_id TEXT,
+            snapshot_json      TEXT
         )
     """)
-    for col in ('ixc_os_id TEXT', 'colaborador_ixc_id TEXT'):
+    for col in ('ixc_os_id TEXT', 'colaborador_ixc_id TEXT', 'snapshot_json TEXT'):
         try:
             conn.execute(f"ALTER TABLE Acompanhamento_Clientes ADD COLUMN {col}")
         except Exception:
@@ -3815,11 +3816,15 @@ def api_behavior_acompanhamento_post():
         else:
             logger.warning("acompanhamento_post: id_cliente_ixc ausente — ticket IXC não criado")
 
+        import json as _json
+        snapshot_raw = data.get('snapshot_json')
+        snapshot_json = _json.dumps(snapshot_raw, ensure_ascii=False) if snapshot_raw else None
+
         conn.execute("""
             INSERT INTO Acompanhamento_Clientes
-                (contrato_id, usuario, data_registro, tipo_acao, resultado, observacao, data_retorno, snooze_ate, ixc_os_id, colaborador_ixc_id)
-            VALUES (?, ?, datetime('now', 'localtime'), ?, ?, ?, ?, ?, ?, ?)
-        """, (contrato_id, usuario, tipo_acao, resultado, observacao, data_retorno, snooze_ate, ixc_os_id, colaborador_ixc_id))
+                (contrato_id, usuario, data_registro, tipo_acao, resultado, observacao, data_retorno, snooze_ate, ixc_os_id, colaborador_ixc_id, snapshot_json)
+            VALUES (?, ?, datetime('now', 'localtime'), ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (contrato_id, usuario, tipo_acao, resultado, observacao, data_retorno, snooze_ate, ixc_os_id, colaborador_ixc_id, snapshot_json))
         conn.commit()
 
         return jsonify({"ok": True, "snooze_ate": snooze_ate, "ixc_os_id": ixc_os_id, "ixc_erro": ixc_erro})
@@ -3928,6 +3933,54 @@ def api_behavior_acompanhamento_all():
         })
     except Exception as e:
         logger.error(f"Erro em acompanhamento_all: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Route: GET /api/behavior/historico/<int:contrato_id>
+# Histórico completo de movimentação de um cliente
+# ---------------------------------------------------------------------------
+@behavior_bp.route('/historico/<int:contrato_id>')
+def api_behavior_historico(contrato_id):
+    import json as _json
+    conn = get_db()
+    try:
+        _ensure_acompanhamento_table(conn)
+        rows = conn.execute("""
+            SELECT A.id, A.contrato_id, A.usuario, A.data_registro,
+                   A.tipo_acao, A.resultado, A.observacao, A.data_retorno,
+                   A.snooze_ate, A.ixc_os_id, A.snapshot_json,
+                   C.Cliente AS cliente, C.Cidade AS cidade
+            FROM Acompanhamento_Clientes A
+            LEFT JOIN Contratos C ON C.ID = A.contrato_id
+            WHERE A.contrato_id = ?
+            ORDER BY A.data_registro DESC
+        """, (contrato_id,)).fetchall()
+
+        result = []
+        for r in rows:
+            d = dict(r)
+            raw = d.get('snapshot_json')
+            if raw:
+                try:
+                    d['snapshot'] = _json.loads(raw)
+                except Exception:
+                    d['snapshot'] = None
+            else:
+                d['snapshot'] = None
+            del d['snapshot_json']
+            result.append(d)
+
+        cliente_nome = result[0]['cliente'] if result else None
+        if not cliente_nome:
+            c = conn.execute("SELECT Cliente FROM Contratos WHERE ID = ?", (contrato_id,)).fetchone()
+            cliente_nome = c['Cliente'] if c else None
+
+        return jsonify({"contrato_id": contrato_id, "cliente": cliente_nome, "registros": result})
+    except Exception as e:
+        logger.error(f"Erro em historico {contrato_id}: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
