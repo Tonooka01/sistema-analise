@@ -3687,17 +3687,29 @@ function _atendRenderRight(reg) {
       <!-- Mensagens prontas -->
       <div>
         <div style="font-size:.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">💬 Mensagens prontas</div>
-        ${msgs.map(m => `
+        ${msgs.map((m, i) => `
           <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid #e2e8f0;border-radius:7px;padding:9px 12px;margin-bottom:7px;background:#fff;">
             <div>
               <div style="font-size:.75rem;font-weight:600;color:#374151;margin-bottom:4px;">${m.icon} ${m.label}</div>
               <div style="font-size:.72rem;color:#64748b;line-height:1.5;">${m.msg}</div>
             </div>
-            <button onclick="navigator.clipboard.writeText(${JSON.stringify(m.msg)}).then(()=>{this.textContent='✅';setTimeout(()=>this.textContent='Copiar',1500)})"
+            <button class="atend-copy-btn" data-msg-idx="${i}"
               style="font-size:.7rem;color:#2563eb;background:none;border:1px solid #bfdbfe;border-radius:5px;padding:3px 10px;cursor:pointer;white-space:nowrap;margin-left:10px;">Copiar</button>
           </div>`).join('')}
       </div>
     </div>`;
+
+    // Guarda msgs para os botões de copiar
+    panel._atendMsgs = msgs;
+    panel.querySelectorAll('.atend-copy-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const txt = panel._atendMsgs[parseInt(btn.dataset.msgIdx, 10)]?.msg || '';
+            navigator.clipboard.writeText(txt).then(() => {
+                btn.textContent = '✅';
+                setTimeout(() => btn.textContent = 'Copiar', 1500);
+            });
+        });
+    });
 
     // Botão excluir
     panel.querySelector('#atend-btn-excluir').addEventListener('click', async () => {
