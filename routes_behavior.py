@@ -3599,36 +3599,47 @@ def api_behavior_client_detail(contrato_id):
 
         financeiro_summary = dict(fin_summary) if fin_summary else {}
 
-        # --- Last 24 invoices ---
+        # --- Last 24 invoices (recorrentes + boletos de renegociação avulsos) ---
         # ID_Renegocia_o preenchido = boleto baixado via renegociação (não pagamento efetivo)
-        faturas = conn.execute("""
+        _is_reneg = "COALESCE(ID_Renegocia_o,'') NOT IN ('','0','0.0')"
+        faturas = conn.execute(f"""
             SELECT
                 ID, Vencimento, Valor, Valor_recebido, Valor_aberto,
-                CASE
-                    WHEN COALESCE(ID_Renegocia_o, '') NOT IN ('', '0', '0.0')
-                    THEN 'Renegociado'
-                    ELSE Status
-                END AS Status,
-                CASE
-                    WHEN COALESCE(ID_Renegocia_o, '') NOT IN ('', '0', '0.0')
-                    THEN ''
-                    ELSE Data_pagamento
-                END AS Data_pagamento,
+                CASE WHEN {_is_reneg} THEN 'Renegociado' ELSE Status END AS Status,
+                CASE WHEN {_is_reneg} THEN '' ELSE Data_pagamento END AS Data_pagamento,
                 Data_baixa,
                 CASE
-                    WHEN COALESCE(ID_Renegocia_o, '') NOT IN ('', '0', '0.0')
-                    THEN NULL
+                    WHEN {_is_reneg} THEN NULL
                     WHEN Data_pagamento IS NOT NULL AND Data_pagamento != ''
                           AND Data_pagamento > Vencimento
                     THEN CAST(JULIANDAY(Data_pagamento) - JULIANDAY(Vencimento) AS INTEGER)
                     WHEN Status = 'A receber' AND Vencimento < date('now')
                     THEN CAST(JULIANDAY('now') - JULIANDAY(Vencimento) AS INTEGER)
-                END AS dias_atraso
+                END AS dias_atraso,
+                'recorrente' AS tipo
             FROM Contas_a_Receber
             WHERE ID_contrato_recorrente = ?
+            UNION ALL
+            SELECT
+                ID, Vencimento, Valor, Valor_recebido, Valor_aberto,
+                CASE WHEN {_is_reneg} THEN 'Renegociado' ELSE Status END AS Status,
+                CASE WHEN {_is_reneg} THEN '' ELSE Data_pagamento END AS Data_pagamento,
+                Data_baixa,
+                CASE
+                    WHEN {_is_reneg} THEN NULL
+                    WHEN Data_pagamento IS NOT NULL AND Data_pagamento != ''
+                          AND Data_pagamento > Vencimento
+                    THEN CAST(JULIANDAY(Data_pagamento) - JULIANDAY(Vencimento) AS INTEGER)
+                    WHEN Status = 'A receber' AND Vencimento < date('now')
+                    THEN CAST(JULIANDAY('now') - JULIANDAY(Vencimento) AS INTEGER)
+                END AS dias_atraso,
+                'acordo' AS tipo
+            FROM Contas_a_Receber
+            WHERE CAST(ID_contrato_avulso AS INTEGER) = ?
+              AND CAST(ID_contrato_recorrente AS INTEGER) != ?
             ORDER BY Vencimento DESC
-            LIMIT 24
-        """, (contrato_id,)).fetchall()
+            LIMIT 36
+        """, (contrato_id, contrato_id, contrato_id)).fetchall()
 
         # --- Last 10 atendimentos ---
         atendimentos = conn.execute("""
