@@ -3581,16 +3581,16 @@ window._atendSelect = function(id) {
     if (reg) _atendRenderRight(reg);
 };
 
-function _atendRenderRight(reg) {
+const _TIPO_ICON = { ligacao:'📞', whatsapp:'💬', visita:'🏠', email:'✉️' };
+
+async function _atendRenderRight(reg) {
     const panel = document.getElementById('atend-panel');
     if (!panel) return;
 
     const wa = reg.whatsapp
         ? `<a href="https://wa.me/55${reg.whatsapp.replace(/\D/g,'')}" target="_blank" class="text-green-600 hover:underline">💬 ${reg.whatsapp}</a>`
         : '—';
-    const msgs = _retornoMensagens(reg); // reusa a mesma lógica de mensagens prontas
-
-    const cfg = _atendResCfg(reg.resultado);
+    const msgs = _retornoMensagens(reg);
     const temRetorno = reg.data_retorno && reg.data_retorno.trim();
 
     panel.innerHTML = `
@@ -3607,11 +3607,6 @@ function _atendRenderRight(reg) {
             style="font-size:0.75rem;background:#059669;color:#fff;padding:6px 12px;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
             ✅ Resolver / Registrar
           </button>
-          <button onclick="if(window._openHistoricoModal)window._openHistoricoModal('${reg.contrato_id}')"
-            style="font-size:0.75rem;background:#ede9fe;color:#6d28d9;padding:6px 10px;border:1px solid #c4b5fd;border-radius:6px;cursor:pointer;font-weight:600;"
-            title="Histórico de movimentação">
-            🕐 Histórico
-          </button>
           <button id="atend-btn-excluir"
             style="font-size:0.75rem;background:#fff;color:#dc2626;padding:6px 10px;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-weight:600;">
             🗑 Excluir
@@ -3623,23 +3618,11 @@ function _atendRenderRight(reg) {
         </div>
       </div>
 
-      <!-- Contato + último atendimento -->
-      <div class="grid grid-cols-2 gap-4 text-sm bg-gray-50 rounded-lg p-4">
+      <!-- Contato -->
+      <div class="grid grid-cols-2 gap-3 text-sm bg-gray-50 rounded-lg p-3">
         <div><div class="text-xs text-gray-400 mb-1">WhatsApp</div>${wa}</div>
         <div><div class="text-xs text-gray-400 mb-1">Telefone</div>${reg.telefone_cel || '—'}</div>
-        <div><div class="text-xs text-gray-400 mb-1">Último contato em</div>${(reg.data_registro||'').slice(0,16).replace('T',' ')}</div>
-        <div><div class="text-xs text-gray-400 mb-1">Último contato por</div>${reg.usuario || '—'}</div>
-        ${temRetorno ? `<div><div class="text-xs text-gray-400 mb-1">Retorno agendado</div><span style="color:#2563eb;font-weight:600;">${reg.data_retorno}</span></div>` : ''}
-      </div>
-
-      <!-- Resultado + observação -->
-      <div style="background:#f8fafc;border-radius:8px;padding:14px;border:1px solid #e2e8f0;">
-        <div style="font-size:.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Último Atendimento</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
-          <span style="font-size:.75rem;padding:3px 10px;border-radius:999px;${cfg.css}">${cfg.label}</span>
-          <span style="font-size:.72rem;color:#94a3b8;">${reg.tipo_acao ? '· ' + reg.tipo_acao : ''}</span>
-        </div>
-        ${reg.observacao ? `<div style="font-size:.8rem;color:#475569;font-style:italic;">"${reg.observacao}"</div>` : ''}
+        ${temRetorno ? `<div class="col-span-2"><div class="text-xs text-gray-400 mb-1">Retorno agendado</div><span style="color:#2563eb;font-weight:600;">📅 ${reg.data_retorno}</span></div>` : ''}
       </div>
 
       <!-- Form resolver (oculto) -->
@@ -3684,6 +3667,12 @@ function _atendRenderRight(reg) {
         </div>
       </div>
 
+      <!-- Histórico inline (preenchido assincronamente) -->
+      <div id="atend-hist-inline">
+        <div style="font-size:.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">🕐 Histórico</div>
+        <div style="color:#94a3b8;font-size:.78rem;">Carregando...</div>
+      </div>
+
       <!-- Mensagens prontas -->
       <div>
         <div style="font-size:.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">💬 Mensagens prontas</div>
@@ -3698,6 +3687,50 @@ function _atendRenderRight(reg) {
           </div>`).join('')}
       </div>
     </div>`;
+
+    // Busca histórico e injeta inline
+    fetch(`/api/behavior/historico/${reg.contrato_id}`)
+        .then(r => r.json())
+        .then(d => {
+            const el = document.getElementById('atend-hist-inline');
+            if (!el) return;
+            const registros = d.registros || [];
+            if (!registros.length) {
+                el.innerHTML = `<div style="font-size:.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">🕐 Histórico</div>
+                    <div style="color:#94a3b8;font-size:.78rem;">Sem registros.</div>`;
+                return;
+            }
+            const linhas = registros.map((r, i) => {
+                const cfg    = _atendResCfg(r.resultado);
+                const data   = (r.data_registro || '').slice(0, 16).replace('T', ' ');
+                const icon   = _TIPO_ICON[r.tipo_acao] || '📋';
+                const isFirst = i === 0;
+                return `<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9;${isFirst?'border-top:2px solid '+cfg.borda+';background:'+cfg.bg+';margin:0 -4px;padding:8px 4px;border-radius:6px;':''}">
+                    <div style="flex-shrink:0;width:2px;background:${cfg.cor};border-radius:2px;margin:2px 0;"></div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px;">
+                            <span style="font-size:.7rem;color:#94a3b8;">${data}</span>
+                            <span style="font-size:.7rem;">${icon}</span>
+                            <span style="font-size:.7rem;padding:1px 7px;border-radius:999px;${cfg.css};font-weight:600;">${cfg.label}</span>
+                            ${r.data_retorno ? `<span style="font-size:.68rem;color:#2563eb;">📅 ${r.data_retorno}</span>` : ''}
+                            ${r.ixc_os_id ? `<span style="font-size:.65rem;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;">OS #${r.ixc_os_id}</span>` : ''}
+                        </div>
+                        ${r.observacao ? `<div style="font-size:.75rem;color:#475569;font-style:italic;white-space:pre-wrap;">"${r.observacao}"</div>` : ''}
+                        <div style="font-size:.65rem;color:#cbd5e1;">por ${r.usuario || '—'}</div>
+                    </div>
+                </div>`;
+            }).join('');
+            el.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                    <span style="font-size:.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;">🕐 Histórico</span>
+                    <span style="font-size:.68rem;background:#e0e7ff;color:#3730a3;padding:1px 8px;border-radius:999px;font-weight:700;">${registros.length}</span>
+                </div>
+                ${linhas}`;
+        })
+        .catch(() => {
+            const el = document.getElementById('atend-hist-inline');
+            if (el) el.innerHTML = '<div style="color:#dc2626;font-size:.75rem;">Erro ao carregar histórico.</div>';
+        });
 
     // Guarda msgs para os botões de copiar
     panel._atendMsgs = msgs;
