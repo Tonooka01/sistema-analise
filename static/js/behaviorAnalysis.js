@@ -3832,7 +3832,7 @@ async function renderAtendimentosTab() {
     if (!pane) return;
     pane.innerHTML = '<div class="p-8 text-center text-gray-500">Carregando...</div>';
     try {
-        const d = await fetch('/api/behavior/atendimentos?limit=300').then(r => r.json());
+        const d = await fetch('/api/behavior/atendimentos?limit=1000').then(r => r.json());
         if (d.error) throw new Error(d.error);
         _atendRegistros = d.registros || [];
         _atendSelected  = null;

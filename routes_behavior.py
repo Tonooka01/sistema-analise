@@ -4086,14 +4086,14 @@ def api_behavior_retorno():
 
 @behavior_bp.route('/atendimentos')
 def api_behavior_atendimentos():
-    """Último registro por contrato (todos, sem filtro de data_retorno) — CRM completo."""
+    """Todos os registros de atendimento (um por linha, não agrupado por contrato)."""
     if not current_user.is_authenticated:
         return jsonify({'error': 'Não autenticado'}), 401
     conn = get_db()
     try:
         _ensure_acompanhamento_table(conn)
-        limit    = min(300, int(request.args.get('limit', 200)))
-        page     = max(1,   int(request.args.get('page',  1)))
+        limit    = min(1000, int(request.args.get('limit', 500)))
+        page     = max(1,    int(request.args.get('page',  1)))
         offset   = (page - 1) * limit
         busca    = (request.args.get('busca', '') or '').strip()
         filtro   = (request.args.get('resultado', '') or '').strip()
@@ -4112,24 +4112,15 @@ def api_behavior_atendimentos():
             FROM Acompanhamento_Clientes A
             LEFT JOIN Contratos C  ON C.ID  = A.contrato_id
             LEFT JOIN Clientes  cl ON cl.Raz_o_social = C.Cliente
-            WHERE A.id IN (
-                SELECT MAX(id) FROM Acompanhamento_Clientes
-                WHERE COALESCE(resultado, '') != 'mensagem_enviada'
-                GROUP BY contrato_id
-            )
-            AND COALESCE(A.resultado, '') != 'mensagem_enviada'
+            WHERE COALESCE(A.resultado, '') != 'mensagem_enviada'
             {busca_cond} {filtro_cond}
             ORDER BY A.data_registro DESC
             LIMIT ? OFFSET ?
         """, busca_param + filtro_param + [limit, offset]).fetchall()
 
         total = conn.execute(f"""
-            SELECT COUNT(*) FROM (
-                SELECT MAX(id) AS mid FROM Acompanhamento_Clientes
-                WHERE COALESCE(resultado, '') != 'mensagem_enviada'
-                GROUP BY contrato_id
-            ) sub
-            JOIN Acompanhamento_Clientes A ON A.id = sub.mid
+            SELECT COUNT(*)
+            FROM Acompanhamento_Clientes A
             LEFT JOIN Contratos C ON C.ID = A.contrato_id
             WHERE COALESCE(A.resultado, '') != 'mensagem_enviada'
             {busca_cond} {filtro_cond}
