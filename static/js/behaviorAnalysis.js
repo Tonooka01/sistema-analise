@@ -3027,6 +3027,7 @@ async function renderAlertasAcaoTab() {
 let _retornoSelected  = null;
 let _retornoRegistros = [];
 let _retornoFiltro    = null; // null | 'atrasado' | 'hoje' | 'futuro'
+let _retornoBusca     = '';   // texto de busca por nome
 
 function _retornoComputeGroups() {
     const hoje = new Date().toISOString().slice(0, 10);
@@ -3053,6 +3054,11 @@ function _retornoUpdateSummary() {
     set('ret-cnt-futuro',   g.futuro.length);
     set('ret-cnt-total',    _retornoRegistros.length);
 }
+
+window._retornoBuscaChange = function(val) {
+    _retornoBusca = val;
+    _retornoRenderList();
+};
 
 window._retornoSetFiltro = function(f) {
     _retornoFiltro = (_retornoFiltro === f) ? null : f;
@@ -3330,10 +3336,16 @@ function _retornoRenderList() {
 
     const grupos = _retornoComputeGroups();
 
+    // filtra por busca de nome
+    const busca = _retornoBusca.toLowerCase().trim();
+    const filtraNome = regs => busca
+        ? regs.filter(r => (r.cliente || '').toLowerCase().includes(busca))
+        : regs;
+
     let visivel;
-    if (_retornoFiltro) visivel = [{ key: _retornoFiltro, regs: grupos[_retornoFiltro] }];
+    if (_retornoFiltro) visivel = [{ key: _retornoFiltro, regs: filtraNome(grupos[_retornoFiltro]) }];
     else visivel = ['atrasado','hoje','futuro']
-            .map(k => ({ key: k, regs: grupos[k] }))
+            .map(k => ({ key: k, regs: filtraNome(grupos[k]) }))
             .filter(g => g.regs.length);
 
     container.innerHTML = visivel.map(({ key, regs }) => {
@@ -3421,6 +3433,17 @@ async function renderRetornoTab() {
                 <span style="font-size:.6rem;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;">Próximos</span>
               </div>
             </div>
+            <!-- Campo de busca por nome -->
+            <div style="padding:6px 10px;border-bottom:1px solid #e5e7eb;background:#fff;flex-shrink:0;">
+              <div style="position:relative;">
+                <span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:.82rem;color:#94a3b8;pointer-events:none;">🔍</span>
+                <input id="ret-busca-nome" type="text" placeholder="Filtrar por nome..."
+                  oninput="window._retornoBuscaChange(this.value)"
+                  style="width:100%;box-sizing:border-box;padding:5px 8px 5px 28px;border:1px solid #e2e8f0;border-radius:6px;font-size:.78rem;color:#374151;outline:none;background:#f8fafc;"
+                  onfocus="this.style.borderColor='#60a5fa';this.style.background='#fff'"
+                  onblur="this.style.borderColor='#e2e8f0';this.style.background='#f8fafc'">
+              </div>
+            </div>
             <div id="retorno-cards" class="overflow-y-auto flex-1"></div>
           </div>
           <!-- Painel direito -->
@@ -3433,6 +3456,7 @@ async function renderRetornoTab() {
         </div>`;
 
         _retornoFiltro = null;
+        _retornoBusca  = '';
         _retornoUpdateSummary();
         _retornoRenderList();
         // seleciona o primeiro automaticamente
