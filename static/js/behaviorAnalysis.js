@@ -3478,19 +3478,20 @@ let _atendBusca     = '';
 let _atendFiltro    = null; // null | resultado string
 
 const _ATEND_RES_CFG = {
-    sem_resposta: { label:'Sem resposta', cor:'#b91c1c', bg:'#fef2f2', borda:'#fca5a5', css:'background:#fee2e2;color:#b91c1c;' },
-    reagendou:    { label:'Reagendou',    cor:'#92400e', bg:'#fffbeb', borda:'#fde68a', css:'background:#fef3c7;color:#92400e;' },
-    negociacao:   { label:'Em negociação',cor:'#1e40af', bg:'#eff6ff', borda:'#bfdbfe', css:'background:#dbeafe;color:#1e40af;' },
-    retido:       { label:'Retido',       cor:'#15803d', bg:'#f0fdf4', borda:'#86efac', css:'background:#dcfce7;color:#15803d;' },
-    cancelou:     { label:'Cancelou',     cor:'#6b7280', bg:'#f9fafb', borda:'#e5e7eb', css:'background:#f3f4f6;color:#6b7280;' },
-    pagou:        { label:'Pagou',        cor:'#15803d', bg:'#f0fdf4', borda:'#86efac', css:'background:#dcfce7;color:#15803d;' },
+    sem_resposta:     { label:'Sem resposta',    cor:'#b91c1c', bg:'#fef2f2', borda:'#fca5a5', css:'background:#fee2e2;color:#b91c1c;' },
+    reagendou:        { label:'Reagendou',       cor:'#92400e', bg:'#fffbeb', borda:'#fde68a', css:'background:#fef3c7;color:#92400e;' },
+    negociacao:       { label:'Em negociação',   cor:'#1e40af', bg:'#eff6ff', borda:'#bfdbfe', css:'background:#dbeafe;color:#1e40af;' },
+    retido:           { label:'Retido',          cor:'#15803d', bg:'#f0fdf4', borda:'#86efac', css:'background:#dcfce7;color:#15803d;' },
+    cancelou:         { label:'Cancelou',        cor:'#6b7280', bg:'#f9fafb', borda:'#e5e7eb', css:'background:#f3f4f6;color:#6b7280;' },
+    pagou:            { label:'Pagou',           cor:'#15803d', bg:'#f0fdf4', borda:'#86efac', css:'background:#dcfce7;color:#15803d;' },
+    mensagem_enviada: { label:'Msg enviada',     cor:'#7c3aed', bg:'#f5f3ff', borda:'#ddd6fe', css:'background:#ede9fe;color:#7c3aed;' },
 };
 function _atendResCfg(res) {
     return _ATEND_RES_CFG[res] || { label: res || '—', cor:'#6b7280', bg:'#f9fafb', borda:'#e5e7eb', css:'background:#f3f4f6;color:#6b7280;' };
 }
 
 function _atendComputeGroups() {
-    const order = ['sem_resposta','reagendou','negociacao','retido','cancelou','pagou'];
+    const order = ['sem_resposta','reagendou','negociacao','retido','cancelou','pagou','mensagem_enviada'];
     const groups = {};
     _atendRegistros.forEach(reg => {
         const k = reg.resultado || '_outros';

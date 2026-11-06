@@ -4103,6 +4103,7 @@ def api_behavior_atendimentos():
         busca_param  = [f'%{busca}%']          if busca  else []
         filtro_param = [filtro]                if filtro else []
 
+        where_base = "WHERE 1=1"
         rows = conn.execute(f"""
             SELECT A.id, A.contrato_id, A.usuario, A.data_registro,
                    A.tipo_acao, A.resultado, A.observacao, A.data_retorno, A.snooze_ate,
@@ -4112,8 +4113,7 @@ def api_behavior_atendimentos():
             FROM Acompanhamento_Clientes A
             LEFT JOIN Contratos C  ON C.ID  = A.contrato_id
             LEFT JOIN Clientes  cl ON cl.Raz_o_social = C.Cliente
-            WHERE COALESCE(A.resultado, '') != 'mensagem_enviada'
-            {busca_cond} {filtro_cond}
+            {where_base} {busca_cond} {filtro_cond}
             ORDER BY A.data_registro DESC
             LIMIT ? OFFSET ?
         """, busca_param + filtro_param + [limit, offset]).fetchall()
@@ -4122,13 +4122,12 @@ def api_behavior_atendimentos():
             SELECT COUNT(*)
             FROM Acompanhamento_Clientes A
             LEFT JOIN Contratos C ON C.ID = A.contrato_id
-            WHERE COALESCE(A.resultado, '') != 'mensagem_enviada'
-            {busca_cond} {filtro_cond}
+            {where_base} {busca_cond} {filtro_cond}
         """, busca_param + filtro_param).fetchone()[0]
 
         resultados = [r[0] for r in conn.execute(
             """SELECT DISTINCT resultado FROM Acompanhamento_Clientes
-               WHERE resultado IS NOT NULL AND resultado != '' AND resultado != 'mensagem_enviada'
+               WHERE resultado IS NOT NULL AND resultado != ''
                ORDER BY resultado"""
         ).fetchall()]
 
