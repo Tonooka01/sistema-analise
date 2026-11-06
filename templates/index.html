@@ -1677,18 +1677,46 @@ function _renderClientDetail(d) {
   ].join('');
 
   const tbody = document.getElementById('cdp-faturas-body');
+  const _fatBadge = (f) => {
+    const s       = f.Status || '';
+    const atraso  = (f.dias_atraso || 0) > 0;
+    const isReceb = ['Recebido','Quitado','Recebimento em dia'].includes(s);
+    const isReneg = s === 'Renegociado' || s === 'Renegociada';
+    const isAReceb= s === 'A receber';
+    const isCance = ['Cancelado','Cancelada'].includes(s);
+    let style, label;
+    if (isReceb) {
+      style = 'background:#dcfce7;color:#15803d;border:1px solid #86efac;';
+      label = 'Recebido';
+    } else if (isReneg) {
+      style = 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;';
+      label = 'Renegociado';
+    } else if (isAReceb && atraso) {
+      style = 'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;';
+      label = 'Em atraso';
+    } else if (isAReceb) {
+      style = 'background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;';
+      label = 'A receber';
+    } else if (isCance) {
+      style = 'background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;';
+      label = 'Cancelado';
+    } else {
+      style = 'background:#fef3c7;color:#92400e;border:1px solid #fde68a;';
+      label = s || '—';
+    }
+    return `<span style="padding:2px 10px;border-radius:999px;font-size:.72rem;font-weight:600;white-space:nowrap;${style}">${label}</span>`;
+  };
   tbody.innerHTML = (fin.faturas || []).map(f => {
-    const atrasado = f.dias_atraso > 0;
-    const vencida  = f.Status === 'A receber' && atrasado;
-    const statusCls = f.Status === 'Quitado' ? 'bg-green-100 text-green-800'
-                    : vencida                ? 'bg-red-100 text-red-800'
-                    : 'bg-yellow-100 text-yellow-800';
-    return `<tr class="hover:bg-gray-50 ${vencida ? 'bg-red-50' : ''}">
-      <td class="px-2 py-1">${_fmtDate(f.Vencimento)}</td>
-      <td class="px-2 py-1 text-right font-mono">${fmtBRL(f.Valor)}</td>
-      <td class="px-2 py-1 text-center"><span class="px-1.5 py-0.5 rounded text-xs ${statusCls}">${f.Status}</span></td>
-      <td class="px-2 py-1">${_fmtDate(f.Data_pagamento)}</td>
-      <td class="px-2 py-1 text-right ${atrasado ? 'text-red-600 font-semibold' : 'text-gray-400'}">${atrasado ? f.dias_atraso + 'd' : '—'}</td>
+    const atraso = (f.dias_atraso || 0) > 0;
+    const isVenc = f.Status === 'A receber' && atraso;
+    const isReneg= f.Status === 'Renegociado' || f.Status === 'Renegociada';
+    const rowBg  = isVenc ? 'background:#fff5f5;' : isReneg ? 'background:#faf5ff;' : '';
+    return `<tr style="${rowBg}" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='${rowBg}'">
+      <td class="px-2 py-1.5">${_fmtDate(f.Vencimento)}</td>
+      <td class="px-2 py-1.5 text-right font-mono">${fmtBRL(f.Valor)}</td>
+      <td class="px-2 py-1.5 text-center">${_fatBadge(f)}</td>
+      <td class="px-2 py-1.5">${_fmtDate(f.Data_pagamento)}</td>
+      <td class="px-2 py-1.5 text-right font-semibold" style="color:${atraso?'#dc2626':'#9ca3af'}">${atraso ? f.dias_atraso + 'd' : '—'}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="5" class="text-center text-gray-400 py-4">Nenhuma fatura encontrada.</td></tr>';
 
