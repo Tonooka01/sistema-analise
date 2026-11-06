@@ -4029,6 +4029,10 @@ def api_behavior_retorno():
         usr_cond = 'AND A.usuario = ?' if usuario else ''
         params   = [usuario] if usuario else []
 
+        # MAX(id) sobre TODOS os registros do contrato (sem filtrar data_retorno).
+        # O filtro data_retorno fica só na query externa — assim, se o último
+        # registro foi um "resolver sem reagendar" (data_retorno=null), o contrato
+        # some da lista mesmo que haja registros mais antigos com data_retorno.
         rows = conn.execute(f"""
             SELECT A.id, A.contrato_id, A.usuario, A.data_registro,
                    A.tipo_acao, A.resultado, A.observacao, A.data_retorno, A.snooze_ate,
@@ -4040,8 +4044,7 @@ def api_behavior_retorno():
             LEFT JOIN Clientes  cl ON cl.Raz_o_social = C.Cliente
             WHERE A.id IN (
                 SELECT MAX(id) FROM Acompanhamento_Clientes
-                WHERE data_retorno IS NOT NULL AND TRIM(data_retorno) != ''
-                  AND COALESCE(resultado, '') != 'mensagem_enviada'
+                WHERE COALESCE(resultado, '') != 'mensagem_enviada'
                 {usr_cond}
                 GROUP BY contrato_id
             )
@@ -4054,8 +4057,7 @@ def api_behavior_retorno():
         total = conn.execute(f"""
             SELECT COUNT(*) FROM (
                 SELECT MAX(id) AS mid FROM Acompanhamento_Clientes
-                WHERE data_retorno IS NOT NULL AND TRIM(data_retorno) != ''
-                  AND COALESCE(resultado, '') != 'mensagem_enviada'
+                WHERE COALESCE(resultado, '') != 'mensagem_enviada'
                 {usr_cond}
                 GROUP BY contrato_id
             ) sub
