@@ -4084,6 +4084,77 @@ def api_behavior_retorno():
         if conn: conn.close()
 
 
+@behavior_bp.route('/atendimentos')
+def api_behavior_atendimentos():
+    """Último registro por contrato (todos, sem filtro de data_retorno) — CRM completo."""
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Não autenticado'}), 401
+    conn = get_db()
+    try:
+        _ensure_acompanhamento_table(conn)
+        limit    = min(300, int(request.args.get('limit', 200)))
+        page     = max(1,   int(request.args.get('page',  1)))
+        offset   = (page - 1) * limit
+        busca    = (request.args.get('busca', '') or '').strip()
+        filtro   = (request.args.get('resultado', '') or '').strip()
+
+        busca_cond   = "AND C.Cliente LIKE ?"  if busca  else ''
+        filtro_cond  = "AND A.resultado = ?"   if filtro else ''
+        busca_param  = [f'%{busca}%']          if busca  else []
+        filtro_param = [filtro]                if filtro else []
+
+        rows = conn.execute(f"""
+            SELECT A.id, A.contrato_id, A.usuario, A.data_registro,
+                   A.tipo_acao, A.resultado, A.observacao, A.data_retorno, A.snooze_ate,
+                   C.Cliente AS cliente, C.Cidade AS cidade,
+                   cl.Whatsapp         AS whatsapp,
+                   cl.Telefone_celular AS telefone_cel
+            FROM Acompanhamento_Clientes A
+            LEFT JOIN Contratos C  ON C.ID  = A.contrato_id
+            LEFT JOIN Clientes  cl ON cl.Raz_o_social = C.Cliente
+            WHERE A.id IN (
+                SELECT MAX(id) FROM Acompanhamento_Clientes
+                WHERE COALESCE(resultado, '') != 'mensagem_enviada'
+                GROUP BY contrato_id
+            )
+            AND COALESCE(A.resultado, '') != 'mensagem_enviada'
+            {busca_cond} {filtro_cond}
+            ORDER BY A.data_registro DESC
+            LIMIT ? OFFSET ?
+        """, busca_param + filtro_param + [limit, offset]).fetchall()
+
+        total = conn.execute(f"""
+            SELECT COUNT(*) FROM (
+                SELECT MAX(id) AS mid FROM Acompanhamento_Clientes
+                WHERE COALESCE(resultado, '') != 'mensagem_enviada'
+                GROUP BY contrato_id
+            ) sub
+            JOIN Acompanhamento_Clientes A ON A.id = sub.mid
+            LEFT JOIN Contratos C ON C.ID = A.contrato_id
+            WHERE COALESCE(A.resultado, '') != 'mensagem_enviada'
+            {busca_cond} {filtro_cond}
+        """, busca_param + filtro_param).fetchone()[0]
+
+        resultados = [r[0] for r in conn.execute(
+            """SELECT DISTINCT resultado FROM Acompanhamento_Clientes
+               WHERE resultado IS NOT NULL AND resultado != '' AND resultado != 'mensagem_enviada'
+               ORDER BY resultado"""
+        ).fetchall()]
+
+        return jsonify({
+            'registros':  [dict(r) for r in rows],
+            'total':      total,
+            'page':       page,
+            'pages':      max(1, -(-total // limit)),
+            'resultados': resultados,
+        })
+    except Exception as e:
+        logger.error(f"Erro em atendimentos: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn: conn.close()
+
+
 @behavior_bp.route('/acompanhamento/<int:record_id>', methods=['PUT'])
 def api_behavior_acompanhamento_put(record_id):
     if not current_user.is_authenticated:

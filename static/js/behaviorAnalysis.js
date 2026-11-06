@@ -207,6 +207,9 @@ export function handleBehaviorTabChange(tabName) {
             case 'retorno':
                 renderRetornoTab();
                 break;
+            case 'atendimentos':
+                renderAtendimentosTab();
+                break;
             case 'dashboard_trabalho':
                 renderDashboardTrabalhoTab();
                 break;
@@ -3461,6 +3464,372 @@ async function renderRetornoTab() {
         _retornoRenderList();
         // seleciona o primeiro automaticamente
         if (_retornoRegistros.length) window._retornoSelect(_retornoRegistros[0].id);
+    } catch(e) {
+        pane.innerHTML = `<div class="p-6 text-red-600">Erro: ${e.message}</div>`;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: Atendimentos (CRM — último registro por contrato, todos)
+// ─────────────────────────────────────────────────────────────────────────────
+let _atendSelected  = null;
+let _atendRegistros = [];
+let _atendBusca     = '';
+let _atendFiltro    = null; // null | resultado string
+
+const _ATEND_RES_CFG = {
+    sem_resposta: { label:'Sem resposta', cor:'#b91c1c', bg:'#fef2f2', borda:'#fca5a5', css:'background:#fee2e2;color:#b91c1c;' },
+    reagendou:    { label:'Reagendou',    cor:'#92400e', bg:'#fffbeb', borda:'#fde68a', css:'background:#fef3c7;color:#92400e;' },
+    negociacao:   { label:'Em negociação',cor:'#1e40af', bg:'#eff6ff', borda:'#bfdbfe', css:'background:#dbeafe;color:#1e40af;' },
+    retido:       { label:'Retido',       cor:'#15803d', bg:'#f0fdf4', borda:'#86efac', css:'background:#dcfce7;color:#15803d;' },
+    cancelou:     { label:'Cancelou',     cor:'#6b7280', bg:'#f9fafb', borda:'#e5e7eb', css:'background:#f3f4f6;color:#6b7280;' },
+    pagou:        { label:'Pagou',        cor:'#15803d', bg:'#f0fdf4', borda:'#86efac', css:'background:#dcfce7;color:#15803d;' },
+};
+function _atendResCfg(res) {
+    return _ATEND_RES_CFG[res] || { label: res || '—', cor:'#6b7280', bg:'#f9fafb', borda:'#e5e7eb', css:'background:#f3f4f6;color:#6b7280;' };
+}
+
+function _atendComputeGroups() {
+    const order = ['sem_resposta','reagendou','negociacao','retido','cancelou','pagou'];
+    const groups = {};
+    _atendRegistros.forEach(reg => {
+        const k = reg.resultado || '_outros';
+        if (!groups[k]) groups[k] = [];
+        groups[k].push(reg);
+    });
+    // ordem definida + eventuais resultados extras
+    const keys = [...order.filter(k => groups[k]), ...Object.keys(groups).filter(k => !order.includes(k))];
+    return keys.map(k => ({ key: k, regs: groups[k] }));
+}
+
+function _atendRenderList() {
+    const container = document.getElementById('atend-cards');
+    if (!container) return;
+
+    const busca = _atendBusca.toLowerCase().trim();
+    let grupos = _atendComputeGroups();
+
+    if (_atendFiltro) grupos = grupos.filter(g => g.key === _atendFiltro);
+    if (busca) grupos = grupos.map(g => ({ ...g, regs: g.regs.filter(r => (r.cliente||'').toLowerCase().includes(busca)) })).filter(g => g.regs.length);
+
+    if (!grupos.length || grupos.every(g => !g.regs.length)) {
+        container.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:.85rem;">Nenhum atendimento encontrado.</div>';
+        return;
+    }
+
+    container.innerHTML = grupos.map(({ key, regs }) => {
+        const cfg = _atendResCfg(key);
+        const header = `<div style="padding:5px 12px;background:${cfg.bg};border-bottom:1px solid ${cfg.borda};border-top:1px solid ${cfg.borda};display:flex;align-items:center;gap:6px;position:sticky;top:0;z-index:1;">
+            <span style="font-size:.68rem;font-weight:700;color:${cfg.cor};text-transform:uppercase;letter-spacing:.06em;">${cfg.label}</span>
+            <span style="margin-left:auto;font-size:.68rem;background:${cfg.borda};color:${cfg.cor};padding:1px 7px;border-radius:999px;font-weight:700;">${regs.length}</span>
+        </div>`;
+
+        const items = regs.map(reg => {
+            const ativo = _atendSelected === reg.id;
+            const dataTxt = (reg.data_registro || '').slice(0, 10);
+            const temRetorno = reg.data_retorno && reg.data_retorno.trim();
+            return `<div style="border-bottom:1px solid #f1f5f9;padding:9px 12px;cursor:pointer;border-left:3px solid ${ativo ? cfg.cor : 'transparent'};background:${ativo ? cfg.bg : 'transparent'};transition:background .1s;"
+                        onmouseover="if(!${ativo})this.style.background='#f8fafc'"
+                        onmouseout="this.style.background='${ativo ? cfg.bg : 'transparent'}'"
+                        onclick="window._atendSelect(${reg.id})">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;gap:6px;">
+                    <span style="font-size:.82rem;font-weight:600;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${reg.cliente || '—'}</span>
+                    <span style="font-size:.65rem;color:#94a3b8;flex-shrink:0;">${dataTxt}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;flex-wrap:wrap;">
+                    <span style="font-size:.7rem;color:#94a3b8;">${reg.cidade || '—'} · #${reg.contrato_id}</span>
+                </div>
+                ${temRetorno ? `<div style="font-size:.65rem;color:#2563eb;">📅 Retorno: ${reg.data_retorno}</div>` : ''}
+                <div style="font-size:.68rem;color:#cbd5e1;">por ${reg.usuario || '—'}</div>
+            </div>`;
+        }).join('');
+
+        return header + items;
+    }).join('');
+}
+
+function _atendUpdateChips() {
+    const grupos = _atendComputeGroups();
+    const bar = document.getElementById('atend-filtros-bar');
+    if (!bar) return;
+    bar.innerHTML = grupos.map(({ key, regs }) => {
+        const cfg = _atendResCfg(key);
+        const ativo = _atendFiltro === key;
+        return `<div onclick="window._atendSetFiltro('${key}')"
+            style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;cursor:pointer;border:1.5px solid ${cfg.borda};background:${ativo ? cfg.bg : '#fff'};font-size:.7rem;font-weight:700;color:${cfg.cor};transition:opacity .15s;opacity:${!_atendFiltro||ativo?'1':'.45'};">
+            ${cfg.label}
+            <span style="background:${cfg.borda};padding:1px 6px;border-radius:999px;">${regs.length}</span>
+        </div>`;
+    }).join('');
+}
+
+window._atendSetFiltro = function(f) {
+    _atendFiltro = (_atendFiltro === f) ? null : f;
+    _atendUpdateChips();
+    _atendRenderList();
+};
+
+window._atendBuscaChange = function(val) {
+    _atendBusca = val;
+    _atendRenderList();
+};
+
+window._atendSelect = function(id) {
+    _atendSelected = id;
+    const reg = _atendRegistros.find(r => r.id === id);
+    _atendRenderList();
+    if (reg) _atendRenderRight(reg);
+};
+
+function _atendRenderRight(reg) {
+    const panel = document.getElementById('atend-panel');
+    if (!panel) return;
+
+    const wa = reg.whatsapp
+        ? `<a href="https://wa.me/55${reg.whatsapp.replace(/\D/g,'')}" target="_blank" class="text-green-600 hover:underline">💬 ${reg.whatsapp}</a>`
+        : '—';
+    const msgs = _retornoMensagens(reg); // reusa a mesma lógica de mensagens prontas
+
+    const cfg = _atendResCfg(reg.resultado);
+    const temRetorno = reg.data_retorno && reg.data_retorno.trim();
+
+    panel.innerHTML = `
+    <div class="p-5 flex flex-col gap-4 h-full">
+
+      <!-- Cabeçalho -->
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="font-bold text-gray-900 text-lg leading-tight">${reg.cliente || '—'}</div>
+          <div class="text-sm text-gray-500">${reg.cidade || '—'} · Contrato <strong>#${reg.contrato_id}</strong></div>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button id="atend-btn-resolver"
+            style="font-size:0.75rem;background:#059669;color:#fff;padding:6px 12px;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+            ✅ Resolver / Registrar
+          </button>
+          <button onclick="if(window._openHistoricoModal)window._openHistoricoModal('${reg.contrato_id}')"
+            style="font-size:0.75rem;background:#ede9fe;color:#6d28d9;padding:6px 10px;border:1px solid #c4b5fd;border-radius:6px;cursor:pointer;font-weight:600;"
+            title="Histórico de movimentação">
+            🕐 Histórico
+          </button>
+          <button id="atend-btn-excluir"
+            style="font-size:0.75rem;background:#fff;color:#dc2626;padding:6px 10px;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;font-weight:600;">
+            🗑 Excluir
+          </button>
+          <button onclick="if(typeof showClientDetail==='function') showClientDetail('${reg.contrato_id}')"
+            style="font-size:0.75rem;background:#2563eb;color:#fff;padding:6px 10px;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+            📋 Detalhes
+          </button>
+        </div>
+      </div>
+
+      <!-- Contato + último atendimento -->
+      <div class="grid grid-cols-2 gap-4 text-sm bg-gray-50 rounded-lg p-4">
+        <div><div class="text-xs text-gray-400 mb-1">WhatsApp</div>${wa}</div>
+        <div><div class="text-xs text-gray-400 mb-1">Telefone</div>${reg.telefone_cel || '—'}</div>
+        <div><div class="text-xs text-gray-400 mb-1">Último contato em</div>${(reg.data_registro||'').slice(0,16).replace('T',' ')}</div>
+        <div><div class="text-xs text-gray-400 mb-1">Último contato por</div>${reg.usuario || '—'}</div>
+        ${temRetorno ? `<div><div class="text-xs text-gray-400 mb-1">Retorno agendado</div><span style="color:#2563eb;font-weight:600;">${reg.data_retorno}</span></div>` : ''}
+      </div>
+
+      <!-- Resultado + observação -->
+      <div style="background:#f8fafc;border-radius:8px;padding:14px;border:1px solid #e2e8f0;">
+        <div style="font-size:.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Último Atendimento</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+          <span style="font-size:.75rem;padding:3px 10px;border-radius:999px;${cfg.css}">${cfg.label}</span>
+          <span style="font-size:.72rem;color:#94a3b8;">${reg.tipo_acao ? '· ' + reg.tipo_acao : ''}</span>
+        </div>
+        ${reg.observacao ? `<div style="font-size:.8rem;color:#475569;font-style:italic;">"${reg.observacao}"</div>` : ''}
+      </div>
+
+      <!-- Form resolver (oculto) -->
+      <div id="atend-resolver-form" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:14px;">
+        <div style="font-size:.75rem;font-weight:700;color:#15803d;margin-bottom:10px;">📝 Registrar atendimento</div>
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label style="font-size:.7rem;color:#6b7280;display:block;margin-bottom:3px;">Tipo</label>
+            <select id="atend-form-tipo" style="width:100%;font-size:.78rem;border:1px solid #d1d5db;border-radius:5px;padding:5px 8px;">
+              <option value="">Selecione...</option>
+              <option value="ligacao">📞 Ligação</option>
+              <option value="whatsapp">💬 WhatsApp</option>
+              <option value="visita">🏠 Visita</option>
+              <option value="email">✉️ E-mail</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:.7rem;color:#6b7280;display:block;margin-bottom:3px;">Resultado</label>
+            <select id="atend-form-resultado" style="width:100%;font-size:.78rem;border:1px solid #d1d5db;border-radius:5px;padding:5px 8px;">
+              <option value="">Selecione...</option>
+              <option value="sem_resposta">Sem resposta</option>
+              <option value="reagendou">Reagendou</option>
+              <option value="negociacao">Em negociação</option>
+              <option value="retido">Retido</option>
+              <option value="cancelou">Cancelou</option>
+              <option value="pagou">Pagou</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label style="font-size:.7rem;color:#6b7280;display:block;margin-bottom:3px;">Observação</label>
+          <textarea id="atend-form-obs" rows="2" style="width:100%;font-size:.78rem;border:1px solid #d1d5db;border-radius:5px;padding:5px 8px;resize:vertical;" placeholder="Detalhes do contato..."></textarea>
+        </div>
+        <div class="mb-3">
+          <label style="font-size:.7rem;color:#6b7280;display:block;margin-bottom:3px;">Agendar retorno para (opcional)</label>
+          <input id="atend-form-data-retorno" type="date" style="font-size:.78rem;border:1px solid #d1d5db;border-radius:5px;padding:5px 8px;">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button id="atend-form-salvar" style="font-size:.75rem;background:#059669;color:#fff;padding:6px 14px;border:none;border-radius:5px;cursor:pointer;font-weight:600;">Salvar</button>
+          <button id="atend-form-cancelar" style="font-size:.75rem;background:#fff;color:#6b7280;padding:6px 10px;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;">Cancelar</button>
+          <span id="atend-form-msg" style="font-size:.72rem;"></span>
+        </div>
+      </div>
+
+      <!-- Mensagens prontas -->
+      <div>
+        <div style="font-size:.7rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">💬 Mensagens prontas</div>
+        ${msgs.map(m => `
+          <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid #e2e8f0;border-radius:7px;padding:9px 12px;margin-bottom:7px;background:#fff;">
+            <div>
+              <div style="font-size:.75rem;font-weight:600;color:#374151;margin-bottom:4px;">${m.icon} ${m.label}</div>
+              <div style="font-size:.72rem;color:#64748b;line-height:1.5;">${m.msg}</div>
+            </div>
+            <button onclick="navigator.clipboard.writeText(${JSON.stringify(m.msg)}).then(()=>{this.textContent='✅';setTimeout(()=>this.textContent='Copiar',1500)})"
+              style="font-size:.7rem;color:#2563eb;background:none;border:1px solid #bfdbfe;border-radius:5px;padding:3px 10px;cursor:pointer;white-space:nowrap;margin-left:10px;">Copiar</button>
+          </div>`).join('')}
+      </div>
+    </div>`;
+
+    // Botão excluir
+    panel.querySelector('#atend-btn-excluir').addEventListener('click', async () => {
+        if (!confirm(`Excluir registro de atendimento de ${reg.cliente}?`)) return;
+        const btn = panel.querySelector('#atend-btn-excluir');
+        btn.disabled = true; btn.textContent = '...';
+        try {
+            const r = await fetch(`/api/behavior/acompanhamento/${reg.id}`, { method: 'DELETE' });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error || 'Erro ao excluir');
+            _atendRegistros = _atendRegistros.filter(x => x.id !== reg.id);
+            _atendSelected = null;
+            panel.innerHTML = '<div class="p-8 text-center text-gray-400">Registro excluído.</div>';
+            _atendUpdateChips();
+            _atendRenderList();
+        } catch(e) {
+            btn.disabled = false; btn.textContent = '🗑 Excluir';
+            alert('Erro: ' + e.message);
+        }
+    });
+
+    // Botão resolver — toggle form
+    const resolverForm = panel.querySelector('#atend-resolver-form');
+    panel.querySelector('#atend-btn-resolver').addEventListener('click', () => {
+        resolverForm.style.display = resolverForm.style.display === 'none' ? 'block' : 'none';
+    });
+    panel.querySelector('#atend-form-cancelar').addEventListener('click', () => {
+        resolverForm.style.display = 'none';
+    });
+
+    // Submit do form
+    panel.querySelector('#atend-form-salvar').addEventListener('click', async () => {
+        const tipo    = panel.querySelector('#atend-form-tipo').value;
+        const result  = panel.querySelector('#atend-form-resultado').value;
+        const obs     = panel.querySelector('#atend-form-obs').value.trim();
+        const retorno = panel.querySelector('#atend-form-data-retorno').value;
+        const msg     = panel.querySelector('#atend-form-msg');
+
+        if (!tipo || !result) { msg.textContent = '⚠️ Preencha tipo e resultado.'; msg.style.color = '#dc2626'; return; }
+
+        const btn = panel.querySelector('#atend-form-salvar');
+        btn.disabled = true; btn.textContent = 'Salvando...';
+        msg.textContent = '';
+
+        try {
+            const r = await fetch('/api/behavior/acompanhamento', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contrato_id:  reg.contrato_id,
+                    tipo_acao:    tipo,
+                    resultado:    result,
+                    observacao:   obs || null,
+                    data_retorno: retorno || null,
+                }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error || 'Erro');
+
+            // Atualiza o registro localmente com os novos dados
+            const idx = _atendRegistros.findIndex(x => x.id === reg.id);
+            if (idx !== -1) {
+                _atendRegistros[idx] = {
+                    ..._atendRegistros[idx],
+                    id:           d.id || _atendRegistros[idx].id,
+                    resultado:    result,
+                    tipo_acao:    tipo,
+                    observacao:   obs || null,
+                    data_retorno: retorno || null,
+                    data_registro: new Date().toISOString().slice(0,16),
+                    usuario:      _atendRegistros[idx].usuario,
+                };
+            }
+            _atendSelected = null;
+            panel.innerHTML = '<div class="p-8 text-center text-green-600 font-semibold">✅ Atendimento registrado!</div>';
+            _atendUpdateChips();
+            _atendRenderList();
+        } catch(e) {
+            btn.disabled = false; btn.textContent = 'Salvar';
+            msg.textContent = 'Erro: ' + e.message; msg.style.color = '#dc2626';
+        }
+    });
+}
+
+async function renderAtendimentosTab() {
+    const pane = document.getElementById('tab-content-atendimentos');
+    if (!pane) return;
+    pane.innerHTML = '<div class="p-8 text-center text-gray-500">Carregando...</div>';
+    try {
+        const d = await fetch('/api/behavior/atendimentos?limit=300').then(r => r.json());
+        if (d.error) throw new Error(d.error);
+        _atendRegistros = d.registros || [];
+        _atendSelected  = null;
+        _atendBusca     = '';
+        _atendFiltro    = null;
+
+        pane.innerHTML = `
+        <div class="flex" style="height:calc(100vh - 200px); min-height:520px;">
+          <!-- Lista esquerda -->
+          <div class="flex flex-col border-r border-gray-200" style="width:320px;flex-shrink:0;">
+            <!-- Cabeçalho -->
+            <div style="padding:8px 12px 6px;border-bottom:1px solid #e5e7eb;background:#f8fafc;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">
+              <span style="font-size:.82rem;font-weight:700;color:#374151;">👥 Atendimentos</span>
+              <span style="font-size:.72rem;background:#e0e7ff;color:#3730a3;padding:1px 8px;border-radius:999px;font-weight:700;">${d.total}</span>
+            </div>
+            <!-- Chips de filtro por resultado -->
+            <div id="atend-filtros-bar" style="display:flex;flex-wrap:wrap;gap:5px;padding:7px 10px;border-bottom:1px solid #e5e7eb;background:#f8fafc;flex-shrink:0;"></div>
+            <!-- Campo de busca -->
+            <div style="padding:6px 10px;border-bottom:1px solid #e5e7eb;background:#fff;flex-shrink:0;">
+              <div style="position:relative;">
+                <span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:.82rem;color:#94a3b8;pointer-events:none;">🔍</span>
+                <input id="atend-busca-nome" type="text" placeholder="Filtrar por nome..."
+                  oninput="window._atendBuscaChange(this.value)"
+                  style="width:100%;box-sizing:border-box;padding:5px 8px 5px 28px;border:1px solid #e2e8f0;border-radius:6px;font-size:.78rem;color:#374151;outline:none;background:#f8fafc;"
+                  onfocus="this.style.borderColor='#60a5fa';this.style.background='#fff'"
+                  onblur="this.style.borderColor='#e2e8f0';this.style.background='#f8fafc'">
+              </div>
+            </div>
+            <div id="atend-cards" class="overflow-y-auto flex-1"></div>
+          </div>
+          <!-- Painel direito -->
+          <div id="atend-panel" class="flex-1 overflow-y-auto">
+            <div class="p-10 text-center text-gray-400 mt-8">
+              <div class="text-5xl mb-3">👈</div>
+              <div class="text-sm">Selecione um cliente para ver detalhes e registrar atendimento</div>
+            </div>
+          </div>
+        </div>`;
+
+        _atendUpdateChips();
+        _atendRenderList();
+        if (_atendRegistros.length) window._atendSelect(_atendRegistros[0].id);
     } catch(e) {
         pane.innerHTML = `<div class="p-6 text-red-600">Erro: ${e.message}</div>`;
     }
