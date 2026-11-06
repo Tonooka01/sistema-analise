@@ -1711,11 +1711,15 @@ function _renderClientDetail(d) {
     const isVenc = f.Status === 'A receber' && atraso;
     const isReneg= f.Status === 'Renegociado' || f.Status === 'Renegociada';
     const rowBg  = isVenc ? 'background:#fff5f5;' : isReneg ? 'background:#faf5ff;' : '';
+    // Renegociado: mostra data de baixa (não pagamento), sem atraso
+    const dtPag = isReneg
+      ? (f.Data_baixa ? `<span style="color:#7c3aed;font-size:.7rem;">${_fmtDate(f.Data_baixa.slice(0,10))} <span style="opacity:.6">(baixa)</span></span>` : '—')
+      : _fmtDate(f.Data_pagamento);
     return `<tr style="${rowBg}" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='${rowBg}'">
       <td class="px-2 py-1.5">${_fmtDate(f.Vencimento)}</td>
       <td class="px-2 py-1.5 text-right font-mono">${fmtBRL(f.Valor)}</td>
       <td class="px-2 py-1.5 text-center">${_fatBadge(f)}</td>
-      <td class="px-2 py-1.5">${_fmtDate(f.Data_pagamento)}</td>
+      <td class="px-2 py-1.5">${dtPag}</td>
       <td class="px-2 py-1.5 text-right font-semibold" style="color:${atraso?'#dc2626':'#9ca3af'}">${atraso ? f.dias_atraso + 'd' : '—'}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="5" class="text-center text-gray-400 py-4">Nenhuma fatura encontrada.</td></tr>';

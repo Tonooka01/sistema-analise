@@ -3600,16 +3600,29 @@ def api_behavior_client_detail(contrato_id):
         financeiro_summary = dict(fin_summary) if fin_summary else {}
 
         # --- Last 24 invoices ---
+        # ID_Renegocia_o preenchido = boleto baixado via renegociação (não pagamento efetivo)
         faturas = conn.execute("""
             SELECT
                 ID, Vencimento, Valor, Valor_recebido, Valor_aberto,
-                Status, Data_pagamento,
-                CASE WHEN Data_pagamento IS NOT NULL
-                      AND Data_pagamento != ''
-                      AND Data_pagamento > Vencimento
-                     THEN CAST(JULIANDAY(Data_pagamento) - JULIANDAY(Vencimento) AS INTEGER)
-                     WHEN Status = 'A receber' AND Vencimento < date('now')
-                     THEN CAST(JULIANDAY('now') - JULIANDAY(Vencimento) AS INTEGER)
+                CASE
+                    WHEN COALESCE(ID_Renegocia_o, '') NOT IN ('', '0', '0.0')
+                    THEN 'Renegociado'
+                    ELSE Status
+                END AS Status,
+                CASE
+                    WHEN COALESCE(ID_Renegocia_o, '') NOT IN ('', '0', '0.0')
+                    THEN ''
+                    ELSE Data_pagamento
+                END AS Data_pagamento,
+                Data_baixa,
+                CASE
+                    WHEN COALESCE(ID_Renegocia_o, '') NOT IN ('', '0', '0.0')
+                    THEN NULL
+                    WHEN Data_pagamento IS NOT NULL AND Data_pagamento != ''
+                          AND Data_pagamento > Vencimento
+                    THEN CAST(JULIANDAY(Data_pagamento) - JULIANDAY(Vencimento) AS INTEGER)
+                    WHEN Status = 'A receber' AND Vencimento < date('now')
+                    THEN CAST(JULIANDAY('now') - JULIANDAY(Vencimento) AS INTEGER)
                 END AS dias_atraso
             FROM Contas_a_Receber
             WHERE ID_contrato_recorrente = ?
