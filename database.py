@@ -124,6 +124,28 @@ def init_db_users():
         ''')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_cslog_contrato ON chatmix_send_log(contrato)')
 
+        # Marcações da página de correções do assistente-gerente: 'certo' (conferido, vale até o fim do mês) e 'corrigido'
+        # (vale poucos dias). correcao_marca guarda a marcação atual de cada item; correcao_hist guarda todas, para a métrica.
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS correcao_marca (
+                chave TEXT PRIMARY KEY,
+                tipo  TEXT NOT NULL,
+                ate   TEXT NOT NULL,
+                por   TEXT,
+                em    DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS correcao_hist (
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                secao    TEXT NOT NULL,
+                contrato TEXT NOT NULL,
+                tipo     TEXT NOT NULL,
+                por      TEXT,
+                em       DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         # Migrations
         cursor = conn.cursor()
         cursor.execute("PRAGMA table_info(Users)")

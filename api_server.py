@@ -272,6 +272,41 @@ def resumo_gerente(token):
     return send_from_directory(pasta, token + '.html', mimetype='text/html')
 
 
+@app.route('/resumo/ok', methods=['POST'])
+@login_required
+def resumo_marcar_ok():
+    """Página de correções do assistente-gerente: marca um item como 'certo' (conferido; fica apagado até o fim do mês e volta
+    no dia 1 se continuar errado) ou 'corrigido' (fica marcado por 3 dias; se seguir errado depois disso, volta como pendente).
+    Toda marcação também vai para correcao_hist (métrica). Só aceita seções conhecidas e contrato numérico."""
+    import calendar
+    dados = request.get_json(silent=True) or {}
+    secao, contrato, tipo = str(dados.get('secao', '')), str(dados.get('contrato', '')), str(dados.get('tipo', 'certo'))
+    if secao not in ('pago_ate_incorreto',) or not contrato.isdigit() or tipo not in ('certo', 'corrigido'):
+        return jsonify({'erro': 'dados inválidos'}), 400
+    hoje = datetime.now()
+    if tipo == 'certo':
+        ate = hoje.replace(day=calendar.monthrange(hoje.year, hoje.month)[1]).strftime('%Y-%m-%d')
+    else:
+        ate = (hoje + timedelta(days=3)).strftime('%Y-%m-%d')
+    conn = get_db_connection()
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS correcao_marca (chave TEXT PRIMARY KEY, tipo TEXT NOT NULL, ate TEXT NOT NULL, "
+                     "por TEXT, em DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        conn.execute("CREATE TABLE IF NOT EXISTS correcao_hist (id INTEGER PRIMARY KEY AUTOINCREMENT, secao TEXT NOT NULL, "
+                     "contrato TEXT NOT NULL, tipo TEXT NOT NULL, por TEXT, em DATETIME DEFAULT CURRENT_TIMESTAMP)")
+        conn.execute("INSERT OR REPLACE INTO correcao_marca (chave, tipo, ate, por) VALUES (?, ?, ?, ?)",
+                     (f"{secao}:{contrato}", tipo, ate, current_user.username))
+        conn.execute("INSERT INTO correcao_hist (secao, contrato, tipo, por) VALUES (?, ?, ?, ?)",
+                     (secao, contrato, tipo, current_user.username))
+        conn.commit()
+    except Exception:
+        logger.exception("Erro ao gravar marcação de correção")
+        return jsonify({'erro': 'falha ao gravar'}), 500
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'tipo': tipo, 'ate': ate})
+
+
 # ---------------------------------------------------------------------------
 # Registro de Blueprints
 # ---------------------------------------------------------------------------

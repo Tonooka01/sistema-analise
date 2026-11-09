@@ -1251,6 +1251,9 @@ h1{margin:0 0 3px;font-size:1.2rem;font-weight:700}
 .fa-spin-wrap{text-align:center;padding:32px;color:var(--mu);font-size:.85rem}
 .fa-spin{display:inline-block;width:18px;height:18px;border:2px solid var(--bd);
   border-top-color:var(--ac);border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;margin-right:8px}
+.si-click{cursor:pointer;transition:opacity .15s;border-radius:5px;padding:3px 4px;margin:-3px -4px}
+.si-click:hover{opacity:.75}
+.si-active{outline:2px solid var(--ac);outline-offset:3px;border-radius:5px}
 </style></head><body>
 <div class="hd">
   <div><h1>Status dos Contratos — Filial 2 · Tempo Real</h1>
@@ -1258,16 +1261,22 @@ h1{margin:0 0 3px;font-size:1.2rem;font-weight:700}
   <button class="btn" id="btn" onclick="carregar()">↻ Buscar agora</button>
 </div>
 <div id="out-status"><div class="state">Clique em "Buscar agora" para consultar o IXC em tempo real.</div></div>
-<div id="out-fa"></div>
+<div id="out-analise"></div>
 <script>
 const C={ok:'#15803d',wa:'#b45309',da:'#dc2626',ac:'#2563eb',or:'#c2410c',ne:'#6b7280'};
 const CT=[
-  {k:'Ativo',c:'ok'},{k:'Inativo',c:'ne'},{k:'Negativado',c:'da'},
-  {k:'Desistente',c:'wa'},{k:'Pendente',c:'ac'},
+  {k:'Ativo',c:'ok'},{k:'Inativo',c:'ne'},
+  {k:'Negativado',c:'da',tipo:'sc_N'},
+  {k:'Desistente',c:'wa',tipo:'sc_D'},
+  {k:'Pendente',c:'ac'},
 ];
 const SA=[
-  {k:'Ativo',c:'ok'},{k:'Bloqueio Automático',c:'da'},{k:'Bloqueio Manual',c:'wa'},
-  {k:'Financeiro em atraso',c:'or'},{k:'Desativado',c:'ne'},{k:'Aguardando Assinatura',c:'ac'},
+  {k:'Ativo',c:'ok'},
+  {k:'Bloqueio Automático',c:'da',tipo:'si_CA'},
+  {k:'Bloqueio Manual',c:'wa',tipo:'si_CM'},
+  {k:'Financeiro em atraso',c:'or',tipo:'si_FA'},
+  {k:'Desativado',c:'ne',tipo:'si_D'},
+  {k:'Aguardando Assinatura',c:'ac'},
 ];
 function fN(n){return Number(n).toLocaleString('pt-BR')}
 function fR(n){return 'R$ '+Number(n).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0})}
@@ -1275,7 +1284,8 @@ function hex(v){return getComputedStyle(document.documentElement).getPropertyVal
 function statusList(data,cfg,tot){
   return cfg.filter(x=>(data[x.k]||0)>0).sort((a,b)=>(data[b.k]||0)-(data[a.k]||0)).map(x=>{
     const n=data[x.k]||0,p=tot>0?(n/tot*100).toFixed(1):0,h=hex(x.c);
-    return `<div class="si"><span class="dot" style="background:${h}"></span>
+    const extra=x.tipo?`id="si-${x.tipo}" class="si si-click" onclick="loadAnalise('${x.tipo}','${x.k}')" title="Clique para analisar"`:`class="si"`;
+    return `<div ${extra}><span class="dot" style="background:${h}"></span>
       <span class="sn">${x.k}</span>
       <span class="sc" style="color:${h}">${fN(n)}</span>
       <span class="sp2">${p}%</span>
@@ -1311,19 +1321,39 @@ function tlNote(dt){
   return'';
 }
 function tlColor(cnt,max){return cnt===max?hex('da'):cnt>max*0.3?hex('or'):hex('wa')}
-function renderFA(d){
-  if(!d||!d.total_fa)return'';
+const TIPO_TL_LABEL={
+  'si_FA':'Quando entraram em FA','si_CA':'Vencimento (pago até)',
+  'si_CM':'Vencimento (pago até)','si_D':'Vencimento (pago até)',
+  'sc_N':'Vencimento (pago até)','sc_D':'Vencimento (pago até)',
+};
+function insightText(d,label,tipo){
+  const tot=d.total||0;
+  const tempo=d.por_tempo||{};
+  const antigos=((tempo['1-2 anos']||0)+(tempo['> 2 anos']||0));
+  const pctA=tot>0?(antigos/tot*100).toFixed(0):0;
+  const parteA=pctA>=30?` <strong>${pctA}% têm mais de 1 ano de contrato</strong> — clientes antigos em dificuldade.`:'';
+  if(tipo==='si_FA')return`<strong>Por que ${fN(tot)} contratos estão em FA?</strong> É o efeito do ciclo de vencimentos — os dias <strong>23 e 25</strong> são os mais comuns e, após 7 dias de carência, geram o maior volume de FA em bloco.${parteA} Dados de ${d.gerado_em}.`;
+  if(tipo==='si_CA')return`<strong>${fN(tot)} contratos em Bloqueio Automático</strong> — clientes que ultrapassaram a carência sem regularizar o pagamento.${parteA} Dados de ${d.gerado_em}.`;
+  if(tipo==='si_CM')return`<strong>${fN(tot)} contratos com Bloqueio Manual</strong> — bloqueios aplicados diretamente pela equipe.${parteA} Dados de ${d.gerado_em}.`;
+  if(tipo==='si_D')return`<strong>${fN(tot)} contratos com acesso Desativado</strong> — serviço suspenso por inadimplência ou solicitação.${parteA} Dados de ${d.gerado_em}.`;
+  if(tipo==='sc_N')return`<strong>${fN(tot)} contratos Negativados</strong> — clientes com dívidas registradas em negativação.${parteA} Dados de ${d.gerado_em}.`;
+  if(tipo==='sc_D')return`<strong>${fN(tot)} contratos Desistentes</strong> — clientes que solicitaram cancelamento do serviço.${parteA} Dados de ${d.gerado_em}.`;
+  return`<strong>${fN(tot)} contratos em ${label}</strong>. Dados de ${d.gerado_em}.`;
+}
+function renderAnalise(d,label,tipo){
+  if(!d||!d.total)return'';
   const tl=d.timeline||[];
   const maxTL=tl.reduce((m,r)=>Math.max(m,r.cnt),1);
-  const tlRows=tl.slice(0,6).map(r=>{
-    const note=tlNote(r.dt);
+  const tlLabel=TIPO_TL_LABEL[tipo]||'Entrada no status';
+  const isFa=tipo==='si_FA';
+  const tlRows=tl.slice(0,8).map(r=>{
+    const note=isFa?tlNote(r.dt):'';
     const dt=r.dt.split('-').reverse().join('/').slice(0,5);
     const col=tlColor(r.cnt,maxTL);
     return `<div class="tl-row">
         <div class="tl-label">${dt}</div>
         <div class="bar-track" style="height:20px"><div class="bar-fill" style="width:${(r.cnt/maxTL*100).toFixed(0)}%;background:${col};height:20px"></div></div>
-        <div class="bar-cnt">${fN(r.cnt)}</div></div>
-      ${note?`<div class="tl-note">${note}</div>`:''}`;
+        <div class="bar-cnt">${fN(r.cnt)}</div></div>${note?`<div class="tl-note">${note}</div>`:''}`;
   }).join('');
   const cidades=d.por_cidade||{};
   const maxCid=Math.max(...Object.values(cidades),1);
@@ -1331,55 +1361,55 @@ function renderFA(d){
   const maxTempo=Math.max(...Object.values(tempo),1);
   const boletos=(d.boletos_abertos||[]).slice(0,8);
   const maxBol=Math.max(...boletos.map(b=>b.cnt),1);
-  const chips=boletos.map(b=>{
+  const chips=boletos.length?boletos.map(b=>{
     const pct=b.cnt/maxBol*100;
     const mes=b.mes.split('-').reverse().join('/').replace(/^\d+\//,'');
-    return `<div class="trend-chip">
-      <div class="trend-mes">${mes}</div>
+    return `<div class="trend-chip"><div class="trend-mes">${mes}</div>
       <div class="trend-val" style="color:${b.cnt>1000?hex('or'):b.cnt>500?hex('wa'):'var(--fg)'}">${fN(b.cnt)}</div>
       <div class="trend-brl">${fR(b.total)}</div>
-      <div class="trend-bar"><div class="trend-bf" style="width:${pct.toFixed(0)}%"></div></div>
-    </div>`;
-  }).join('');
-  const antigos=((tempo['1-2 anos']||0)+(tempo['> 2 anos']||0));
-  const pctAntigos=d.total_fa>0?(antigos/d.total_fa*100).toFixed(0):0;
+      <div class="trend-bar"><div class="trend-bf" style="width:${pct.toFixed(0)}%"></div></div></div>`;
+  }).join(''):`<span style="color:var(--mu);font-size:.8rem">Sem boletos em aberto encontrados.</span>`;
   return `<div class="fa-section">
     <div class="fa-sep"><div class="fa-sep-line"></div>
-      <div class="fa-sep-label">📊 Análise Filial 2 — ${fN(d.total_fa)} em Financeiro em Atraso</div>
+      <div class="fa-sep-label">📊 Análise — ${fN(d.total)} em ${label}</div>
       <div class="fa-sep-line"></div></div>
-    <div class="insight-box">
-      <strong>Por que ${fN(d.total_fa)} contratos estão em FA?</strong>
-      É o efeito do ciclo de vencimentos — os dias <strong>23 e 25</strong> são os mais comuns e, após 7 dias de carência, geram o maior volume de FA em bloco.
-      ${pctAntigos>=40?`<strong>${pctAntigos}% são clientes com mais de 1 ano</strong> — não é problema de cliente novo.`:''}
-      Dados do dia ${d.gerado_em}.
+    <div class="insight-box">${insightText(d,label,tipo)}</div>
+    <div class="fa-grid">
+      <div class="card"><h3>${tlLabel}</h3>${tlRows||'<span style="color:var(--mu);font-size:.8rem">Sem dados de timeline.</span>'}</div>
+      <div class="card"><h3>Por cidade</h3>${barList(cidades,maxCid,hex('ac'))}</div>
     </div>
     <div class="fa-grid">
-      <div class="card"><h3>Quando entraram em FA</h3>${tlRows}</div>
-      <div class="card"><h3>FA por cidade</h3>${barList(cidades,maxCid,hex('ac'))}</div>
-    </div>
-    <div class="fa-grid">
-      <div class="card"><h3>FA por tempo de contrato</h3>${tempoList(tempo,maxTempo)}</div>
-      <div class="card"><h3>Boletos em aberto por mês (banco local)</h3>
-        <div class="trend-row">${chips}</div>
-      </div>
+      <div class="card"><h3>Por tempo de contrato</h3>${tempoList(tempo,maxTempo)}</div>
+      <div class="card"><h3>Boletos em aberto (Filial 2)</h3><div class="trend-row">${chips}</div></div>
     </div>
   </div>`;
+}
+let _analiseAtiva=null;
+async function loadAnalise(tipo,label){
+  if(_analiseAtiva){const p=document.getElementById('si-'+_analiseAtiva);if(p)p.classList.remove('si-active');}
+  _analiseAtiva=tipo;
+  const cur=document.getElementById('si-'+tipo);if(cur)cur.classList.add('si-active');
+  const el=document.getElementById('out-analise');if(!el)return;
+  el.innerHTML=`<div class="fa-spin-wrap"><span class="fa-spin"></span>Carregando análise de ${label}...</div>`;
+  try{
+    const r=await fetch(`/api/ixc/status_analysis?tipo=${tipo}`);
+    if(!r.ok)throw new Error(r.statusText);
+    el.innerHTML=renderAnalise(await r.json(),label,tipo);
+  }catch(e){
+    el.innerHTML=`<div class="state err" style="font-size:.85rem">⚠ Erro ao carregar análise: ${e.message}</div>`;
+  }
 }
 async function carregar(){
   const btn=document.getElementById('btn');
   btn.disabled=true;
   btn.innerHTML='<span class="spin"></span> Buscando...';
   document.getElementById('out-status').innerHTML='<div class="state">Consultando IXC...</div>';
-  document.getElementById('out-fa').innerHTML='<div class="fa-spin-wrap"><span class="fa-spin"></span>Carregando análise FA (pode levar ~10s)...</div>';
-  const [resStatus,resFA]=await Promise.allSettled([
-    fetch('/api/ixc/status_rt').then(r=>{if(!r.ok)throw new Error(r.statusText);return r.json();}),
-    fetch('/api/ixc/fa_analysis').then(r=>{if(!r.ok)throw new Error(r.statusText);return r.json();})
-  ]);
-  if(resStatus.status==='fulfilled'){
-    const d=resStatus.value;
+  document.getElementById('out-analise').innerHTML='';
+  try{
+    const d=await fetch('/api/ixc/status_rt').then(r=>{if(!r.ok)throw new Error(r.statusText);return r.json();});
     const nAtivos=d.por_status['Ativo']||0;
     document.getElementById('out-status').innerHTML=`
-      <div class="ts">Atualizado: <strong>${d.gerado_em}</strong></div>
+      <div class="ts">Atualizado: <strong>${d.gerado_em}</strong> &nbsp;·&nbsp; Clique em um status para ver a análise detalhada</div>
       <div class="tot"><div>
         <div class="tot-l">Total de contratos</div>
         <div class="tot-v">${fN(d.total)}</div>
@@ -1388,13 +1418,9 @@ async function carregar(){
         <div class="card"><h3>Status do contrato</h3><div class="sl">${statusList(d.por_status,CT,d.total)}</div></div>
         <div class="card"><h3>Status de acesso — ativos (${fN(nAtivos)})</h3><div class="sl">${statusList(d.ativos_por_acesso,SA,nAtivos)}</div></div>
       </div>`;
-  }else{
-    document.getElementById('out-status').innerHTML=`<div class="state err">❌ Status: ${resStatus.reason?.message||'Erro'}</div>`;
-  }
-  if(resFA.status==='fulfilled'){
-    document.getElementById('out-fa').innerHTML=renderFA(resFA.value);
-  }else{
-    document.getElementById('out-fa').innerHTML=`<div class="state err" style="font-size:.8rem">⚠ Análise FA: ${resFA.reason?.message||'Erro'}</div>`;
+    loadAnalise('si_FA','Financeiro em atraso');
+  }catch(e){
+    document.getElementById('out-status').innerHTML=`<div class="state err">❌ Erro: ${e.message}</div>`;
   }
   btn.disabled=false;btn.innerHTML='↻ Buscar agora';
 }
@@ -1491,6 +1517,115 @@ def fa_analysis():
         'por_tempo':      dict(por_tempo),
         'boletos_abertos': boletos_abertos,
         'gerado_em':      datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+    })
+
+
+@ixc_sync_bp.route('/status_analysis', methods=['GET'])
+@login_required
+def status_analysis():
+    """Análise genérica para qualquer status de contrato/acesso da Filial 2."""
+    from collections import Counter
+
+    tipo = request.args.get('tipo', 'si_FA')
+
+    # tipo → (campo IXC, valor, campo_data_timeline)
+    TIPO_MAP = {
+        'si_FA': ('status_internet', 'FA', 'dt_ult_finan_atraso'),
+        'si_CA': ('status_internet', 'CA', 'pago_ate_data'),
+        'si_CM': ('status_internet', 'CM', 'pago_ate_data'),
+        'si_D':  ('status_internet', 'D',  'pago_ate_data'),
+        'sc_N':  ('status',          'N',  'pago_ate_data'),
+        'sc_D':  ('status',          'D',  'pago_ate_data'),
+    }
+    if tipo not in TIPO_MAP:
+        return jsonify({'error': f'Tipo inválido: {tipo}'}), 400
+
+    campo_ixc, valor_ixc, campo_data = TIPO_MAP[tipo]
+
+    conn = get_db()
+    try:
+        token = _get_token(conn)
+        if not token:
+            return jsonify({"error": "Token IXC não configurado"}), 400
+        boletos = conn.execute("""
+            SELECT substr(Vencimento,1,7) AS mes, COUNT(*) AS cnt, SUM(Valor_aberto) AS total
+            FROM Contas_a_Receber
+            WHERE Status = 'A receber' AND Vencimento >= '2025-01-01'
+            GROUP BY mes ORDER BY mes DESC LIMIT 12
+        """).fetchall()
+        boletos_abertos = [{'mes': r['mes'], 'cnt': r['cnt'], 'total': float(r['total'] or 0)}
+                           for r in boletos]
+    finally:
+        conn.close()
+
+    hdrs = _ixc_headers(token)
+    hoje = datetime.now().date()
+
+    all_recs = []
+    page = 1
+    fetched = 0
+    while True:
+        resp = requests.post(f'{IXC_BASE_URL}/cliente_contrato', data={
+            'qtype': f'cliente_contrato.{campo_ixc}', 'query': valor_ixc, 'oper': '=',
+            'sortname': 'cliente_contrato.id', 'sortorder': 'asc',
+            'page': str(page), 'rp': '200',
+            'fields': 'id,id_cliente,data_ativacao,pago_ate_data,dt_ult_finan_atraso,id_filial',
+        }, headers=hdrs, timeout=60, verify=False)
+        resp.raise_for_status()
+        data = resp.json()
+        recs = data.get('registros', [])
+        if not recs:
+            break
+        all_recs.extend(r for r in recs if str(r.get('id_filial', '')) == '2')
+        fetched += len(recs)
+        if fetched >= int(data.get('total', 0)):
+            break
+        page += 1
+
+    conn2 = get_db()
+    try:
+        ids = [int(c['id_cliente']) for c in all_recs if c.get('id_cliente')]
+        id_cidade = {}
+        for i in range(0, len(ids), 500):
+            batch = ids[i:i+500]
+            ph = ','.join('?' * len(batch))
+            for r in conn2.execute(f'SELECT ID, Cidade FROM Clientes WHERE ID IN ({ph})', batch).fetchall():
+                id_cidade[int(r['ID'])] = r['Cidade']
+    finally:
+        conn2.close()
+
+    timeline   = Counter()
+    por_cidade = Counter()
+    por_tempo  = Counter()
+    FAIXAS = [('< 3 meses', 90), ('3-6 meses', 180), ('6-12 meses', 365),
+              ('1-2 anos', 730), ('> 2 anos', 99999)]
+
+    for c in all_recs:
+        dt = c.get(campo_data, '') or ''
+        if dt and not dt.startswith('0000'):
+            timeline[dt[:10]] += 1
+        cidade = id_cidade.get(int(c.get('id_cliente', 0) or 0), 'Outras')
+        por_cidade[cidade] += 1
+        dt_atv = c.get('data_ativacao', '')
+        if dt_atv and not dt_atv.startswith('0000'):
+            try:
+                dias = (hoje - datetime.strptime(dt_atv[:10], '%Y-%m-%d').date()).days
+                faixa = next(f for f, lim in FAIXAS if dias < lim)
+                por_tempo[faixa] += 1
+            except Exception:
+                pass
+
+    top_tl = [{'dt': dt, 'cnt': cnt}
+              for dt, cnt in sorted(timeline.items(), reverse=True)[:8]]
+
+    return jsonify({
+        'total':           len(all_recs),
+        'tipo':            tipo,
+        'timeline':        top_tl,
+        'por_cidade':      dict(por_cidade.most_common(8)),
+        'por_tempo':       dict(por_tempo),
+        'boletos_abertos': boletos_abertos,
+        'gerado_em':       datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
     })
 
 
