@@ -12,3 +12,4 @@ Tabelas/
 logs/
 logs/*.log
 versions/
+version.txt
