@@ -39,13 +39,16 @@ def _tg_send(text: str, app=None):
             chat_id = _get('tg_chat_id')
             conn.close()
             if not token or not chat_id:
+                logger.warning("[Telegram] Token ou chat_id não configurado — mensagem não enviada.")
                 return
-            requests.post(
+            resp = requests.post(
                 f'https://api.telegram.org/bot{token}/sendMessage',
                 json={'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'},
                 timeout=10,
                 verify=False,
             )
+            if not resp.ok:
+                logger.warning(f"[Telegram] API retornou {resp.status_code}: {resp.text[:200]}")
 
         if app:
             with app.app_context():
@@ -53,7 +56,7 @@ def _tg_send(text: str, app=None):
         else:
             _do()
     except Exception as e:
-        logger.warning(f"[Telegram] Falha ao enviar mensagem: {e}")
+        logger.warning(f"[Telegram] Falha ao enviar mensagem: {e}", exc_info=True)
 
 IXC_BASE_URL  = 'https://sistema.netvaletelecom.com/webservice/v1'
 ROWS_PER_PAGE = 500
@@ -1734,7 +1737,7 @@ def start_sync():
 # ── Agendamento diário ────────────────────────────────────────────────────────
 
 def start_weekly_scheduler(app):
-    """Mantém nome original para compatibilidade; agora executa todo dia às 23:59.
+    """Mantém nome original para compatibilidade; agora executa todo dia às 05:00.
     Ao iniciar, se a última sync tiver mais de 24 h, dispara catch-up imediato."""
     def _scheduler():
         # ── Catch-up: sync atrasada? ──────────────────────────────────────────
@@ -1769,7 +1772,7 @@ def start_weekly_scheduler(app):
 
         while True:
             now    = datetime.now()
-            target = now.replace(hour=23, minute=59, second=0, microsecond=0)
+            target = now.replace(hour=5, minute=0, second=0, microsecond=0)
             if now >= target:
                 target += timedelta(days=1)
             wait = (target - now).total_seconds()
