@@ -688,10 +688,8 @@ def api_behavior_predictive_churn():
 
         risk_sql = ""
         risk_p   = []
-        if risk_level == 'Altíssimo':
-            risk_sql = "AND Risk_Score > 160"
-        elif risk_level == 'Alto':
-            risk_sql = "AND Risk_Score >= 60 AND Risk_Score <= 160"
+        if risk_level == 'Alto':
+            risk_sql = "AND Risk_Score >= 60"
         elif risk_level == 'Médio':
             risk_sql = "AND Risk_Score >= 25 AND Risk_Score < 60"
         elif risk_level == 'Baixo':
@@ -788,7 +786,7 @@ def api_behavior_predictive_churn():
 
         summary_sql = base_cte + """
             SELECT
-                SUM(CASE WHEN Risk_Score > 160                              THEN 1 ELSE 0 END) AS Altissimo,
+                SUM(CASE WHEN Risk_Score > 160                              THEN 1 ELSE 0 END) AS Critico,
                 SUM(CASE WHEN Risk_Score >= 60 AND Risk_Score <= 160        THEN 1 ELSE 0 END) AS Alto,
                 SUM(CASE WHEN Risk_Score >= 25 AND Risk_Score < 60          THEN 1 ELSE 0 END) AS Medio,
                 SUM(CASE WHEN Risk_Score >= 10 AND Risk_Score < 25          THEN 1 ELSE 0 END) AS Baixo,
@@ -802,7 +800,7 @@ def api_behavior_predictive_churn():
 
         data_sql = base_cte + f"""
             SELECT *,
-                CASE WHEN Risk_Score > 160  THEN 'Altíssimo'
+                CASE WHEN Risk_Score > 160  THEN 'Crítico'
                      WHEN Risk_Score >= 60  THEN 'Alto'
                      WHEN Risk_Score >= 25  THEN 'Médio'
                      WHEN Risk_Score >= 10  THEN 'Baixo'
@@ -868,7 +866,7 @@ def api_behavior_predictive_churn_export():
 
         risk_sql = ""
         risk_p   = []
-        if risk_level == 'Altíssimo':
+        if risk_level in ('Crítico', 'Critico'):
             risk_sql = "AND Risk_Score > 160"
         elif risk_level == 'Alto':
             risk_sql = "AND Risk_Score >= 60 AND Risk_Score <= 160"
@@ -961,7 +959,7 @@ def api_behavior_predictive_churn_export():
             )
             SELECT
                 S.*,
-                CASE WHEN S.Risk_Score > 160 THEN 'Altíssimo'
+                CASE WHEN S.Risk_Score > 160 THEN 'Crítico'
                      WHEN S.Risk_Score >= 60 THEN 'Alto'
                      WHEN S.Risk_Score >= 25 THEN 'Médio'
                      WHEN S.Risk_Score >= 10 THEN 'Baixo'
@@ -2047,7 +2045,7 @@ def api_behavior_contact_list():
         city_p    = [city] if city else []
 
         risk_sql = ""
-        if risk_level in ('Altíssimo', 'Altissimo'):
+        if risk_level in ('Crítico', 'Critico'):
             risk_sql = "AND score > 160"
         elif risk_level == 'Alto':
             risk_sql = "AND score > 60 AND score <= 160"
@@ -2169,7 +2167,7 @@ def api_behavior_contact_list():
 
         summary_sql = base_cte + f"""
             SELECT
-                SUM(CASE WHEN score > 160                 THEN 1 ELSE 0 END) AS altissimo,
+                SUM(CASE WHEN score > 160                 THEN 1 ELSE 0 END) AS critico,
                 SUM(CASE WHEN score > 60 AND score <= 160 THEN 1 ELSE 0 END) AS alto,
                 SUM(CASE WHEN score > 25 AND score <= 60  THEN 1 ELSE 0 END) AS medio,
                 SUM(CASE WHEN score >= 10 AND score <= 25 THEN 1 ELSE 0 END) AS baixo,
@@ -2186,7 +2184,7 @@ def api_behavior_contact_list():
                 S.contrato, S.cliente, S.cidade, S.status_acesso,
                 S.fat_vencidas, S.dias_vencido, S.atrasos_90d, S.val_vencido,
                 S.atend_30d, S.sem_conexao, S.score,
-                CASE WHEN S.score > 160  THEN 'Altíssimo'
+                CASE WHEN S.score > 160  THEN 'Crítico'
                      WHEN S.score > 60   THEN 'Alto'
                      WHEN S.score > 25   THEN 'Médio'
                      WHEN S.score >= 10  THEN 'Baixo'
@@ -2225,7 +2223,7 @@ def api_behavior_contact_list():
         data        = [dict(r) for r in conn.execute(data_sql, tuple(city_p) + (limit, offset)).fetchall()]
         cities      = [r[0] for r in conn.execute(cities_sql).fetchall() if r[0]]
 
-        summary = dict(summary_row) if summary_row else {"altissimo": 0, "alto": 0, "medio": 0, "baixo": 0, "total": 0}
+        summary = dict(summary_row) if summary_row else {"critico": 0, "alto": 0, "medio": 0, "baixo": 0, "total": 0}
 
         return jsonify({
             "data":       data,

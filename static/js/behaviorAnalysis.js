@@ -567,7 +567,7 @@ function renderPredictiveChurnTab() {
                 <label class="text-sm font-medium text-gray-700 mr-1">Nível de Risco:</label>
                 <select id="predRiskFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
                     <option value="">Todos</option>
-                    <option value="Altíssimo">🚨 Altíssimo</option>
+                    <option value="Crítico">🚨 Crítico</option>
                     <option value="Alto">🔴 Alto</option>
                     <option value="Médio">🟠 Médio</option>
                     <option value="Baixo">🟡 Baixo</option>
@@ -656,9 +656,9 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
         if (kpiRow && result.summary) {
             const s = result.summary;
             kpiRow.innerHTML = `
-                <div class="summary-card" style="border-left:4px solid #7c3aed;cursor:pointer;" onclick="document.getElementById('predRiskFilter').value='Altíssimo';document.getElementById('btnFilterPredictive').click()">
-                    <div class="summary-card-label">🚨 Altíssimo Risco</div>
-                    <div class="summary-card-value" style="color:#7c3aed;">${s.Altissimo || 0}</div>
+                <div class="summary-card" style="border-left:4px solid #7c3aed;cursor:pointer;" onclick="document.getElementById('predRiskFilter').value='Crítico';document.getElementById('btnFilterPredictive').click()">
+                    <div class="summary-card-label">🚨 Crítico</div>
+                    <div class="summary-card-value" style="color:#7c3aed;">${s.Critico || 0}</div>
                     <div style="font-size:0.7rem;color:#9ca3af;">Score &gt; 160 · clique para filtrar</div>
                 </div>
                 <div class="summary-card" style="border-left:4px solid #ef4444;cursor:pointer;" onclick="document.getElementById('predRiskFilter').value='Alto';document.getElementById('btnFilterPredictive').click()">
@@ -691,10 +691,10 @@ export async function fetchAndRenderPredictiveChurnTable(page = 1) {
         }
 
         const RISK_CLS = {
-            'Altíssimo': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
-            'Alto':      'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;',
-            'Médio':     'background:#ffedd5;color:#ea580c;border:1px solid #fdba74;',
-            'Baixo':     'background:#fefce8;color:#ca8a04;border:1px solid #fde047;',
+            'Crítico': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
+            'Alto':    'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;',
+            'Médio':   'background:#ffedd5;color:#ea580c;border:1px solid #fdba74;',
+            'Baixo':   'background:#fefce8;color:#ca8a04;border:1px solid #fde047;',
         };
 
         const _esc = s => (s || '').replace(/"/g, '&quot;');
@@ -1172,7 +1172,7 @@ async function renderAcoesTab() {
     } catch (_) {}
 
     const STAGES = [
-        { key: 'Altissimo', label: 'Altissimo', count: summary.Altissimo || 0,
+        { key: 'Critico', label: 'Crítico', count: summary.Critico || 0,
           cor: '#7c3aed', corBg: '#ede9fe', corBd: '#c4b5fd', emoji: 'xx_EMOJ1',
           scoreRange: '> 160', urgencia: 'MESMO DIA — resposta em ate 2 horas', urCor: '#7c3aed',
           gatilhos: ['Score > 160 pontos', 'Multiplos sinais criticos simultaneos', 'Bloqueio + historico de atraso + queda de uso'],
@@ -2060,7 +2060,7 @@ async function renderListaRetencaoTab() {
                 <label class="text-sm font-medium text-gray-700 mr-1">Nível de Risco:</label>
                 <select id="retRiskFilter" class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm">
                     <option value="">Todos</option>
-                    <option value="Altíssimo">🚨 Altíssimo</option>
+                    <option value="Crítico">🚨 Crítico</option>
                     <option value="Alto">🔴 Alto</option>
                     <option value="Médio">🟠 Médio</option>
                     <option value="Baixo">🟡 Baixo</option>
@@ -2081,10 +2081,10 @@ async function renderListaRetencaoTab() {
     `;
 
     const RISK_CLS = {
-        'Altíssimo': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
-        'Alto':      'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;',
-        'Médio':     'background:#ffedd5;color:#ea580c;border:1px solid #fdba74;',
-        'Baixo':     'background:#fefce8;color:#ca8a04;border:1px solid #fde047;',
+        'Crítico': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
+        'Alto':    'background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;',
+        'Médio':   'background:#ffedd5;color:#ea580c;border:1px solid #fdba74;',
+        'Baixo':   'background:#fefce8;color:#ca8a04;border:1px solid #fde047;',
     };
 
     function buildRetUrl(page, limit = 50) {
@@ -2117,9 +2117,9 @@ async function renderListaRetencaoTab() {
             if (kpiRow && result.summary && page === 1) {
                 const s = result.summary;
                 kpiRow.innerHTML = `
-                    <div class="summary-card" style="border-left:4px solid #7c3aed;cursor:pointer;" onclick="document.getElementById('retRiskFilter').value='Altíssimo';document.getElementById('btnFilterRet').click()">
-                        <div class="summary-card-title">🚨 Altíssimo Risco</div>
-                        <div class="summary-card-value" style="color:#7c3aed;">${s.altissimo || 0}</div>
+                    <div class="summary-card" style="border-left:4px solid #7c3aed;cursor:pointer;" onclick="document.getElementById('retRiskFilter').value='Crítico';document.getElementById('btnFilterRet').click()">
+                        <div class="summary-card-title">🚨 Crítico</div>
+                        <div class="summary-card-value" style="color:#7c3aed;">${s.critico || 0}</div>
                         <div style="font-size:0.7rem;color:#9ca3af;">Score &gt; 160 · clique para filtrar</div>
                     </div>
                     <div class="summary-card" style="border-left:4px solid #ef4444;cursor:pointer;" onclick="document.getElementById('retRiskFilter').value='Alto';document.getElementById('btnFilterRet').click()">
