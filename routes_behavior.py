@@ -3544,28 +3544,34 @@ def api_behavior_client_detail(contrato_id):
                 CNPJ_CPF AS cpf_cnpj,
                 Telefone, Telefone_celular AS cel, Telefone_comercial AS comercial,
                 WhatsApp, E_mail AS email,
-                Endere_o AS endereco, Cidade, Bairro, CEP,
+                Endere_o AS endereco, Cidade, Bairro, CEP, UF,
                 Data_nascimento, Tipo_pessoa
             FROM Clientes
         """
+        _CLIENTE_COLS_NEG = _CLIENTE_COLS.replace('FROM Clientes', 'FROM Clientes_Negativacao')
+
+        cliente_row = None
         if id_cliente:
             cliente_row = conn.execute(
                 _CLIENTE_COLS + " WHERE ID = ?", (id_cliente,)
             ).fetchone()
-        else:
+        if not cliente_row and cliente_nome:
             cliente_row = conn.execute(
                 _CLIENTE_COLS + " WHERE Raz_o_social = ? LIMIT 1", (cliente_nome,)
             ).fetchone()
 
         if not cliente_row:
-            # Tenta em clientes negativados (menos colunas disponíveis)
-            neg_row = conn.execute(
-                "SELECT ID AS id_cliente_ixc FROM Clientes_Negativacao WHERE Raz_o_social = ? LIMIT 1",
-                (cliente_nome,)
-            ).fetchone()
-            cliente = {'id_cliente_ixc': neg_row['id_cliente_ixc']} if neg_row else {}
-        else:
-            cliente = dict(cliente_row)
+            # Tenta em Clientes_Negativacao com dados completos de telefone
+            if id_cliente:
+                cliente_row = conn.execute(
+                    _CLIENTE_COLS_NEG + " WHERE ID = ?", (id_cliente,)
+                ).fetchone()
+            if not cliente_row and cliente_nome:
+                cliente_row = conn.execute(
+                    _CLIENTE_COLS_NEG + " WHERE Raz_o_social = ? LIMIT 1", (cliente_nome,)
+                ).fetchone()
+
+        cliente = dict(cliente_row) if cliente_row else {}
 
         # --- Financial summary ---
         fin_summary = conn.execute("""
