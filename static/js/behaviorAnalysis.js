@@ -4829,7 +4829,7 @@ export async function renderRetiradaTab() {
         ]);
         _retFiltros = filtros;
         _retTecnicosMap = filtros.tecnicos_map || {};
-        _retFilters = { status: 'Aberta,Encaminhada,Agendada', assunto: '', filial: '', cidade: '', bairro: '', colaborador: '', equipamento: '', min_visitas: '', date_from: '', date_to: '', search: '' };
+        _retFilters = { status: 'Aberta,Encaminhada,Agendada', assunto: '', filial: '', cidade: '', bairro: '', colaborador: '', equipamento: '', min_visitas: '', date_from: '', date_to: '', close_from: '', close_to: '', search: '' };
         _retPage    = 1;
         _retExpanded.clear();
 
@@ -4939,12 +4939,20 @@ function _retShell(f) {
           </div>
         </div>
         <div class="flex flex-col gap-1">
-          <label class="text-xs text-gray-500 font-medium">De</label>
+          <label class="text-xs text-gray-500 font-medium">Abertura De</label>
           <input type="date" id="ret-f-de" class="border border-gray-300 rounded px-2 py-1 text-sm">
         </div>
         <div class="flex flex-col gap-1">
-          <label class="text-xs text-gray-500 font-medium">Até</label>
+          <label class="text-xs text-gray-500 font-medium">Abertura Até</label>
           <input type="date" id="ret-f-ate" class="border border-gray-300 rounded px-2 py-1 text-sm">
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Fechamento De</label>
+          <input type="date" id="ret-f-close-de" class="border border-gray-300 rounded px-2 py-1 text-sm">
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 font-medium">Fechamento Até</label>
+          <input type="date" id="ret-f-close-ate" class="border border-gray-300 rounded px-2 py-1 text-sm">
         </div>
         <div class="flex flex-col gap-1">
           <label class="text-xs text-gray-500 font-medium">Equipamento</label>
@@ -5019,6 +5027,8 @@ function _retBindEvents(pane) {
         _retFilters.min_visitas = pane.querySelector('#ret-f-min-visitas')?.value || '';
         _retFilters.date_from   = pane.querySelector('#ret-f-de')?.value || '';
         _retFilters.date_to     = pane.querySelector('#ret-f-ate')?.value || '';
+        _retFilters.close_from  = pane.querySelector('#ret-f-close-de')?.value || '';
+        _retFilters.close_to    = pane.querySelector('#ret-f-close-ate')?.value || '';
         _retFilters.search      = pane.querySelector('#ret-f-search')?.value || '';
         _retPage = 1;
         _retExpanded.clear();
@@ -5040,6 +5050,8 @@ function _retBindEvents(pane) {
                 equipamento: _retFilters.equipamento,
                 date_from:   _retFilters.date_from,
                 date_to:     _retFilters.date_to,
+                close_from:  _retFilters.close_from,
+                close_to:    _retFilters.close_to,
                 search:      _retFilters.search,
             });
             const r = await fetch(`/api/behavior/retiradas/sync-visitas?${q}`, { method: 'POST' });
@@ -5078,9 +5090,9 @@ function _retBindEvents(pane) {
     pane.querySelector('#ret-btn-limpar')?.addEventListener('click', () => {
         pane.querySelectorAll('.ret-ms-cb').forEach(cb => cb.checked = false);
         _retUpdateStatusLabel();
-        ['#ret-f-assunto','#ret-f-filial','#ret-f-cidade','#ret-f-bairro','#ret-f-colab','#ret-f-colab-input','#ret-f-equip','#ret-f-min-visitas','#ret-f-de','#ret-f-ate','#ret-f-search']
+        ['#ret-f-assunto','#ret-f-filial','#ret-f-cidade','#ret-f-bairro','#ret-f-colab','#ret-f-colab-input','#ret-f-equip','#ret-f-min-visitas','#ret-f-de','#ret-f-ate','#ret-f-close-de','#ret-f-close-ate','#ret-f-search']
             .forEach(s => { const el = pane.querySelector(s); if (el) el.value = ''; });
-        _retFilters = { status:'',assunto:'',filial:'',cidade:'',bairro:'',colaborador:'',equipamento:'',min_visitas:'',date_from:'',date_to:'',search:'' };
+        _retFilters = { status:'',assunto:'',filial:'',cidade:'',bairro:'',colaborador:'',equipamento:'',min_visitas:'',date_from:'',date_to:'',close_from:'',close_to:'',search:'' };
         _retSortBy  = '';
         _retSortDir = 'desc';
         _retPage = 1;
@@ -5141,7 +5153,8 @@ async function _retLoad() {
                 filial: _retFilters.filial, cidade: _retFilters.cidade,
                 bairro: _retFilters.bairro, colaborador: _retFilters.colaborador,
                 equipamento: _retFilters.equipamento, date_from: _retFilters.date_from,
-                date_to: _retFilters.date_to, search: _retFilters.search,
+                date_to: _retFilters.date_to, close_from: _retFilters.close_from,
+                close_to: _retFilters.close_to, search: _retFilters.search,
             });
             const sd = await fetch(`/api/behavior/retiradas/sync-visitas?${syncQ}`, { method: 'POST' }).then(r => r.json());
             if (sd.counts) {

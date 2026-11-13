@@ -4480,12 +4480,14 @@ def api_behavior_retiradas():
         cidade_f  = request.args.get('cidade', '')
         bairro_f  = request.args.get('bairro', '')
         colab_f   = request.args.get('colaborador', '')
-        equip_f   = request.args.get('equipamento', '').strip()
-        date_from = request.args.get('date_from', '')
-        date_to   = request.args.get('date_to', '')
-        search    = request.args.get('search', '').strip()
-        page      = max(1, int(request.args.get('page', 1)))
-        limit     = min(200, int(request.args.get('limit', 50)))
+        equip_f    = request.args.get('equipamento', '').strip()
+        date_from  = request.args.get('date_from', '')
+        date_to    = request.args.get('date_to', '')
+        close_from = request.args.get('close_from', '')
+        close_to   = request.args.get('close_to', '')
+        search     = request.args.get('search', '').strip()
+        page       = max(1, int(request.args.get('page', 1)))
+        limit      = min(200, int(request.args.get('limit', 50)))
 
         ph = ','.join('?' * len(RETIRADA_ASSUNTOS))
         conds  = [f"o.Assunto IN ({ph})"]
@@ -4526,6 +4528,13 @@ def api_behavior_retiradas():
             conds.append("o.Abertura >= ?"); params.append(date_from)
         if date_to:
             conds.append("o.Abertura <= ?"); params.append(date_to + ' 23:59:59')
+        _DATA_FIN_EXPR = ("CASE WHEN o.Fechamento IS NOT NULL AND o.Fechamento != '' "
+                          "AND o.Fechamento NOT LIKE '0000%' "
+                          "THEN o.Fechamento ELSE o.Final END")
+        if close_from:
+            conds.append(f"{_DATA_FIN_EXPR} >= ?"); params.append(close_from)
+        if close_to:
+            conds.append(f"{_DATA_FIN_EXPR} <= ?"); params.append(close_to + ' 23:59:59')
         if search:
             conds.append("(o.Cliente LIKE ? OR o.Endere_o LIKE ? OR o.Bairro LIKE ? OR o.Mensagem LIKE ?)")
             s = f'%{search}%'
