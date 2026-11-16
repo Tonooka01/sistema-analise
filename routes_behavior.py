@@ -82,6 +82,7 @@ _TAB_ROUTE_KEYS = {
     '/predictive_churn_export':   'preditiva',
     '/qos_overview':              'qualidade',
     '/signal_clients':            'qualidade',
+    '/sem_conexao':               'qualidade',
     '/action_plans':              'acoes',
     '/temporal_support':          'temporal_suporte',
     '/financial_behavior':        'financeiro_ativo',
@@ -1262,6 +1263,97 @@ def api_behavior_qos_overview():
         })
     except Exception as e:
         logger.error(f"Erro em qos_overview: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@behavior_bp.route('/sem_conexao')
+def api_behavior_sem_conexao():
+    conn = get_db()
+    try:
+        city      = request.args.get('city',    '').strip()
+        cliente   = request.args.get('cliente', '').strip()
+        min_dias  = request.args.get('min_dias', 1, type=int)
+        status_ac = request.args.get('status_acesso', '').strip()
+        limit     = request.args.get('limit',  100, type=int)
+        offset    = request.args.get('offset',   0, type=int)
+
+        conds  = ["C.Status_contrato = 'Ativo'",
+                  "L.ltima_conex_o_final IS NOT NULL",
+                  "L.ltima_conex_o_final != ''",
+                  "L.ltima_conex_o_final NOT LIKE '0000%'"]
+        params = []
+
+        if city:
+            conds.append("C.Cidade = ?"); params.append(city)
+        if cliente:
+            conds.append("C.Cliente LIKE ?"); params.append(f"%{cliente}%")
+        if status_ac:
+            conds.append("C.Status_acesso = ?"); params.append(status_ac)
+
+        where = " AND ".join(conds)
+
+        base_q = f"""
+            SELECT
+                C.ID                                                                   AS contrato,
+                C.Cliente                                                              AS cliente,
+                C.Cidade                                                               AS cidade,
+                C.Status_acesso                                                        AS status_acesso,
+                MAX(L.ltima_conex_o_final)                                            AS ultima_conexao,
+                CAST(JULIANDAY('now') - JULIANDAY(MAX(L.ltima_conex_o_final))
+                     AS INTEGER)                                                       AS dias_sem_cx,
+                COALESCE(FAT.fat_vencidas, 0)                                         AS fat_vencidas,
+                COALESCE(FAT.valor_vencido, 0)                                        AS valor_vencido,
+                COALESCE(CLI.WhatsApp, CLI.Telefone_celular, CLI.Telefone, '')        AS whatsapp,
+                COALESCE(CLI.Telefone, '')                                            AS telefone
+            FROM Contratos C
+            JOIN Logins L ON L.ID_contrato = C.ID
+            LEFT JOIN (
+                SELECT ID_contrato_recorrente,
+                       COUNT(CASE WHEN Status = 'A receber' AND Vencimento < date('now') THEN 1 END) AS fat_vencidas,
+                       ROUND(SUM(CASE WHEN Status = 'A receber' AND Vencimento < date('now') THEN Valor_aberto ELSE 0 END), 2) AS valor_vencido
+                FROM Contas_a_Receber
+                GROUP BY ID_contrato_recorrente
+            ) FAT ON FAT.ID_contrato_recorrente = C.ID
+            LEFT JOIN Clientes CLI ON CLI.Raz_o_social = C.Cliente
+            WHERE {where}
+            GROUP BY C.ID
+            HAVING dias_sem_cx >= ?
+        """
+        count_params = tuple(params) + (min_dias,)
+
+        total = conn.execute(f"SELECT COUNT(*) FROM ({base_q})", count_params).fetchone()[0]
+
+        rows = conn.execute(
+            base_q + " ORDER BY dias_sem_cx DESC LIMIT ? OFFSET ?",
+            count_params + (limit, offset)
+        ).fetchall()
+
+        # KPIs por faixa (sem paginação)
+        kpi_rows = conn.execute(
+            f"SELECT dias_sem_cx, fat_vencidas FROM ({base_q})", count_params
+        ).fetchall()
+        faixa = {'1_7': 0, '8_30': 0, '31_60': 0, '60_mais': 0}
+        for r in kpi_rows:
+            d = r[0] or 0
+            if d <= 7:        faixa['1_7']     += 1
+            elif d <= 30:     faixa['8_30']    += 1
+            elif d <= 60:     faixa['31_60']   += 1
+            else:             faixa['60_mais'] += 1
+
+        cities = [r[0] for r in conn.execute(
+            "SELECT DISTINCT Cidade FROM Contratos WHERE Status_contrato='Ativo' AND Cidade IS NOT NULL AND TRIM(Cidade)!='' AND NOT (Cidade GLOB '[0-9]*') ORDER BY Cidade"
+        ).fetchall() if r[0]]
+
+        return jsonify({
+            'total':  total,
+            'faixas': faixa,
+            'cities': cities,
+            'data':   [dict(r) for r in rows],
+        })
+    except Exception as e:
+        logger.error(f"Erro em sem_conexao: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()

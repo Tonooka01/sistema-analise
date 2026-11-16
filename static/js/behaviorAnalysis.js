@@ -965,10 +965,196 @@ async function renderQoSTab() {
         </div>
         <div id="qos-kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
         <div id="qos-charts-area" class="grid-stack"></div>
+
+        <!-- Sem Conexão -->
+        <div class="mt-8 border-t border-gray-200 pt-6">
+          <h3 class="text-lg font-bold text-gray-800 mb-4">📡 Clientes Sem Conexão</h3>
+
+          <!-- Filtros sem conexão -->
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+            <div class="flex flex-wrap gap-3 items-end">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-500 font-medium">Cidade</label>
+                <select id="scx-f-city" class="border border-gray-300 rounded px-2 py-1.5 text-sm min-w-[150px]">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-500 font-medium">Cliente</label>
+                <input type="text" id="scx-f-cliente" placeholder="Nome..." class="border border-gray-300 rounded px-2 py-1.5 text-sm w-44">
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-500 font-medium">Status Acesso</label>
+                <select id="scx-f-status" class="border border-gray-300 rounded px-2 py-1.5 text-sm">
+                  <option value="">Todos</option>
+                  <option value="Ativo">Ativo</option>
+                  <option value="Bloqueio Automático">Bloq. Automático</option>
+                  <option value="Bloqueio Manual">Bloq. Manual</option>
+                  <option value="Desativado">Desativado</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-500 font-medium">Sem conexão ≥ (dias)</label>
+                <input type="number" id="scx-f-dias" min="1" value="1" class="border border-gray-300 rounded px-2 py-1.5 text-sm w-24">
+              </div>
+              <button id="scx-btn-filtrar" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700">Filtrar</button>
+              <button id="scx-btn-limpar" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-300">Limpar</button>
+            </div>
+          </div>
+
+          <!-- KPIs sem conexão -->
+          <div id="scx-kpis" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4"></div>
+
+          <!-- Tabela -->
+          <div id="scx-table-wrap" class="overflow-x-auto rounded-lg border border-gray-200"></div>
+          <div id="scx-pagination" class="flex justify-between items-center mt-3 text-sm text-gray-600"></div>
+        </div>
     `;
 
     tabContent.querySelector('#btnFilterQoS')?.addEventListener('click', fetchBehaviorData_QoS);
     fetchBehaviorData_QoS();
+
+    // ── Sem Conexão ──────────────────────────────────────────────────
+    let _scxPage = 1;
+    const _scxPageSize = 50;
+    let _scxFilters = { city: '', cliente: '', status_acesso: '', min_dias: 1 };
+
+    async function _scxLoad() {
+        const wrap = document.getElementById('scx-table-wrap');
+        const pgDiv = document.getElementById('scx-pagination');
+        if (wrap) wrap.innerHTML = '<div class="p-6 text-center text-gray-400">Carregando...</div>';
+
+        const q = new URLSearchParams({
+            city:         _scxFilters.city,
+            cliente:      _scxFilters.cliente,
+            status_acesso: _scxFilters.status_acesso,
+            min_dias:     _scxFilters.min_dias,
+            limit:        _scxPageSize,
+            offset:       (_scxPage - 1) * _scxPageSize,
+        });
+
+        try {
+            const d = await fetch(`/api/behavior/sem_conexao?${q}`).then(r => r.json());
+            if (d.error) { if(wrap) wrap.innerHTML = `<div class="p-4 text-red-600">Erro: ${d.error}</div>`; return; }
+
+            // KPIs
+            const kpiEl = document.getElementById('scx-kpis');
+            if (kpiEl) {
+                const f = d.faixas || {};
+                const _kpi = (label, val, cor, sub) => `
+                    <div class="summary-card" style="border-left:4px solid ${cor};">
+                        <div class="summary-card-label">${label}</div>
+                        <div class="summary-card-value" style="color:${cor};">${val}</div>
+                        <div style="font-size:.7rem;color:#9ca3af;">${sub}</div>
+                    </div>`;
+                kpiEl.innerHTML =
+                    _kpi('Total', d.total, '#6b7280', 'clientes sem conexão') +
+                    _kpi('1–7 dias', f['1_7']||0, '#f59e0b', 'atenção') +
+                    _kpi('8–30 dias', f['8_30']||0, '#f97316', 'alerta') +
+                    _kpi('31–60 dias', f['31_60']||0, '#dc2626', 'crítico') +
+                    _kpi('60+ dias', f['60_mais']||0, '#7c3aed', 'grave');
+                // Preenche cidade na primeira carga
+                const cityEl = document.getElementById('scx-f-city');
+                if (cityEl && d.cities?.length && cityEl.options.length <= 1) {
+                    d.cities.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; cityEl.appendChild(o); });
+                }
+            }
+
+            // Tabela
+            if (!d.data?.length) {
+                if(wrap) wrap.innerHTML = '<div class="p-6 text-center text-gray-400">Nenhum cliente encontrado.</div>';
+                if(pgDiv) pgDiv.innerHTML = '';
+                return;
+            }
+
+            const STATUS_COR = {
+                'Ativo':              'color:#15803d;',
+                'Bloqueio Automático':'color:#ca8a04;',
+                'Bloqueio Manual':    'color:#dc2626;',
+                'Desativado':         'color:#6b7280;',
+            };
+            const _fmtDate = v => v ? v.slice(0,10) : '—';
+            const _wa = (wa, tel) => {
+                const n = (wa||tel||'').replace(/\D/g,'');
+                return n ? `<a href="https://wa.me/55${n}" target="_blank" class="text-green-600 hover:underline text-xs">💬 WA</a>` : '—';
+            };
+
+            wrap.innerHTML = `
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-800 text-white">
+                <tr>
+                  <th style="padding:8px 10px;text-align:left;">#</th>
+                  <th style="padding:8px 10px;text-align:left;">Contrato</th>
+                  <th style="padding:8px 10px;text-align:left;">Cliente</th>
+                  <th style="padding:8px 10px;text-align:left;">Cidade</th>
+                  <th style="padding:8px 10px;text-align:left;">Status Acesso</th>
+                  <th style="padding:8px 10px;text-align:right;">Dias Sem Cx.</th>
+                  <th style="padding:8px 10px;text-align:left;">Última Conexão</th>
+                  <th style="padding:8px 10px;text-align:right;">Fat. Vencidas</th>
+                  <th style="padding:8px 10px;text-align:center;">WA</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 bg-white">
+                ${d.data.map((r, i) => {
+                    const idx = (_scxPage - 1) * _scxPageSize + i + 1;
+                    const dias = r.dias_sem_cx || 0;
+                    const dCor = dias >= 60 ? '#7c3aed' : dias >= 30 ? '#dc2626' : dias >= 8 ? '#f97316' : '#ca8a04';
+                    return `<tr style="${i%2===1?'background:#f9fafb;':''}">
+                        <td style="padding:6px 10px;color:#6b7280;">${idx}</td>
+                        <td style="padding:6px 10px;">
+                          <a href="#" onclick="openClientDetail(${r.contrato});return false;"
+                             class="text-blue-600 hover:underline font-mono text-xs">#${r.contrato}</a>
+                        </td>
+                        <td style="padding:6px 10px;font-weight:500;">${r.cliente||'—'}</td>
+                        <td style="padding:6px 10px;color:#6b7280;">${r.cidade||'—'}</td>
+                        <td style="padding:6px 10px;${STATUS_COR[r.status_acesso]||''}">${r.status_acesso||'—'}</td>
+                        <td style="padding:6px 10px;text-align:right;font-weight:700;color:${dCor};">${dias}d</td>
+                        <td style="padding:6px 10px;color:#6b7280;">${_fmtDate(r.ultima_conexao)}</td>
+                        <td style="padding:6px 10px;text-align:right;${r.fat_vencidas>0?'color:#dc2626;font-weight:600;':''}">${r.fat_vencidas||0}</td>
+                        <td style="padding:6px 10px;text-align:center;">${_wa(r.whatsapp, r.telefone)}</td>
+                    </tr>`;
+                }).join('')}
+              </tbody>
+            </table>`;
+
+            // Paginação
+            const total = d.total || 0;
+            const totalPages = Math.ceil(total / _scxPageSize);
+            if (pgDiv) {
+                pgDiv.innerHTML = `
+                    <span>${(_scxPage-1)*_scxPageSize+1}–${Math.min(_scxPage*_scxPageSize,total)} de ${total}</span>
+                    <div class="flex gap-1">
+                        <button onclick="_scxGoPage(${_scxPage-1})" ${_scxPage<=1?'disabled':''} class="px-3 py-1 border rounded text-xs ${_scxPage<=1?'opacity-40 cursor-not-allowed':'hover:bg-gray-100'}">‹ Ant.</button>
+                        <button onclick="_scxGoPage(${_scxPage+1})" ${_scxPage>=totalPages?'disabled':''} class="px-3 py-1 border rounded text-xs ${_scxPage>=totalPages?'opacity-40 cursor-not-allowed':'hover:bg-gray-100'}">Próx. ›</button>
+                    </div>`;
+            }
+        } catch(e) {
+            if(wrap) wrap.innerHTML = `<div class="p-4 text-red-600">Erro de conexão</div>`;
+        }
+    }
+
+    window._scxGoPage = function(p) { _scxPage = p; _scxLoad(); };
+
+    tabContent.querySelector('#scx-btn-filtrar')?.addEventListener('click', () => {
+        _scxFilters.city          = document.getElementById('scx-f-city')?.value || '';
+        _scxFilters.cliente       = document.getElementById('scx-f-cliente')?.value.trim() || '';
+        _scxFilters.status_acesso = document.getElementById('scx-f-status')?.value || '';
+        _scxFilters.min_dias      = parseInt(document.getElementById('scx-f-dias')?.value || '1') || 1;
+        _scxPage = 1;
+        _scxLoad();
+    });
+
+    tabContent.querySelector('#scx-btn-limpar')?.addEventListener('click', () => {
+        document.getElementById('scx-f-city').value    = '';
+        document.getElementById('scx-f-cliente').value = '';
+        document.getElementById('scx-f-status').value  = '';
+        document.getElementById('scx-f-dias').value    = '1';
+        _scxFilters = { city: '', cliente: '', status_acesso: '', min_dias: 1 };
+        _scxPage = 1;
+        _scxLoad();
+    });
+
+    _scxLoad();
 }
 
 async function fetchBehaviorData_QoS() {
