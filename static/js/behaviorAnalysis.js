@@ -2466,7 +2466,7 @@ async function renderAlertasAcaoTab() {
     if (!tabContent) return;
 
     let _alertaCurrentPage = 1;
-    let _alertaFilters = { city: '', tier: [], cliente: '', equipamento: [], retirada: [], assunto_ret: [] };
+    let _alertaFilters = { city: '', tier: [], cliente: '', equipamento: [], retirada: [], assunto_ret: [], sem_cx_min: '' };
 
     const TIER_STYLE = {
         'Crítico': 'background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;',
@@ -2575,6 +2575,11 @@ async function renderAlertasAcaoTab() {
                     </label>
                 </div>
             </div>
+            <div>
+                <label class="text-sm font-medium text-gray-700 mr-1">Sem conexão &gt;</label>
+                <input type="number" id="alertaSemCxFilter" min="0" placeholder="dias"
+                    class="py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none sm:text-sm w-20">
+            </div>
             <button id="btnFilterAlerta" class="bg-blue-600 text-white px-5 py-2 rounded-lg shadow-md hover:bg-blue-700 transition font-semibold text-sm h-10">Filtrar</button>
             <button id="btnOcultarTrabalhados"
                 style="display:inline-flex;align-items:center;gap:5px;padding:8px 12px;border:1px solid #d1d5db;background:white;border-radius:6px;font-size:0.82rem;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.05);white-space:nowrap;"
@@ -2599,9 +2604,10 @@ async function renderAlertasAcaoTab() {
         const rowsPerPage = 50;
         const offset = (page - 1) * rowsPerPage;
         const p = new URLSearchParams({
-            city:    _alertaFilters.city,
-            cliente: _alertaFilters.cliente,
-            limit:   rowsPerPage,
+            city:       _alertaFilters.city,
+            cliente:    _alertaFilters.cliente,
+            sem_cx_min: _alertaFilters.sem_cx_min,
+            limit:      rowsPerPage,
             offset
         });
         _alertaFilters.tier.forEach(v => p.append('tier', v));
@@ -2907,8 +2913,9 @@ async function renderAlertasAcaoTab() {
     _eqMenu.addEventListener('click', e => e.stopPropagation());
 
     tabContent.querySelector('#btnFilterAlerta').addEventListener('click', () => {
-        _alertaFilters.city    = document.getElementById('alertaCityFilter')?.value || '';
-        _alertaFilters.cliente = document.getElementById('alertaClienteFilter')?.value.trim() || '';
+        _alertaFilters.city       = document.getElementById('alertaCityFilter')?.value || '';
+        _alertaFilters.cliente    = document.getElementById('alertaClienteFilter')?.value.trim() || '';
+        _alertaFilters.sem_cx_min = document.getElementById('alertaSemCxFilter')?.value.trim() || '';
         const checkedTier = [...tabContent.querySelectorAll('.tier-chk:checked')].map(c => c.value);
         _alertaFilters.tier = checkedTier;
         _tierLbl.textContent = checkedTier.length === 0 ? 'Todos' : checkedTier.length === 1 ? checkedTier[0] : `${checkedTier.length} selecionados`;
@@ -2959,6 +2966,7 @@ async function renderAlertasAcaoTab() {
             const p = new URLSearchParams({
                 city:            _alertaFilters.city,
                 cliente:         _alertaFilters.cliente,
+                sem_cx_min:      _alertaFilters.sem_cx_min,
                 limit:           9999,
                 offset:          0,
                 include_soneca:  '1',

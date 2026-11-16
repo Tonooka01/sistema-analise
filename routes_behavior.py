@@ -2259,8 +2259,9 @@ def api_behavior_action_alerts():
         city_cond    = "AND Cidade = ?" if city else ""
         city_p       = [city] if city else []
 
-        retirada_vals   = request.args.getlist('retirada')
+        retirada_vals    = request.args.getlist('retirada')
         assunto_ret_vals = request.args.getlist('assunto_ret')
+        sem_cx_min       = request.args.get('sem_cx_min', '', type=str).strip()
 
         if tier_vals:
             _ph_tier = ','.join('?' * len(tier_vals))
@@ -2293,6 +2294,13 @@ def api_behavior_action_alerts():
         else:
             assunto_ret_cond = ""
             assunto_ret_p    = []
+
+        if sem_cx_min and sem_cx_min.isdigit():
+            sem_cx_cond = "AND A.sem_conexao >= ?"
+            sem_cx_p    = [int(sem_cx_min)]
+        else:
+            sem_cx_cond = ""
+            sem_cx_p    = []
 
         if retirada_vals:
             sem_ret   = 'sem_retirada' in retirada_vals
@@ -2557,7 +2565,7 @@ def api_behavior_action_alerts():
                 WHERE Status_comodato = 'Emprestado'
                 GROUP BY CAST(ID_contrato AS TEXT)
             ) EQ ON CAST(A.contrato AS TEXT) = EQ.id_c
-            WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond} {equipamento_cond}
+            WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond} {equipamento_cond} {sem_cx_cond}
             ORDER BY A.score DESC
             LIMIT ? OFFSET ?
         """
@@ -2578,7 +2586,7 @@ def api_behavior_action_alerts():
 
         # ── Materializa Alerted numa temp table (CTE roda UMA vez) ───────────
         base_p   = tuple(ret_params) + tuple(ret_params) + tuple(city_p)
-        filter_p = tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + tuple(assunto_ret_p) + tuple(equipamento_p)
+        filter_p = tuple(tier_p) + tuple(cliente_p) + tuple(retirada_p) + tuple(assunto_ret_p) + tuple(equipamento_p) + tuple(sem_cx_p)
 
         conn.execute("DROP TABLE IF EXISTS _alerted_tmp")
         conn.execute(f"CREATE TEMP TABLE _alerted_tmp AS {base_cte} SELECT * FROM Alerted", base_p)
@@ -2594,7 +2602,7 @@ def api_behavior_action_alerts():
             FROM _alerted_tmp
         """).fetchone()
 
-        count_sql = f"SELECT COUNT(*) FROM _alerted_tmp A WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond} {equipamento_cond}"
+        count_sql = f"SELECT COUNT(*) FROM _alerted_tmp A WHERE 1=1 {tier_cond} {cliente_cond} {retirada_cond} {assunto_ret_cond} {equipamento_cond} {sem_cx_cond}"
         total_rows = conn.execute(count_sql, filter_p).fetchone()[0]
 
         data_sql = data_sql.replace("FROM Alerted A", "FROM _alerted_tmp A")
