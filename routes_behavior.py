@@ -1276,6 +1276,7 @@ def api_behavior_sem_conexao():
         cliente   = request.args.get('cliente', '').strip()
         min_dias  = request.args.get('min_dias', 1, type=int)
         status_ac = request.args.get('status_acesso', '').strip()
+        faixa     = request.args.get('faixa', '').strip()
         limit     = request.args.get('limit',  100, type=int)
         offset    = request.args.get('offset',   0, type=int)
 
@@ -1295,11 +1296,28 @@ def api_behavior_sem_conexao():
 
         where = " AND ".join(conds)
 
+        if faixa == '1_7':
+            having_clause = "HAVING dias_sem_cx >= 1 AND dias_sem_cx <= 7"
+            having_params = ()
+        elif faixa == '8_30':
+            having_clause = "HAVING dias_sem_cx >= 8 AND dias_sem_cx <= 30"
+            having_params = ()
+        elif faixa == '31_60':
+            having_clause = "HAVING dias_sem_cx >= 31 AND dias_sem_cx <= 60"
+            having_params = ()
+        elif faixa == '60_mais':
+            having_clause = "HAVING dias_sem_cx > 60"
+            having_params = ()
+        else:
+            having_clause = "HAVING dias_sem_cx >= ?"
+            having_params = (min_dias,)
+
         base_q = f"""
             SELECT
                 C.ID                                                                   AS contrato,
                 C.Cliente                                                              AS cliente,
                 C.Cidade                                                               AS cidade,
+                C.Status_contrato                                                      AS status_contrato,
                 C.Status_acesso                                                        AS status_acesso,
                 MAX(L.ltima_conex_o_final)                                            AS ultima_conexao,
                 CAST(JULIANDAY('now') - JULIANDAY(MAX(L.ltima_conex_o_final))
@@ -1320,9 +1338,9 @@ def api_behavior_sem_conexao():
             LEFT JOIN Clientes CLI ON CLI.Raz_o_social = C.Cliente
             WHERE {where}
             GROUP BY C.ID
-            HAVING dias_sem_cx >= ?
+            {having_clause}
         """
-        count_params = tuple(params) + (min_dias,)
+        count_params = tuple(params) + having_params
 
         total = conn.execute(f"SELECT COUNT(*) FROM ({base_q})", count_params).fetchone()[0]
 

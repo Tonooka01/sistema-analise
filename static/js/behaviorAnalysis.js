@@ -1020,7 +1020,7 @@ async function renderSemConexaoTab() {
 
     let _scxPage = 1;
     const _scxPageSize = 50;
-    let _scxFilters = { city: '', cliente: '', status_acesso: '', min_dias: 1 };
+    let _scxFilters = { city: '', cliente: '', status_acesso: '', min_dias: 1, faixa: '' };
 
     async function _scxLoad() {
         const wrap = document.getElementById('scx-table-wrap');
@@ -1032,6 +1032,7 @@ async function renderSemConexaoTab() {
             cliente:       _scxFilters.cliente,
             status_acesso: _scxFilters.status_acesso,
             min_dias:      _scxFilters.min_dias,
+            faixa:         _scxFilters.faixa,
             limit:         _scxPageSize,
             offset:        (_scxPage - 1) * _scxPageSize,
         });
@@ -1044,18 +1045,24 @@ async function renderSemConexaoTab() {
             const kpiEl = document.getElementById('scx-kpis');
             if (kpiEl) {
                 const f = d.faixas || {};
-                const _kpi = (label, val, cor, sub) => `
-                    <div class="summary-card" style="border-left:4px solid ${cor};">
+                const _kpi = (label, val, cor, sub, faixaKey) => {
+                    const isActive = _scxFilters.faixa === faixaKey;
+                    const outline  = isActive ? `box-shadow:0 0 0 2px ${cor};` : '';
+                    const opacity  = _scxFilters.faixa && !isActive ? 'opacity:.55;' : '';
+                    const cursor   = faixaKey ? 'cursor:pointer;' : '';
+                    return `<div class="summary-card" style="border-left:4px solid ${cor};${outline}${opacity}${cursor}"
+                                 ${faixaKey ? `onclick="_scxClickFaixa('${faixaKey}')"` : ''}>
                         <div class="summary-card-label">${label}</div>
                         <div class="summary-card-value" style="color:${cor};">${val}</div>
                         <div style="font-size:.7rem;color:#9ca3af;">${sub}</div>
                     </div>`;
+                };
                 kpiEl.innerHTML =
-                    _kpi('Total', d.total, '#6b7280', 'clientes sem conexão') +
-                    _kpi('1–7 dias', f['1_7']||0, '#f59e0b', 'atenção') +
-                    _kpi('8–30 dias', f['8_30']||0, '#f97316', 'alerta') +
-                    _kpi('31–60 dias', f['31_60']||0, '#dc2626', 'crítico') +
-                    _kpi('60+ dias', f['60_mais']||0, '#7c3aed', 'grave');
+                    _kpi('Total', d.total, '#6b7280', 'clientes sem conexão', '') +
+                    _kpi('1–7 dias', f['1_7']||0, '#f59e0b', 'atenção', '1_7') +
+                    _kpi('8–30 dias', f['8_30']||0, '#f97316', 'alerta', '8_30') +
+                    _kpi('31–60 dias', f['31_60']||0, '#dc2626', 'crítico', '31_60') +
+                    _kpi('60+ dias', f['60_mais']||0, '#7c3aed', 'grave', '60_mais');
                 const cityEl = document.getElementById('scx-f-city');
                 if (cityEl && d.cities?.length && cityEl.options.length <= 1) {
                     d.cities.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; cityEl.appendChild(o); });
@@ -1068,10 +1075,14 @@ async function renderSemConexaoTab() {
                 return;
             }
 
-            const STATUS_COR = {
+            const STATUS_AC_COR = {
                 'Ativo':              'color:#15803d;',
                 'Bloqueio Automático':'color:#ca8a04;',
                 'Bloqueio Manual':    'color:#dc2626;',
+            };
+            const STATUS_CT_COR = {
+                'Ativo':   'color:#15803d;',
+                'Inativo': 'color:#6b7280;',
             };
             const _fmtDate = v => v ? v.slice(0,10) : '—';
             const _wa = (wa, tel) => {
@@ -1087,7 +1098,8 @@ async function renderSemConexaoTab() {
                   <th style="padding:8px 10px;text-align:left;">Contrato</th>
                   <th style="padding:8px 10px;text-align:left;">Cliente</th>
                   <th style="padding:8px 10px;text-align:left;">Cidade</th>
-                  <th style="padding:8px 10px;text-align:left;">Status Acesso</th>
+                  <th style="padding:8px 10px;text-align:left;">St. Contrato</th>
+                  <th style="padding:8px 10px;text-align:left;">St. Acesso</th>
                   <th style="padding:8px 10px;text-align:right;">Dias Sem Cx.</th>
                   <th style="padding:8px 10px;text-align:left;">Última Conexão</th>
                   <th style="padding:8px 10px;text-align:right;">Fat. Vencidas</th>
@@ -1107,7 +1119,8 @@ async function renderSemConexaoTab() {
                         </td>
                         <td style="padding:6px 10px;font-weight:500;">${r.cliente||'—'}</td>
                         <td style="padding:6px 10px;color:#6b7280;">${r.cidade||'—'}</td>
-                        <td style="padding:6px 10px;${STATUS_COR[r.status_acesso]||''}">${r.status_acesso||'—'}</td>
+                        <td style="padding:6px 10px;${STATUS_CT_COR[r.status_contrato]||''}">${r.status_contrato||'—'}</td>
+                        <td style="padding:6px 10px;${STATUS_AC_COR[r.status_acesso]||''}">${r.status_acesso||'—'}</td>
                         <td style="padding:6px 10px;text-align:right;font-weight:700;color:${dCor};">${dias}d</td>
                         <td style="padding:6px 10px;color:#6b7280;">${_fmtDate(r.ultima_conexao)}</td>
                         <td style="padding:6px 10px;text-align:right;${r.fat_vencidas>0?'color:#dc2626;font-weight:600;':''}">${r.fat_vencidas||0}</td>
@@ -1133,6 +1146,11 @@ async function renderSemConexaoTab() {
     }
 
     window._scxGoPage = function(p) { _scxPage = p; _scxLoad(); };
+    window._scxClickFaixa = function(f) {
+        _scxFilters.faixa = (_scxFilters.faixa === f) ? '' : f;
+        _scxPage = 1;
+        _scxLoad();
+    };
 
     tabContent.querySelector('#scx-btn-filtrar')?.addEventListener('click', () => {
         _scxFilters.city          = document.getElementById('scx-f-city')?.value || '';
@@ -1148,7 +1166,7 @@ async function renderSemConexaoTab() {
         document.getElementById('scx-f-cliente').value = '';
         document.getElementById('scx-f-status').value  = '';
         document.getElementById('scx-f-dias').value    = '1';
-        _scxFilters = { city: '', cliente: '', status_acesso: '', min_dias: 1 };
+        _scxFilters = { city: '', cliente: '', status_acesso: '', min_dias: 1, faixa: '' };
         _scxPage = 1;
         _scxLoad();
     });
