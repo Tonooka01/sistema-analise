@@ -998,6 +998,8 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
     <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
             data-tab="os" onclick="switchCdpTab('os')">🔧 OS</button>
     <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
+            data-tab="tecnico" onclick="switchCdpTab('tecnico')">📡 Técnico</button>
+    <button class="cdp-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap"
             data-tab="acomp" onclick="switchCdpTab('acomp')">📋 Acomp.</button>
   </div>
 
@@ -1060,6 +1062,11 @@ button.sb-item{border:none;background:none;width:100%;font-family:inherit;displa
     <!-- OS tab -->
     <div id="cdp-tab-os" class="cdp-tab-pane p-4 hidden">
       <div id="cdp-os-tab-list" class="space-y-2"></div>
+    </div>
+
+    <!-- Técnico tab -->
+    <div id="cdp-tab-tecnico" class="cdp-tab-pane p-5 hidden">
+      <div id="cdp-tecnico-content" class="space-y-5 text-sm"></div>
     </div>
 
     <!-- Acompanhamento tab -->
@@ -1839,6 +1846,83 @@ function _renderClientDetail(d) {
         </div>`;
       }).join('');
   atList.innerHTML = atdsHtml;
+
+  // --- ABA TÉCNICO ---
+  const t = d.tecnico || {};
+  const tecEl = document.getElementById('cdp-tecnico-content');
+  if (tecEl) {
+    const _tf = (label, val, extra) => val != null && val !== '' && val !== '—'
+      ? `<div><p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">${label}</p><p class="font-medium text-gray-800">${val}${extra||''}</p></div>`
+      : '';
+    const _sigCor = rx => !rx ? '#9ca3af' : rx < -27 ? '#dc2626' : rx < -25 ? '#f59e0b' : rx <= -20 ? '#16a34a' : '#059669';
+    const _onlineBadge = t.On_line === 'S'
+      ? '<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:.72rem;font-weight:600;background:#dcfce7;color:#15803d;border:1px solid #86efac;">● Online</span>'
+      : '<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:.72rem;font-weight:600;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;">● Offline</span>';
+
+    const rxCor = _sigCor(t.sinal_rx);
+    const rxLabel = !t.sinal_rx ? '—' : `<span style="color:${rxCor};font-weight:700;">${t.sinal_rx} dBm</span>`;
+    const txLabel = t.sinal_tx != null ? `${t.sinal_tx} dBm` : '—';
+
+    const franquiaBar = (t.Franquia > 0 && t.Consumo != null)
+      ? (() => { const pct = Math.min(100, Math.round(t.Consumo / t.Franquia * 100));
+          const cor = pct >= 90 ? '#dc2626' : pct >= 70 ? '#f59e0b' : '#16a34a';
+          return `<div style="margin-top:4px;background:#e5e7eb;border-radius:4px;height:6px;overflow:hidden;">
+            <div style="width:${pct}%;background:${cor};height:100%;border-radius:4px;"></div></div>
+            <span style="font-size:.7rem;color:${cor};">${pct}% usado</span>`; })()
+      : '';
+
+    const _mb = v => v != null ? (v >= 1024 ? (v/1024).toFixed(1)+' GB' : v+' MB') : '—';
+
+    const sections = [
+      { title: '🔗 Conexão', fields: [
+        ['Login', t.Login], ['Status', t.On_line ? _onlineBadge : null],
+        ['IP (IPv4)', t.IPV4], ['MAC CPE', t.MAC],
+        ['Última Cx. Início', t.ult_cx_inicio ? t.ult_cx_inicio.slice(0,16) : null],
+        ['Última Cx. Fim', t.ult_cx_fim ? t.ult_cx_fim.slice(0,16) : null],
+        ['Dias Sem Cx.', t.dias_sem_cx != null ? `${t.dias_sem_cx}d` : null],
+        ['Tempo Conectado', t.Tempo_conectado],
+        ['Desconexões Hoje', t.desconexoes_hoje != null ? String(t.desconexoes_hoje) : null],
+        ['Causa Desconexão', t.causa_desconexao],
+        ['Interface', t.interface],
+      ]},
+      { title: '📶 Sinal & ONU', fields: [
+        ['Modelo ONU', t.onu_tipo],
+        ['MAC / Serial ONU', t.onu_serial || t.ONU_MAC],
+        ['Status ONU', t.status_onu],
+        ['Sinal RX', rxLabel ? rxLabel : null, true],
+        ['Sinal TX', txLabel !== '—' ? txLabel : null],
+        ['Temperatura', t.Temperatura != null ? `${t.Temperatura} °C` : null],
+        ['Voltagem', t.Voltagem != null ? `${t.Voltagem} V` : null],
+        ['Causa Última Queda', t.causa_queda],
+        ['Atualizado ONU', t.onu_atualizado ? t.onu_atualizado.slice(0,16) : null],
+      ]},
+      { title: '🏗️ Rede & Infraestrutura', fields: [
+        ['OLT', t.olt], ['POP', t.POP],
+        ['Concentrador', t.Concentrador],
+        ['Caixa FTTH', t.Caixa_FTTH || t.caixa],
+        ['Porta FTTH', t.Porta_FTTH || t.porta],
+        ['PON ID', t.PON_ID], ['VLAN', t.VLAN],
+      ]},
+      { title: '📊 Franquia', fields: [
+        ['Franquia', _mb(t.Franquia)],
+        ['Consumo', _mb(t.Consumo)],
+        ['Franquia Atingida', t.Franquia_atingida === 'S' ? '⚠️ Sim' : t.Franquia_atingida === 'N' ? 'Não' : null],
+      ]},
+    ];
+
+    tecEl.innerHTML = !Object.keys(t).length
+      ? '<p class="text-gray-400">Nenhum dado técnico encontrado para este contrato.</p>'
+      : sections.map(sec => {
+          const fieldsHtml = sec.fields
+            .map(([lbl, val, raw]) => raw ? (val ? `<div><p class="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">${lbl}</p><p>${val}</p></div>` : '') : _tf(lbl, val))
+            .filter(Boolean).join('');
+          return fieldsHtml ? `<div>
+            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">${sec.title}</p>
+            <div class="grid grid-cols-2 gap-x-6 gap-y-3">${fieldsHtml}</div>
+            ${sec.title.includes('Franquia') ? franquiaBar : ''}
+          </div>` : '';
+        }).filter(Boolean).join('<hr class="border-gray-100 my-1">');
+  }
 
   // Show content
   document.getElementById('cdp-loading').classList.add('hidden');

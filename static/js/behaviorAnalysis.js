@@ -992,14 +992,28 @@ async function renderSemConexaoTab() {
               <label class="text-xs text-gray-500 font-medium">Cliente</label>
               <input type="text" id="scx-f-cliente" placeholder="Nome..." class="border border-gray-300 rounded px-2 py-1.5 text-sm w-44">
             </div>
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col gap-1" style="position:relative;">
               <label class="text-xs text-gray-500 font-medium">Status Acesso</label>
-              <select id="scx-f-status" class="border border-gray-300 rounded px-2 py-1.5 text-sm">
-                <option value="">Todos</option>
-                <option value="Ativo">Ativo</option>
-                <option value="Bloqueio Automático">Bloq. Automático</option>
-                <option value="Bloqueio Manual">Bloq. Manual</option>
-              </select>
+              <div id="scx-ms-wrap" style="position:relative;display:inline-block;">
+                <button type="button" id="scx-ms-btn"
+                  style="border:1px solid #d1d5db;border-radius:4px;padding:5px 8px;font-size:.875rem;background:#fff;min-width:170px;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:6px;cursor:pointer;"
+                  onclick="document.getElementById('scx-ms-panel').classList.toggle('hidden')">
+                  <span id="scx-ms-label" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Todos</span>
+                  <span style="font-size:.7rem;color:#6b7280;">▾</span>
+                </button>
+                <div id="scx-ms-panel" class="hidden"
+                  style="position:absolute;top:calc(100% + 2px);left:0;z-index:50;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);padding:6px 4px;min-width:180px;">
+                  <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:.85rem;cursor:pointer;border-radius:4px;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">
+                    <input type="checkbox" value="Ativo" class="scx-st-cb"> Ativo
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:.85rem;cursor:pointer;border-radius:4px;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">
+                    <input type="checkbox" value="Bloqueio Automático" class="scx-st-cb"> Bloq. Automático
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:.85rem;cursor:pointer;border-radius:4px;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">
+                    <input type="checkbox" value="Bloqueio Manual" class="scx-st-cb"> Bloq. Manual
+                  </label>
+                </div>
+              </div>
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-xs text-gray-500 font-medium">Sem conexão ≥ (dias)</label>
@@ -1020,7 +1034,7 @@ async function renderSemConexaoTab() {
 
     let _scxPage = 1;
     const _scxPageSize = 50;
-    let _scxFilters = { city: '', cliente: '', status_acesso: '', min_dias: 1, faixa: '' };
+    let _scxFilters = { city: '', cliente: '', status_acesso: [], min_dias: 1, faixa: '' };
 
     async function _scxLoad() {
         const wrap = document.getElementById('scx-table-wrap');
@@ -1028,14 +1042,14 @@ async function renderSemConexaoTab() {
         if (wrap) wrap.innerHTML = '<div class="p-6 text-center text-gray-400">Carregando...</div>';
 
         const q = new URLSearchParams({
-            city:          _scxFilters.city,
-            cliente:       _scxFilters.cliente,
-            status_acesso: _scxFilters.status_acesso,
-            min_dias:      _scxFilters.min_dias,
-            faixa:         _scxFilters.faixa,
-            limit:         _scxPageSize,
-            offset:        (_scxPage - 1) * _scxPageSize,
+            city:     _scxFilters.city,
+            cliente:  _scxFilters.cliente,
+            min_dias: _scxFilters.min_dias,
+            faixa:    _scxFilters.faixa,
+            limit:    _scxPageSize,
+            offset:   (_scxPage - 1) * _scxPageSize,
         });
+        (_scxFilters.status_acesso || []).forEach(s => q.append('status_acesso', s));
 
         try {
             const d = await fetch(`/api/behavior/sem_conexao?${q}`).then(r => r.json());
@@ -1152,10 +1166,27 @@ async function renderSemConexaoTab() {
         _scxLoad();
     };
 
+    // Fecha o dropdown ao clicar fora
+    document.addEventListener('click', function _scxOutside(e) {
+        const wrap = document.getElementById('scx-ms-wrap');
+        if (!wrap) { document.removeEventListener('click', _scxOutside); return; }
+        if (!wrap.contains(e.target)) document.getElementById('scx-ms-panel')?.classList.add('hidden');
+    });
+
+    // Atualiza label do dropdown ao mudar checkbox
+    tabContent.querySelectorAll('.scx-st-cb').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const checked = [...tabContent.querySelectorAll('.scx-st-cb:checked')].map(c => c.value);
+            const label = document.getElementById('scx-ms-label');
+            if (label) label.textContent = checked.length === 0 ? 'Todos' : checked.map(v => v === 'Bloqueio Automático' ? 'Bloq. Auto.' : v === 'Bloqueio Manual' ? 'Bloq. Manual' : v).join(', ');
+        });
+    });
+
     tabContent.querySelector('#scx-btn-filtrar')?.addEventListener('click', () => {
+        const checked = [...tabContent.querySelectorAll('.scx-st-cb:checked')].map(c => c.value);
         _scxFilters.city          = document.getElementById('scx-f-city')?.value || '';
         _scxFilters.cliente       = document.getElementById('scx-f-cliente')?.value.trim() || '';
-        _scxFilters.status_acesso = document.getElementById('scx-f-status')?.value || '';
+        _scxFilters.status_acesso = checked;
         _scxFilters.min_dias      = parseInt(document.getElementById('scx-f-dias')?.value || '1') || 1;
         _scxPage = 1;
         _scxLoad();
@@ -1164,9 +1195,11 @@ async function renderSemConexaoTab() {
     tabContent.querySelector('#scx-btn-limpar')?.addEventListener('click', () => {
         document.getElementById('scx-f-city').value    = '';
         document.getElementById('scx-f-cliente').value = '';
-        document.getElementById('scx-f-status').value  = '';
         document.getElementById('scx-f-dias').value    = '1';
-        _scxFilters = { city: '', cliente: '', status_acesso: '', min_dias: 1, faixa: '' };
+        tabContent.querySelectorAll('.scx-st-cb').forEach(cb => cb.checked = false);
+        const label = document.getElementById('scx-ms-label');
+        if (label) label.textContent = 'Todos';
+        _scxFilters = { city: '', cliente: '', status_acesso: [], min_dias: 1, faixa: '' };
         _scxPage = 1;
         _scxLoad();
     });

@@ -1275,7 +1275,7 @@ def api_behavior_sem_conexao():
         city      = request.args.get('city',    '').strip()
         cliente   = request.args.get('cliente', '').strip()
         min_dias  = request.args.get('min_dias', 1, type=int)
-        status_ac = request.args.get('status_acesso', '').strip()
+        status_ac = [v.strip() for v in request.args.getlist('status_acesso') if v.strip()]
         faixa     = request.args.get('faixa', '').strip()
         limit     = request.args.get('limit',  100, type=int)
         offset    = request.args.get('offset',   0, type=int)
@@ -1292,7 +1292,9 @@ def api_behavior_sem_conexao():
         if cliente:
             conds.append("C.Cliente LIKE ?"); params.append(f"%{cliente}%")
         if status_ac:
-            conds.append("C.Status_acesso = ?"); params.append(status_ac)
+            placeholders = ','.join(['?'] * len(status_ac))
+            conds.append(f"C.Status_acesso IN ({placeholders})")
+            params.extend(status_ac)
 
         where = " AND ".join(conds)
 
@@ -3795,6 +3797,42 @@ def api_behavior_client_detail(contrato_id):
             LIMIT 50
         """, (str(contrato_id),)).fetchall()
 
+        # --- Dados técnicos (Logins + Clientes_Fibra) ---
+        tecnico_row = conn.execute("""
+            SELECT
+                L.Login, L.IPV4, L.MAC, L.On_line,
+                L.ltima_conex_o_inicial                                           AS ult_cx_inicio,
+                L.ltima_conex_o_final                                             AS ult_cx_fim,
+                CAST(JULIANDAY('now') - JULIANDAY(L.ltima_conex_o_final)
+                     AS INTEGER)                                                  AS dias_sem_cx,
+                L.Tempo_conectado,
+                L.Franquia, L.Consumo, L.Franquia_atingida,
+                L.Concentrador,
+                L.Interface_de_conex_o                                            AS interface,
+                L.Quantidade_de_desconex_es_no_dia_de_hoje                        AS desconexoes_hoje,
+                L.ONU_MAC, L.VLAN,
+                L.Causa_da_desconex_o                                             AS causa_desconexao,
+                L.Caixa_de_atendimento                                            AS caixa,
+                L.Porta_de_atendimento                                            AS porta,
+                CF.ONU_tipo                                                       AS onu_tipo,
+                CF.MAC_Serial                                                     AS onu_serial,
+                ROUND(CF.Sinal_RX, 2)                                            AS sinal_rx,
+                ROUND(CF.Sinal_TX, 2)                                            AS sinal_tx,
+                CF.Temperatura, CF.Voltagem,
+                CF.Status_ONU                                                     AS status_onu,
+                COALESCE(CF.Transmissor, L.Transmissor)                          AS olt,
+                CF.Causa_ltima_queda                                             AS causa_queda,
+                CF.Caixa_FTTH, CF.Porta_FTTH,
+                CF.POP, CF.PON_ID,
+                CF.ltima_atualiza_o                                              AS onu_atualizado
+            FROM Logins L
+            LEFT JOIN Clientes_Fibra CF ON CF.Nome = L.Login
+            WHERE CAST(L.ID_contrato AS INTEGER) = ?
+            ORDER BY L.ltima_conex_o_final DESC
+            LIMIT 1
+        """, (contrato_id,)).fetchone()
+        tecnico = dict(tecnico_row) if tecnico_row else {}
+
         # --- Equipamentos em comodato ---
         equipamentos = conn.execute("""
             SELECT Descricao_produto, Status_comodato, Quantidade
@@ -3807,6 +3845,7 @@ def api_behavior_client_detail(contrato_id):
         return jsonify({
             "contrato":    contrato,
             "cliente":     cliente,
+            "tecnico":     tecnico,
             "financeiro":  {
                 "summary": financeiro_summary,
                 "faturas": [dict(f) for f in faturas],
