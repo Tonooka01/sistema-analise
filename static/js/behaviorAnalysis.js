@@ -1131,8 +1131,8 @@ async function renderSemConexaoTab() {
                           <a href="#" onclick="showClientDetail(${r.contrato});return false;"
                              class="text-blue-600 hover:underline font-mono text-xs">#${r.contrato}</a>
                         </td>
-                        <td style="padding:6px 10px;font-weight:500;">${r.cliente||'—'}</td>
-                        <td style="padding:6px 10px;color:#6b7280;">${r.cidade||'—'}</td>
+                        <td style="padding:6px 10px;font-weight:500;">${esc(r.cliente)||'—'}</td>
+                        <td style="padding:6px 10px;color:#6b7280;">${esc(r.cidade)||'—'}</td>
                         <td style="padding:6px 10px;${STATUS_CT_COR[r.status_contrato]||''}">${r.status_contrato||'—'}</td>
                         <td style="padding:6px 10px;${STATUS_AC_COR[r.status_acesso]||''}">${r.status_acesso||'—'}</td>
                         <td style="padding:6px 10px;text-align:right;font-weight:700;color:${dCor};">${dias}d</td>
@@ -1957,8 +1957,8 @@ async function fetchInatividadeData(city = '', min_days = '1') {
                     : '-';
                 return `<tr style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;">
                     <td data-col="contrato" style="padding:6px 10px;font-size:.8rem;font-weight:600;">${r.contrato || ''}</td>
-                    <td data-col="cliente" style="padding:6px 10px;font-size:.8rem;">${r.cliente || ''}</td>
-                    <td data-col="cidade" style="padding:6px 10px;font-size:.8rem;">${r.cidade || ''}</td>
+                    <td data-col="cliente" style="padding:6px 10px;font-size:.8rem;">${esc(r.cliente) || ''}</td>
+                    <td data-col="cidade" style="padding:6px 10px;font-size:.8rem;">${esc(r.cidade) || ''}</td>
                     <td data-col="dias_inativo" style="padding:6px 10px;font-size:.8rem;color:#dc2626;font-weight:700;">${r.dias_inativo || 0}d</td>
                     <td data-col="login" style="padding:6px 10px;font-size:.8rem;font-family:monospace;">${r.login || ''}</td>
                     <td data-col="telefone" style="padding:6px 10px;font-size:.8rem;">${r.telefone || '-'}</td>
@@ -2406,8 +2406,8 @@ async function renderListaRetencaoTab() {
                     return `<tr data-contrato="${r.contrato}" style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #f1f5f9;cursor:pointer;" title="Clique para ver detalhes">
                         <td data-col="num" style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${(page - 1) * rowsPerPage + i + 1}</td>
                         <td data-col="contrato" style="padding:6px 10px;font-size:.78rem;font-family:monospace;">#${r.contrato || ''}</td>
-                        <td data-col="cliente" style="padding:6px 10px;font-size:.8rem;font-weight:500;">${r.cliente || ''}</td>
-                        <td data-col="cidade" style="padding:6px 10px;font-size:.78rem;">${r.cidade || ''}</td>
+                        <td data-col="cliente" style="padding:6px 10px;font-size:.8rem;font-weight:500;">${esc(r.cliente) || ''}</td>
+                        <td data-col="cidade" style="padding:6px 10px;font-size:.78rem;">${esc(r.cidade) || ''}</td>
                         <td data-col="risco" style="padding:6px 10px;">
                             <span style="padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap;${riskStyle}">${r.risco || ''}</span>
                         </td>
@@ -2960,28 +2960,28 @@ async function renderAlertasAcaoTab() {
             if (result.data?.length > 0) {
                 const rows = result.data.map((r, i) => {
                     const tierStyle = TIER_STYLE[r.tier] || '';
-                    const acaoText = (r.acao || '');
+                    const acaoText = esc(r.acao || '');
                     const trabalhado = r.trabalhado_hoje || window._alertaTrabalhados?.has(String(r.contrato));
                     const rowBg = trabalhado ? (i % 2 === 0 ? '#f0fdf4' : '#dcfce7') : (i % 2 === 0 ? '#fff' : '#f8fafc');
                     return `<tr data-contrato="${r.contrato}" data-trabalhado="${trabalhado ? '1' : '0'}" style="background:${rowBg};border-bottom:1px solid #f1f5f9;cursor:pointer;" title="Clique para ver detalhes">
                         <td data-col="num" style="padding:6px 10px;font-size:.78rem;color:#6b7280;">${trabalhado ? '<span title="Trabalhado hoje" style="color:#059669;font-weight:700;">✓</span>' : (page - 1) * rowsPerPage + i + 1}</td>
                         <td data-col="contrato" style="padding:6px 10px;font-size:.78rem;font-family:monospace;">#${r.contrato || ''}</td>
-                        <td data-col="cliente" style="padding:6px 10px;font-size:.8rem;font-weight:500;">${r.cliente || ''}</td>
-                        <td data-col="cidade" style="padding:6px 10px;font-size:.78rem;">${r.cidade || ''}</td>
+                        <td data-col="cliente" style="padding:6px 10px;font-size:.8rem;font-weight:500;">${esc(r.cliente) || ''}</td>
+                        <td data-col="cidade" style="padding:6px 10px;font-size:.78rem;">${esc(r.cidade) || ''}</td>
                         <td data-col="urgencia" style="padding:6px 10px;">
                             <span style="padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;white-space:nowrap;${tierStyle}">${r.tier || ''}</span>
                         </td>
                         <td data-col="acao_rec" style="padding:6px 10px;font-size:.78rem;max-width:260px;line-height:1.5;">${acaoText}</td>
                         <td data-col="os_ret" style="padding:6px 10px;font-size:.75rem;max-width:180px;line-height:1.4;">${(() => {
                             const sit = r.situacao_retirada || '';
-                            const assunto = r.ret_assunto_aberta || '';
+                            const assunto = esc(r.ret_assunto_aberta || '');
                             const dtRaw = (r.ret_data_aberta || '').slice(0,10);
                             let diasAb = '';
                             if (dtRaw) {
                                 const diff = Math.floor((Date.now() - new Date(dtRaw).getTime()) / 86400000);
                                 diasAb = diff > 0 ? `há ${diff} dias` : '';
                             }
-                            const ultiAssunto = r.ret_ultimo_assunto || '';
+                            const ultiAssunto = esc(r.ret_ultimo_assunto || '');
                             const ultiData    = (r.ret_ultima_data || '').slice(0,10);
                             let ultiDias = '';
                             if (ultiData) {
@@ -3451,7 +3451,7 @@ function _retornoRenderRight(reg) {
           <div><span class="text-gray-400">Resultado</span><div>${RESULTADO_LABEL[reg.resultado||''] || reg.resultado || '—'}</div></div>
           <div><span class="text-gray-400">Retorno marcado para</span><div>${reg.data_retorno || '—'}</div></div>
         </div>
-        ${reg.observacao ? `<div class="mt-2 text-xs text-gray-600 italic border-t border-blue-100 pt-2">"${reg.observacao}"</div>` : ''}
+        ${reg.observacao ? `<div class="mt-2 text-xs text-gray-600 italic border-t border-blue-100 pt-2">"${esc(reg.observacao)}"</div>` : ''}
       </div>
 
       <!-- Mensagens prontas -->
@@ -3960,7 +3960,7 @@ async function _atendRenderRight(reg) {
                             ${r.data_retorno ? `<span style="font-size:.68rem;color:#2563eb;">📅 ${r.data_retorno}</span>` : ''}
                             ${r.ixc_os_id ? `<span style="font-size:.65rem;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;">OS #${r.ixc_os_id}</span>` : ''}
                         </div>
-                        ${r.observacao ? `<div style="font-size:.75rem;color:#475569;font-style:italic;white-space:pre-wrap;">"${r.observacao}"</div>` : ''}
+                        ${r.observacao ? `<div style="font-size:.75rem;color:#475569;font-style:italic;white-space:pre-wrap;">"${esc(r.observacao)}"</div>` : ''}
                         <div style="font-size:.65rem;color:#cbd5e1;">por ${r.usuario || '—'}</div>
                     </div>
                 </div>`;
@@ -4702,8 +4702,8 @@ function renderPerfilPagamentoTab() {
                       ${data.primeira_vez.slice(0, 30).map(r => `
                         <tr class="cursor-pointer hover:bg-red-100" data-contrato="${r.contrato}" title="Clique para ver detalhes">
                           <td class="px-2 py-1">${r.contrato}</td>
-                          <td class="px-2 py-1">${r.cliente}</td>
-                          <td class="px-2 py-1">${r.cidade || '-'}</td>
+                          <td class="px-2 py-1">${esc(r.cliente)}</td>
+                          <td class="px-2 py-1">${esc(r.cidade) || '-'}</td>
                           <td class="px-2 py-1 text-right font-semibold text-red-600">${r.fat_vencidas_hoje}</td>
                           <td class="px-2 py-1 text-right">${r.total_pagas}</td>
                         </tr>`).join('')}
@@ -4733,8 +4733,8 @@ function renderPerfilPagamentoTab() {
             tbody.innerHTML = (data.data || []).map(r => `
               <tr class="hover:bg-gray-50 cursor-pointer" data-contrato="${r.contrato}" title="Clique para ver detalhes">
                 <td data-col="contrato" class="px-3 py-2">${r.contrato}</td>
-                <td data-col="cliente" class="px-3 py-2">${r.cliente}</td>
-                <td data-col="cidade" class="px-3 py-2">${r.cidade || '-'}</td>
+                <td data-col="cliente" class="px-3 py-2">${esc(r.cliente)}</td>
+                <td data-col="cidade" class="px-3 py-2">${esc(r.cidade) || '-'}</td>
                 <td data-col="perfil" class="px-3 py-2 text-center">${perfilBadge(r.perfil)}</td>
                 <td data-col="pagas" class="px-3 py-2 text-right">${r.total_pagas}</td>
                 <td data-col="atrasos" class="px-3 py-2 text-right">${r.total_atrasos}</td>

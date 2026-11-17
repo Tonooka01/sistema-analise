@@ -93,7 +93,9 @@ export function renderGenericDetailTable(contentElement, data, columns, returnHt
                                     console.error(`Erro ao renderizar coluna ${c.header || c.key}:`, e, "Linha:", row);
                                     value = 'Erro';
                                 }
-                                const displayValue = (value === null || value === undefined || value === '') ? 'N/A' : String(value);
+                                const rawValue = (value === null || value === undefined || value === '') ? 'N/A' : String(value);
+                                const isHtml = c.render && typeof c.render === 'function';
+                                const displayValue = isHtml ? rawValue : rawValue.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                                 if (tooltipText === 'N/A' || tooltipText === '') tooltipText = null;
                                 return `<td class="py-2 px-3 text-sm text-gray-800 ${c.cssClass || ''}" ${tooltipText ? `title="${tooltipText.replace(/"/g, '&quot;')}"` : ''}>${displayValue}</td>`;
                             }).join('')}

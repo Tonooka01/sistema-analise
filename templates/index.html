@@ -9,7 +9,7 @@
 window._currentUser = {
     username: "{{ current_user.username | e }}",
     is_admin: {{ 'true' if current_user.username == 'admin' else 'false' }},
-    permissions: {% if current_user.permissions %}{{ current_user.permissions | safe }}{% else %}null{% endif %}
+    permissions: {% if current_user.permissions %}{{ current_user.permissions | tojson }}{% else %}null{% endif %}
 };
 document.addEventListener('DOMContentLoaded', () => {
     const user = window._currentUser;
@@ -1829,7 +1829,7 @@ function _renderClientDetail(d) {
         const status = a.status || '';
         const statusLabel = _atStatusLabel[status] || status;
         const statusClass = _atStatusClass[status] || 'bg-gray-100 text-gray-600';
-        const descricao = (a.descricao || '').replace(/\r\n/g,'<br>').replace(/\n/g,'<br>');
+        const descricao = (a.descricao || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\r\n/g,'<br>').replace(/\n/g,'<br>');
         const alterado = a.ultima_alteracao && a.ultima_alteracao !== a.Criado_em && a.ultima_alteracao !== a.criado_em
           ? `<span class="text-xs text-gray-400">Atualizado: ${_fmtDate(a.ultima_alteracao)}</span>` : '';
         return `

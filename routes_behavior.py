@@ -383,7 +383,8 @@ def api_behavior_churn_pattern():
 
     except Exception as e:
         logger.error(f"Erro no padrão de churn: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -528,7 +529,8 @@ def api_behavior_ixc_assuntos():
         return jsonify({"error": "Não foi possível listar assuntos do IXC. Acesse /api/behavior/ixc-assuntos?debug=1 para diagnóstico."})
     except Exception as e:
         logger.warning(f"ixc-assuntos: {e}")
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
 
 
 @behavior_bp.route('/ixc-setores')
@@ -557,7 +559,8 @@ def api_behavior_ixc_setores():
         return jsonify({"setores": setores})
     except Exception as e:
         logger.warning(f"ixc-setores: {e}")
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
 
 
 @behavior_bp.route('/fechar-ticket-ixc', methods=['POST'])
@@ -833,7 +836,8 @@ def api_behavior_predictive_churn():
 
     except Exception as e:
         logger.error(f"Erro na análise preditiva de churn: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -985,7 +989,8 @@ def api_behavior_predictive_churn_export():
 
     except Exception as e:
         logger.error(f"Erro no export de churn preditivo: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -1617,7 +1622,8 @@ def api_behavior_temporal_support():
 
     except Exception as e:
         logger.error(f"Erro em temporal_support: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -1813,7 +1819,8 @@ def api_behavior_financial_behavior():
 
     except Exception as e:
         logger.error(f"Erro em financial_behavior: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -1919,7 +1926,8 @@ def api_behavior_connection_inactivity():
 
     except Exception as e:
         logger.error(f"Erro em connection_inactivity: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -2051,7 +2059,8 @@ def api_behavior_cancellation_seasonality():
 
     except Exception as e:
         logger.error(f"Erro em cancellation_seasonality: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -2138,7 +2147,8 @@ def api_behavior_signal_causes():
 
     except Exception as e:
         logger.error(f"Erro em signal_causes: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -2347,7 +2357,8 @@ def api_behavior_contact_list():
 
     except Exception as e:
         logger.error(f"Erro em contact_list: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -2855,7 +2866,8 @@ def api_behavior_action_alerts():
 
     except Exception as e:
         logger.error(f"Erro em action_alerts: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -3007,7 +3019,8 @@ def api_behavior_canc_reasons():
 
     except Exception as e:
         logger.error(f"Erro em canc_reasons: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -3138,7 +3151,8 @@ def api_behavior_pre_canc_behavior():
 
     except Exception as e:
         logger.error(f"Erro em pre_canc_behavior: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -3304,7 +3318,8 @@ def api_behavior_lifecycle_risk():
 
     except Exception as e:
         logger.error(f"Erro em lifecycle_risk: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -3372,7 +3387,8 @@ def api_behavior_plan_risk():
 
     except Exception as e:
         logger.error(f"Erro em plan_risk: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -3581,7 +3597,8 @@ def api_behavior_payment_profile():
 
     except Exception as e:
         logger.error(f"Erro em payment_profile: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -3857,7 +3874,8 @@ def api_behavior_client_detail(contrato_id):
 
     except Exception as e:
         logger.error(f"Erro em client_detail {contrato_id}: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -3909,7 +3927,8 @@ def api_behavior_acompanhamento_get(contrato_id):
         return jsonify([dict(r) for r in rows])
     except Exception as e:
         logger.error(f"Erro em acompanhamento_get {contrato_id}: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -4023,7 +4042,8 @@ def api_behavior_acompanhamento_post():
         return jsonify({"ok": True, "snooze_ate": snooze_ate, "ixc_os_id": ixc_os_id, "ixc_erro": ixc_erro})
     except Exception as e:
         logger.error(f"Erro em acompanhamento_post: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -4126,7 +4146,8 @@ def api_behavior_acompanhamento_all():
         })
     except Exception as e:
         logger.error(f"Erro em acompanhamento_all: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -4174,7 +4195,8 @@ def api_behavior_historico(contrato_id):
         return jsonify({"contrato_id": contrato_id, "cliente": cliente_nome, "registros": result})
     except Exception as e:
         logger.error(f"Erro em historico {contrato_id}: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -4351,7 +4373,8 @@ def api_behavior_acompanhamento_put(record_id):
         return jsonify({"ok": True})
     except Exception as e:
         logger.error(f"Erro em acompanhamento_put: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -4377,7 +4400,8 @@ def api_behavior_acompanhamento_delete(record_id):
         return jsonify({"ok": True})
     except Exception as e:
         logger.error(f"Erro em acompanhamento_delete: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         if conn: conn.close()
 
@@ -6182,7 +6206,8 @@ def api_chatmix_templates_list():
         return jsonify([dict(r) for r in rows])
     except Exception as e:
         logger.error(f"chatmix templates list: {e}")
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         conn.close()
 
@@ -6212,7 +6237,8 @@ def api_chatmix_templates_create():
         return jsonify(dict(row)), 201
     except Exception as e:
         logger.error(f"chatmix templates create: {e}")
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         conn.close()
 
@@ -6226,7 +6252,8 @@ def api_chatmix_templates_delete(tmpl_id):
         return jsonify({"ok": True})
     except Exception as e:
         logger.error(f"chatmix templates delete {tmpl_id}: {e}")
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         conn.close()
 
@@ -6241,7 +6268,8 @@ def api_chatmix_settings_get():
         cfg = {r['key']: r['value'] or '' for r in rows}
         return jsonify({'chatmix_url': cfg.get('chatmix_url',''), 'chatmix_token': cfg.get('chatmix_token', ''), 'chatmix_key': cfg.get('chatmix_key', ''), 'chatmix_api_token': cfg.get('chatmix_api_token', '')})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         conn.close()
 
@@ -6257,7 +6285,8 @@ def api_chatmix_settings_put():
         conn.commit()
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         conn.close()
 
@@ -6344,6 +6373,7 @@ def api_chatmix_send():
         return jsonify({"error": f"Erro ao enviar: {e}"}), 502
     except Exception as e:
         logger.error(f"chatmix send: {e}")
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(str(e))
+        return jsonify({"error": "Erro interno do servidor."}), 500
     finally:
         conn.close()
