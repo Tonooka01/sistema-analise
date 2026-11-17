@@ -1280,6 +1280,7 @@ def api_behavior_sem_conexao():
         offset    = request.args.get('offset',   0, type=int)
 
         conds  = ["C.Status_contrato = 'Ativo'",
+                  "C.Status_acesso != 'Desativado'",
                   "L.ltima_conex_o_final IS NOT NULL",
                   "L.ltima_conex_o_final != ''",
                   "L.ltima_conex_o_final NOT LIKE '0000%'"]
@@ -3589,12 +3590,17 @@ MOTIVO_LABELS_DETAIL = {
 def api_behavior_client_detail(contrato_id):
     conn = get_db()
     try:
-        # Migração: garante coluna ID_cliente em Contratos (populada pelo sync IXC)
-        try:
-            conn.execute("ALTER TABLE Contratos ADD COLUMN ID_cliente INTEGER")
-            conn.commit()
-        except Exception:
-            pass
+        # Migração: garante colunas necessárias
+        for _mig in [
+            "ALTER TABLE Contratos ADD COLUMN ID_cliente INTEGER",
+            "ALTER TABLE Clientes_Negativacao ADD COLUMN UF TEXT",
+            "ALTER TABLE Clientes_Negativacao ADD COLUMN Telefone_celular TEXT",
+            "ALTER TABLE Clientes_Negativacao ADD COLUMN Telefone_comercial TEXT",
+        ]:
+            try:
+                conn.execute(_mig); conn.commit()
+            except Exception:
+                pass
 
         # --- Contract ---
         contrato_row = conn.execute("""
@@ -3651,25 +3657,27 @@ def api_behavior_client_detail(contrato_id):
         _CLIENTE_COLS_NEG = _CLIENTE_COLS.replace('FROM Clientes', 'FROM Clientes_Negativacao')
 
         cliente_row = None
-        if id_cliente:
-            cliente_row = conn.execute(
-                _CLIENTE_COLS + " WHERE ID = ?", (id_cliente,)
-            ).fetchone()
-        if not cliente_row and cliente_nome:
-            cliente_row = conn.execute(
-                _CLIENTE_COLS + " WHERE Raz_o_social = ? LIMIT 1", (cliente_nome,)
-            ).fetchone()
-
-        if not cliente_row:
-            # Tenta em Clientes_Negativacao com dados completos de telefone
+        try:
             if id_cliente:
                 cliente_row = conn.execute(
-                    _CLIENTE_COLS_NEG + " WHERE ID = ?", (id_cliente,)
+                    _CLIENTE_COLS + " WHERE ID = ?", (id_cliente,)
                 ).fetchone()
             if not cliente_row and cliente_nome:
                 cliente_row = conn.execute(
-                    _CLIENTE_COLS_NEG + " WHERE Raz_o_social = ? LIMIT 1", (cliente_nome,)
+                    _CLIENTE_COLS + " WHERE Raz_o_social = ? LIMIT 1", (cliente_nome,)
                 ).fetchone()
+            if not cliente_row:
+                # Tenta em Clientes_Negativacao com dados completos de telefone
+                if id_cliente:
+                    cliente_row = conn.execute(
+                        _CLIENTE_COLS_NEG + " WHERE ID = ?", (id_cliente,)
+                    ).fetchone()
+                if not cliente_row and cliente_nome:
+                    cliente_row = conn.execute(
+                        _CLIENTE_COLS_NEG + " WHERE Raz_o_social = ? LIMIT 1", (cliente_nome,)
+                    ).fetchone()
+        except Exception as _e:
+            logger.warning(f"Cliente lookup failed para contrato {contrato_id}: {_e}")
 
         cliente = dict(cliente_row) if cliente_row else {}
 
