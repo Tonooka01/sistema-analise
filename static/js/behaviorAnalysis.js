@@ -159,6 +159,9 @@ export function handleBehaviorTabChange(tabName) {
             case 'qualidade':
                 renderQoSTab();
                 break;
+            case 'sem_conexao':
+                renderSemConexaoTab();
+                break;
             case 'acoes':
                 renderAcoesTab();
                 break;
@@ -965,56 +968,56 @@ async function renderQoSTab() {
         </div>
         <div id="qos-kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
         <div id="qos-charts-area" class="grid-stack"></div>
-
-        <!-- Sem Conexão -->
-        <div class="mt-8 border-t border-gray-200 pt-6">
-          <h3 class="text-lg font-bold text-gray-800 mb-4">📡 Clientes Sem Conexão</h3>
-
-          <!-- Filtros sem conexão -->
-          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-            <div class="flex flex-wrap gap-3 items-end">
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-gray-500 font-medium">Cidade</label>
-                <select id="scx-f-city" class="border border-gray-300 rounded px-2 py-1.5 text-sm min-w-[150px]">
-                  <option value="">Todas</option>
-                </select>
-              </div>
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-gray-500 font-medium">Cliente</label>
-                <input type="text" id="scx-f-cliente" placeholder="Nome..." class="border border-gray-300 rounded px-2 py-1.5 text-sm w-44">
-              </div>
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-gray-500 font-medium">Status Acesso</label>
-                <select id="scx-f-status" class="border border-gray-300 rounded px-2 py-1.5 text-sm">
-                  <option value="">Todos</option>
-                  <option value="Ativo">Ativo</option>
-                  <option value="Bloqueio Automático">Bloq. Automático</option>
-                  <option value="Bloqueio Manual">Bloq. Manual</option>
-                  <option value="Desativado">Desativado</option>
-                </select>
-              </div>
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-gray-500 font-medium">Sem conexão ≥ (dias)</label>
-                <input type="number" id="scx-f-dias" min="1" value="1" class="border border-gray-300 rounded px-2 py-1.5 text-sm w-24">
-              </div>
-              <button id="scx-btn-filtrar" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700">Filtrar</button>
-              <button id="scx-btn-limpar" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-300">Limpar</button>
-            </div>
-          </div>
-
-          <!-- KPIs sem conexão -->
-          <div id="scx-kpis" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4"></div>
-
-          <!-- Tabela -->
-          <div id="scx-table-wrap" class="overflow-x-auto rounded-lg border border-gray-200"></div>
-          <div id="scx-pagination" class="flex justify-between items-center mt-3 text-sm text-gray-600"></div>
-        </div>
     `;
 
     tabContent.querySelector('#btnFilterQoS')?.addEventListener('click', fetchBehaviorData_QoS);
     fetchBehaviorData_QoS();
+}
 
-    // ── Sem Conexão ──────────────────────────────────────────────────
+async function renderSemConexaoTab() {
+    const tabContent = document.getElementById('tab-content-sem_conexao');
+    if (!tabContent) return;
+
+    tabContent.innerHTML = `
+        <!-- Filtros sem conexão -->
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+          <div class="flex flex-wrap gap-3 items-end">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-gray-500 font-medium">Cidade</label>
+              <select id="scx-f-city" class="border border-gray-300 rounded px-2 py-1.5 text-sm min-w-[150px]">
+                <option value="">Todas</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-gray-500 font-medium">Cliente</label>
+              <input type="text" id="scx-f-cliente" placeholder="Nome..." class="border border-gray-300 rounded px-2 py-1.5 text-sm w-44">
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-gray-500 font-medium">Status Acesso</label>
+              <select id="scx-f-status" class="border border-gray-300 rounded px-2 py-1.5 text-sm">
+                <option value="">Todos</option>
+                <option value="Ativo">Ativo</option>
+                <option value="Bloqueio Automático">Bloq. Automático</option>
+                <option value="Bloqueio Manual">Bloq. Manual</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-gray-500 font-medium">Sem conexão ≥ (dias)</label>
+              <input type="number" id="scx-f-dias" min="1" value="1" class="border border-gray-300 rounded px-2 py-1.5 text-sm w-24">
+            </div>
+            <button id="scx-btn-filtrar" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700">Filtrar</button>
+            <button id="scx-btn-limpar" class="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-300">Limpar</button>
+          </div>
+        </div>
+
+        <!-- KPIs sem conexão -->
+        <div id="scx-kpis" class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4"></div>
+
+        <!-- Tabela -->
+        <div id="scx-table-wrap" class="overflow-x-auto rounded-lg border border-gray-200"></div>
+        <div id="scx-pagination" class="flex justify-between items-center mt-3 text-sm text-gray-600"></div>
+    `;
+
     let _scxPage = 1;
     const _scxPageSize = 50;
     let _scxFilters = { city: '', cliente: '', status_acesso: '', min_dias: 1 };
@@ -1025,12 +1028,12 @@ async function renderQoSTab() {
         if (wrap) wrap.innerHTML = '<div class="p-6 text-center text-gray-400">Carregando...</div>';
 
         const q = new URLSearchParams({
-            city:         _scxFilters.city,
-            cliente:      _scxFilters.cliente,
+            city:          _scxFilters.city,
+            cliente:       _scxFilters.cliente,
             status_acesso: _scxFilters.status_acesso,
-            min_dias:     _scxFilters.min_dias,
-            limit:        _scxPageSize,
-            offset:       (_scxPage - 1) * _scxPageSize,
+            min_dias:      _scxFilters.min_dias,
+            limit:         _scxPageSize,
+            offset:        (_scxPage - 1) * _scxPageSize,
         });
 
         try {
@@ -1053,14 +1056,12 @@ async function renderQoSTab() {
                     _kpi('8–30 dias', f['8_30']||0, '#f97316', 'alerta') +
                     _kpi('31–60 dias', f['31_60']||0, '#dc2626', 'crítico') +
                     _kpi('60+ dias', f['60_mais']||0, '#7c3aed', 'grave');
-                // Preenche cidade na primeira carga
                 const cityEl = document.getElementById('scx-f-city');
                 if (cityEl && d.cities?.length && cityEl.options.length <= 1) {
                     d.cities.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; cityEl.appendChild(o); });
                 }
             }
 
-            // Tabela
             if (!d.data?.length) {
                 if(wrap) wrap.innerHTML = '<div class="p-6 text-center text-gray-400">Nenhum cliente encontrado.</div>';
                 if(pgDiv) pgDiv.innerHTML = '';
@@ -1071,7 +1072,6 @@ async function renderQoSTab() {
                 'Ativo':              'color:#15803d;',
                 'Bloqueio Automático':'color:#ca8a04;',
                 'Bloqueio Manual':    'color:#dc2626;',
-                'Desativado':         'color:#6b7280;',
             };
             const _fmtDate = v => v ? v.slice(0,10) : '—';
             const _wa = (wa, tel) => {
@@ -1102,7 +1102,7 @@ async function renderQoSTab() {
                     return `<tr style="${i%2===1?'background:#f9fafb;':''}">
                         <td style="padding:6px 10px;color:#6b7280;">${idx}</td>
                         <td style="padding:6px 10px;">
-                          <a href="#" onclick="openClientDetail(${r.contrato});return false;"
+                          <a href="#" onclick="showClientDetail(${r.contrato});return false;"
                              class="text-blue-600 hover:underline font-mono text-xs">#${r.contrato}</a>
                         </td>
                         <td style="padding:6px 10px;font-weight:500;">${r.cliente||'—'}</td>
@@ -1117,7 +1117,6 @@ async function renderQoSTab() {
               </tbody>
             </table>`;
 
-            // Paginação
             const total = d.total || 0;
             const totalPages = Math.ceil(total / _scxPageSize);
             if (pgDiv) {
