@@ -7,6 +7,9 @@ import { populateContractStatusFilters } from './customAnalysisTables.js';
 
 // --- LÓGICA DA ANÁLISE DE COMPORTAMENTO (Abas) ---
 
+// Escapa HTML para uso seguro em innerHTML
+function esc(s) { return (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
 // ─── Ordenação de tabelas ─────────────────────────────────────────────────────
 function _makeSortable(table) {
     if (!table || table.dataset.sortable) return;
@@ -6729,8 +6732,6 @@ function _renderAcompTable() {
         return `<span class="px-1.5 py-0.5 rounded text-xs font-medium ${cls}">${label}</span>`;
     };
 
-    const esc = s => (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
     const acoesHeader = `<th style="width:${isAdmin?'110px':'44px'}" class="px-2 py-1.5 border-b border-gray-200">Ações</th>`;
     const acoesCell = (r) => `
         <td class="px-2 py-1.5 border-b border-gray-100 whitespace-nowrap">
@@ -6965,8 +6966,20 @@ async function renderDashboardTrabalhoTab() {
     `).join('');
 
     // ── Timeline sparkline (SVG inline) ──
+    // Legend toggle: clique no nome oculta/mostra a série correspondente
+    if (!window._spToggle) {
+        window._spToggle = function(el, ids) {
+            const hiding = el.dataset.hidden !== '1';
+            ids.forEach(id => { const e = document.getElementById(id); if (e) e.style.display = hiding ? 'none' : ''; });
+            el.dataset.hidden = hiding ? '1' : '';
+            el.style.opacity = hiding ? '0.38' : '1';
+            el.style.textDecoration = hiding ? 'line-through' : '';
+        };
+    }
+
     function _sparkline(timeline, users, colors) {
         if (!timeline.length) return '<div style="color:#9ca3af;font-size:.85rem;text-align:center;padding:20px;">Sem dados nos últimos 30 dias</div>';
+        const uid = 'sp' + Math.random().toString(36).slice(2, 8);
         const W = 700, H = 120, PAD_L = 32, PAD_R = 8, PAD_T = 10, PAD_B = 30;
         const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
         const days  = timeline.map(r => r.data);
@@ -6990,7 +7003,6 @@ async function renderDashboardTrabalhoTab() {
         }
 
         const totalPts = _pts(totals);
-        // Area fill path
         const firstX = PAD_L, lastX = PAD_L + plotW;
         const baseY  = PAD_T + plotH;
         const areaPath = `M${firstX},${baseY} L${totalPts.split(' ').map((pt, i) => {
@@ -7008,7 +7020,7 @@ async function renderDashboardTrabalhoTab() {
         const xLabels = days.filter((_, i) => i % 5 === 0 || i === days.length - 1).map(d => {
             const idx = days.indexOf(d);
             const x = PAD_L + (idx / Math.max(days.length - 1, 1)) * plotW;
-            const label = d.slice(5); // MM-DD
+            const label = d.slice(5);
             return `<text x="${x}" y="${PAD_T + plotH + 14}" font-size="9" fill="#9ca3af" text-anchor="middle">${label}</text>`;
         }).join('');
 
@@ -7018,23 +7030,31 @@ async function renderDashboardTrabalhoTab() {
             return `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#f3f4f6" stroke-width="1"/>`;
         }).join('');
 
-        // Per-user lines
-        const userLines = userSeries.map(s => {
-            const pts = s.vals.map((v, i) => {
-                const x = PAD_L + (i / Math.max(days.length - 1, 1)) * plotW;
+        // Per-user lines (com ID para toggle)
+        const userLines = userSeries.map((s, i) => {
+            const pts = s.vals.map((v, j) => {
+                const x = PAD_L + (j / Math.max(days.length - 1, 1)) * plotW;
                 const y = PAD_T + plotH - (v / maxVal) * plotH;
                 return `${x.toFixed(1)},${y.toFixed(1)}`;
             }).join(' ');
-            return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="4 2" opacity="0.7"/>`;
+            return `<polyline id="${uid}_u${i}" points="${pts}" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="4 2" opacity="0.7"/>`;
         }).join('');
 
-        // Total line
-        const totalLine = `<polyline points="${totalPts}" fill="none" stroke="#3b82f6" stroke-width="2.5"/>`;
+        // Total line e área (com ID para toggle)
+        const totalLine = `<polyline id="${uid}_tot" points="${totalPts}" fill="none" stroke="#3b82f6" stroke-width="2.5"/>`;
+        const areaEl    = `<path id="${uid}_area" d="${areaPath}" fill="url(#dashGrad_${uid})" opacity="0.15"/>`;
 
-        // Legend
+        // Legenda clicável (legend toggle)
+        const legStyle = 'display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:.72rem;color:#374151;cursor:pointer;user-select:none;transition:opacity .15s;';
         const legendItems = [
-            `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:.72rem;color:#374151;"><span style="display:inline-block;width:18px;height:3px;background:#3b82f6;border-radius:2px;"></span>Total</span>`,
-            ...userSeries.map(s => `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:.72rem;color:#374151;"><span style="display:inline-block;width:18px;height:2px;background:${s.color};border-radius:2px;opacity:.8;"></span>${s.user}</span>`),
+            `<span onclick="_spToggle(this,['${uid}_tot','${uid}_area'])" style="${legStyle}margin-right:12px;" title="Clique para ocultar/mostrar">
+                <span style="display:inline-block;width:18px;height:3px;background:#3b82f6;border-radius:2px;"></span>Total
+            </span>`,
+            ...userSeries.map((s, i) =>
+                `<span onclick="_spToggle(this,['${uid}_u${i}'])" style="${legStyle}" title="Clique para ocultar/mostrar">
+                    <span style="display:inline-block;width:18px;height:2px;background:${s.color};border-radius:2px;opacity:.8;"></span>${esc(s.user)}
+                </span>`
+            ),
         ].join('');
 
         return `
@@ -7042,9 +7062,9 @@ async function renderDashboardTrabalhoTab() {
                 ${gridLines}
                 ${yLabels}
                 ${xLabels}
-                <path d="${areaPath}" fill="url(#dashGrad)" opacity="0.15"/>
+                ${areaEl}
                 <defs>
-                    <linearGradient id="dashGrad" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="dashGrad_${uid}" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stop-color="#3b82f6"/>
                         <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
                     </linearGradient>
@@ -7052,7 +7072,7 @@ async function renderDashboardTrabalhoTab() {
                 ${userLines}
                 ${totalLine}
             </svg>
-            <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">${legendItems}</div>
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:2px;">${legendItems}</div>
         `;
     }
 
