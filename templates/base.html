@@ -332,27 +332,36 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
 
     const _BEHAVIOR_TABS = [
-        { id: 'reclamacoes',      label: 'Padrão de Reclamações' },
-        { id: 'churn',            label: 'Padrão de Churn' },
-        { id: 'preditiva',        label: 'Análise Preditiva de Churn' },
-        { id: 'qualidade',        label: 'Qualidade de Rede' },
-        { id: 'acoes',            label: 'Plano de Ações' },
-        { id: 'temporal_suporte', label: 'Padrão Temporal de Suporte' },
-        { id: 'financeiro_ativo', label: 'Comportamento Financeiro' },
-        { id: 'inatividade',      label: 'Inatividade de Conexão' },
-        { id: 'sazonalidade_canc',label: 'Sazonalidade de Cancelamentos' },
-        { id: 'causa_queda',      label: 'Monitoramento de ONUs' },
-        { id: 'lista_retencao',   label: 'Lista de Retenção Ativa' },
-        { id: 'dashboard_trabalho',label: 'Dashboard de Trabalho' },
-        { id: 'alertas_acao',     label: 'Alertas de Ação' },
-        { id: 'retorno',          label: 'Retorno' },
-        { id: 'atendimentos',     label: 'Atendimentos' },
-        { id: 'motivos_canc',     label: 'Motivos de Cancelamento' },
-        { id: 'padrao_pre_canc',  label: 'Padrão Pré-Cancelamento' },
-        { id: 'lifecycle_risk',   label: 'Risco por Ciclo de Vida' },
-        { id: 'risco_plano',      label: 'Análise por Plano' },
-        { id: 'perfil_pagamento', label: 'Perfil de Pagamento' },
-        { id: 'acompanhamento',   label: 'Acompanhamento de Clientes' },
+        { id: 'dashboard_trabalho', label: 'Dashboard de Trabalho' },
+        { id: 'alertas_acao',       label: 'Alertas de Ação' },
+        { id: 'acoes',              label: 'Plano de Ações' },
+        { id: 'retorno',            label: 'Retorno' },
+        { id: 'atendimentos',       label: 'Atendimentos' },
+        { id: 'acompanhamento',     label: 'Acompanhamento de Clientes' },
+        { id: 'perfil_pagamento',   label: 'Perfil de Pagamento' },
+        { id: 'churn',              label: 'Padrão de Churn' },
+        { id: 'preditiva',          label: 'Análise Preditiva de Churn' },
+        { id: 'sazonalidade_canc',  label: 'Sazonalidade de Cancelamentos' },
+        { id: 'motivos_canc',       label: 'Motivos de Cancelamento' },
+        { id: 'padrao_pre_canc',    label: 'Padrão Pré-Cancelamento' },
+        { id: 'qualidade',          label: 'Qualidade de Rede' },
+        { id: 'sem_conexao',        label: 'Clientes Sem Conexão' },
+        { id: 'inatividade',        label: 'Inatividade de Conexão' },
+        { id: 'causa_queda',        label: 'Monitoramento de ONUs' },
+        { id: 'temporal_suporte',   label: 'Padrão Temporal de Suporte' },
+        { id: 'financeiro_ativo',   label: 'Comportamento Financeiro' },
+        { id: 'risco_plano',        label: 'Análise por Plano' },
+        { id: 'lista_retencao',     label: 'Lista de Retenção Ativa' },
+        { id: 'lifecycle_risk',     label: 'Risco por Ciclo de Vida' },
+        { id: 'reclamacoes',        label: 'Padrão de Reclamações' },
+    ];
+
+    const _BEHAVIOR_GROUPS = [
+        { label: '📋 Atendimento',       ids: ['dashboard_trabalho','alertas_acao','acoes','retorno','atendimentos','acompanhamento','perfil_pagamento'] },
+        { label: '❌ Cancelamento',       ids: ['churn','preditiva','sazonalidade_canc','motivos_canc','padrao_pre_canc'] },
+        { label: '📡 Rede & Qualidade',  ids: ['qualidade','sem_conexao','inatividade','causa_queda','temporal_suporte'] },
+        { label: '💰 Financeiro & Planos', ids: ['financeiro_ativo','risco_plano'] },
+        { label: '🛡️ Retenção',          ids: ['lista_retencao','lifecycle_risk','reclamacoes'] },
     ];
 
     // ── Helpers de sub-itens ────────────────────────────────────────────────
@@ -482,14 +491,25 @@ document.addEventListener('DOMContentLoaded', () => {
             return _mkDetailPanel(g.id, g.label, '#6ee7b7', '#ecfdf5', '#065f46', itemsHtml, 'Sem seleção = acesso a todas');
         }).join('');
 
-        const btabItemsHtml = _BEHAVIOR_TABS.map(t => `
-            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;padding:.28rem .45rem;
-                          border:1px solid #e0e7ff;border-radius:.25rem;background:#f5f3ff;">
-                <input type="checkbox" class="perm-btab" value="${t.id}"
-                       style="width:.82rem;height:.82rem;cursor:pointer;"
-                       ${hasBehavior && (allBtabs || perms.includes('behavior:' + t.id)) ? 'checked' : ''}>
-                <span style="font-size:.76rem;color:#4338ca;">${t.label}</span>
-            </label>`).join('');
+        const _tabMap = Object.fromEntries(_BEHAVIOR_TABS.map(t => [t.id, t]));
+        const btabItemsHtml = _BEHAVIOR_GROUPS.map(grp => {
+            const items = grp.ids.map(id => {
+                const t = _tabMap[id]; if (!t) return '';
+                const chk = hasBehavior && (allBtabs || perms.includes('behavior:' + t.id)) ? 'checked' : '';
+                return `<label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;padding:.25rem .45rem;
+                                      border:1px solid #e0e7ff;border-radius:.25rem;background:#f5f3ff;">
+                    <input type="checkbox" class="perm-btab" value="${t.id}"
+                           style="width:.82rem;height:.82rem;cursor:pointer;" ${chk}>
+                    <span style="font-size:.74rem;color:#4338ca;">${t.label}</span>
+                </label>`;
+            }).join('');
+            return `<div style="margin-bottom:.6rem;">
+                <div style="font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+                            color:#6366f1;padding:.18rem .4rem;background:#eef2ff;border-radius:.2rem;
+                            margin-bottom:.3rem;display:inline-block;">${grp.label}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:.25rem;">${items}</div>
+            </div>`;
+        }).join('');
         const bhvDetailHtml = _mkDetailPanel('behavior', '🧠 Análise de Comportamento',
             '#c7d2fe', '#eef2ff', '#4338ca', btabItemsHtml, 'Sem seleção = acesso a todas as abas');
 
